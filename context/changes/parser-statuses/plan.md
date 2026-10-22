@@ -250,3 +250,16 @@ Streaming reads; cheap substring prefilter before `JSON.parse` for `api-request*
 #### Manual
 
 - [ ] 4.3 Real-session sanity run reviewed
+
+## Plan-review amendments (accepted by orchestrator, 2026-10-23)
+
+- A1 (finding 1, blocking): analyzer is push-based so sync and streaming share one core: `createAnalyzer(opts)` returns `{push(line: string): void; finish(): SessionAnalysis}`; `analyzeSession(lines: Iterable<string>)` is a thin wrapper. `parseLines` becomes `createParser()` with `push(line)`; no AsyncIterable anywhere in core. Phase 3 streams with `readline` and calls `push` per line. Supersedes the async-variant wording in Phase 3.
+- A2 (finding 2, blocking): dedupe by `uuid` only WITHIN one session file. No cross-file seen-set; `discoverSessions` stays independent per session (newest first). A resumed session therefore shows its copied history as its own prompts; merging is S-02+ scope.
+- A3 (finding 3): unknown top-level `type` values (not in the spike section 10 list) produce one aggregated Warning per distinct type per file ("unknown record type X (N records)"). Known metadata types stay silent. Update the Phase 1 test accordingly.
+- A4 (finding 4): rule clarified, no behaviour change: any successful edit after the last completed check => `unchecked`; `failing` only when the last completed check is after the last edit and failed, or when the last check failed and no edits occurred after it.
+- A5 (finding 5): performance assertion 3000 ms locally, 6000 ms when `process.env.CI`; the measured time is logged.
+- A6 (finding 6): `branch` = first non-empty `gitBranch` of a message record in the session, else `"unknown"`.
+- A7 (finding 7): `Write` without `type:"create"` and without patch => `added = content line count`, `removed = 0`, `maybeIncomplete = true`.
+- A8 (finding 8): node-free assertion is `grep -rn "node:" packages/core/src --exclude-dir=node --exclude=*.test.ts --exclude-dir=testing` returns nothing; use it in Phases 1-3.
+- A9 (finding 9): no sessions found => message on stdout and exit 0; exit 1 only for unreadable dir or bad flags.
+- A10 (finding 10): a chained command counts as a check if any segment is a check; exit code is that of the whole chain; mark `unreliable` when the check segment is followed by a pipe or `|| true`/`; <anything>`.
