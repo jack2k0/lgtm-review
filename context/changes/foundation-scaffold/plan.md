@@ -325,12 +325,12 @@ Not applicable.
 
 #### Automated
 
-- [ ] 3.1 `pnpm check` is green and shows the `lgtm-review#smoke` task passing
-- [ ] 3.2 Negative check: removing `"dist"` from cli `files` makes `pnpm smoke` fail (reverted)
+- [x] 3.1 `pnpm check` is green and shows the `lgtm-review#smoke` task passing
+- [x] 3.2 Negative check: removing `"dist"` from cli `files` makes `pnpm smoke` fail (reverted)
 
 #### Manual
 
-- [ ] 3.3 No temp dirs left behind after a failing and a passing run
+- [x] 3.3 No temp dirs left behind after a failing and a passing run
 
 ### Phase 4: Fixture corpus + golden harness
 

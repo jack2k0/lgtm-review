@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
+    "smoke": "node ../../scripts/smoke-pack.mjs",
     "test": "echo no tests"
   },
   "devDependencies": { "@lgtm/core": "workspace:*", "@types/node": "^22.0.0", "tsup": "^9.0.0", "typescript": "^5.8.0" }
