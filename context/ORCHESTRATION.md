@@ -1,7 +1,7 @@
 # ORCHESTRATION state
 
 ## Faza łańcucha
-Etap A (fundament), kroki 2-4 zakończone (shape-notes.md, prd.md, tech-stack.md). Następnie: krok 5 `/10x-bootstrapper`
+Etap A zakończony. F-01 (foundation-scaffold) zmergowany na main i zarchiwizowany 2026-10-23. Następnie: S-01 parser-statuses (B1 plan, spike logów przez agy).
 
 ## Decyzje właściciela (2026-10-23)
 - Nazwa projektu/pakietu npm: `lgtm-review` (wolne na npm 2026-10-23; GitHub/znak towarowy do sprawdzenia przed publikacją). Hasło robocze: "Earn your LGTM."
@@ -25,11 +25,12 @@ brak
 brak
 
 ## Log workerów
-brak
+- F-01 p1-2: Sonnet subagent, medium, 0 poprawek, OK. F-01 p3-4: Sonnet subagent, medium, 0 poprawek (2 odstępstwa uzasadnione: npx --package, negatyw 3.2 odwrócony).
+- Właściciel zdelegował wszystkie bramki do Opusa (2026-10-23): plan ok / merge ok daje orkiestrator. Push i publikacja nadal NIE (brak zgody). Skille /10x-* nie są zainstalowane - proces ręczny wg plików. Grok oszczędzać; agy/Sonnet do woli.
 
 ## Notatki
 - Repo lokalne, bez remote. Nie pushować. Branch startowy `master`, docelowy `main` (do zmiany przy commicie fundamentu).
-- Narzędzia quoty (usage/agy-usage/grok-usage): niesprawdzone.
+- Env: node 22 + pnpm przez PATH=/tmp/claude-1000/shim:$HOME/.local/opt/node22/bin. git user nie ustawiony: commity z GIT_AUTHOR_*/GIT_COMMITTER_* (jack / bogatyszejksponsor2@gmail.com). Narzędzia quoty niesprawdzone.
 
 ## Otwarte problemy
 brak
