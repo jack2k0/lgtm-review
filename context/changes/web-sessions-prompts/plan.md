@@ -164,8 +164,8 @@ Streaming analysis from S-01 (20 MB in ~0.3 s); API caches by mtime; the list en
 
 #### Automated
 
-- [ ] 1.1 `pnpm check` green with timing tests
-- [ ] 1.2 node-free grep returns nothing
+- [x] 1.1 `pnpm check` green with timing tests
+- [x] 1.2 node-free grep returns nothing
 
 #### Manual
 

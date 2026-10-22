@@ -11,7 +11,15 @@
       "status": "no-changes",
       "reason": "no edits",
       "files": [],
-      "partial": false
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly reading (100%), 0 checks"
     },
     {
       "index": 1,
@@ -28,7 +36,15 @@
           "maybeIncomplete": false
         }
       ],
-      "partial": false
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check"
     }
   ],
   "warnings": [

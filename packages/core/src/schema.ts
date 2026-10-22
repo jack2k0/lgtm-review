@@ -19,6 +19,15 @@ export const FileChange = z.object({
 });
 export type FileChange = z.infer<typeof FileChange>;
 
+/** Approximate active time per phase in milliseconds (see timing.ts for the model). */
+export const TimeSplit = z.object({
+  readMs: z.number().int().nonnegative(),
+  writeMs: z.number().int().nonnegative(),
+  checkMs: z.number().int().nonnegative(),
+  fixMs: z.number().int().nonnegative(),
+});
+export type TimeSplit = z.infer<typeof TimeSplit>;
+
 export const PromptAnalysis = z.object({
   index: z.number().int().nonnegative(),
   uuid: z.string(),
@@ -29,6 +38,11 @@ export const PromptAnalysis = z.object({
   files: z.array(FileChange),
   /** True when the prompt spawned subagents whose activity is not analysed. */
   partial: z.boolean(),
+  timeSplit: TimeSplit,
+  /** Union of all phase intervals; phases that overlap in time can make the four values sum to more. */
+  activeMs: z.number().int().nonnegative(),
+  /** One sentence, e.g. "Mostly writing (62%), 1 check"; "No timing data" when activeMs is 0. */
+  headline: z.string(),
 });
 export type PromptAnalysis = z.infer<typeof PromptAnalysis>;
 

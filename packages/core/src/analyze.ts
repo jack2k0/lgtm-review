@@ -1,5 +1,6 @@
 import { classifyCommand, type RepoScripts } from "./check-patterns.js";
 import { createParser, type Event, type ToolInput, type ToolResultEvent } from "./parse.js";
+import { baseClass, createTimingTracker, parseTs, type Phase, type TimingTracker } from "./timing.js";
 import type { FileChange, PromptAnalysis, SessionAnalysis, Status } from "./schema.js";
 
 export interface AnalyzeOptions {
@@ -54,6 +55,9 @@ interface PromptState {
   edits: EditRec[];
   checks: CheckRec[];
   partial: boolean;
+  timing: TimingTracker;
+  /** The last completed check failed: work now counts as Fix. */
+  failing: boolean;
 }
 
 interface PendingUse {
@@ -61,6 +65,11 @@ interface PendingUse {
   name: string;
   input: ToolInput;
   check: CheckRec | null;
+  /** Timestamps (ms) of the previous event and of this tool_use; null when unknown. */
+  prevTs: number | null;
+  useTs: number | null;
+  /** The prompt was in the failing state when the call started. */
+  failing: boolean;
 }
 
 function editTouch(use: PendingUse, res: ToolResultEvent): FileTouch | null {
@@ -151,13 +160,21 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
   const pending = new Map<string, PendingUse>();
   let cur: PromptState | null = null;
   let seq = 0;
+  /** Timestamp of the last event; events without one inherit it. */
+  let lastTs: number | null = null;
   let result: SessionAnalysis | null = null;
 
   function onEvent(ev: Event): void {
     seq++;
+    const prevTs = lastTs;
+    let ts = lastTs;
+    if (ev.type !== "boundary") {
+      ts = parseTs(ev.ts) ?? lastTs;
+      lastTs = ts;
+    }
     switch (ev.type) {
       case "prompt": {
-        cur = { index: prompts.length, uuid: ev.uuid, text: ev.text, edits: [], checks: [], partial: false };
+        cur = { index: prompts.length, uuid: ev.uuid, text: ev.text, edits: [], checks: [], partial: false, timing: createTimingTracker(), failing: false };
         prompts.push(cur);
         return;
       }
@@ -183,7 +200,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             cur.checks.push(check);
           }
         }
-        pending.set(ev.id, { prompt: cur, name: ev.name, input: ev.input, check });
+        pending.set(ev.id, { prompt: cur, name: ev.name, input: ev.input, check, prevTs, useTs: ts, failing: cur.failing });
         return;
       }
       case "tool_result": {
@@ -198,12 +215,20 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               use.check.exit = ev.exitCode;
               use.check.resultSeq = seq;
               use.check.output = ev.text;
+              use.prompt.failing = ev.exitCode !== 0;
             }
           } else if (!ev.background) {
             use.check.completed = true;
             use.check.exit = 0;
             use.check.resultSeq = seq;
+            use.prompt.failing = false;
           }
+        }
+        const edited = !ev.isError && use.name === "Bash" && ev.bashEditDiff !== undefined && ev.bashEditDiff.length > 0;
+        const base = baseClass(use.name, { isCheck: use.check !== null, edited });
+        if (base !== null) {
+          const phase: Phase = use.failing && (base === "read" || base === "write") ? "fix" : base;
+          use.prompt.timing.add(phase, use.prevTs, use.useTs, ts);
         }
         if (ev.isError) return;
         if (EDIT_TOOLS.has(use.name)) {
@@ -240,6 +265,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           reason: p.partial ? `${j.reason}; subagent activity not analysed` : j.reason,
           files: aggregateFiles(p.edits),
           partial: p.partial,
+          ...p.timing.result(p.checks.filter((c) => !c.ignored).length),
         };
       });
       const first = prompts[0];

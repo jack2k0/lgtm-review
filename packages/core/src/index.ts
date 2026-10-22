@@ -10,10 +10,12 @@ export {
   Status,
   Warning,
   FileChange,
+  TimeSplit,
   PromptAnalysis,
   SessionAnalysis,
   Analysis,
 } from "./schema.js";
+export { makeHeadline } from "./timing.js";
 export { classifyCommand } from "./check-patterns.js";
 export type { CommandClass, RepoScripts } from "./check-patterns.js";
 export { analyzeSession, createAnalyzer } from "./analyze.js";

@@ -19,7 +19,15 @@
           "maybeIncomplete": false
         }
       ],
-      "partial": false
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly writing (100%), 1 check"
     },
     {
       "index": 1,
@@ -28,7 +36,15 @@
       "status": "no-changes",
       "reason": "no edits",
       "files": [],
-      "partial": false
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 0,
+      "headline": "No timing data"
     }
   ],
   "warnings": [

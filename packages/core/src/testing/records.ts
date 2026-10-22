@@ -5,9 +5,12 @@ export function resetIds(): void {
   counter = 0;
 }
 
+/** ISO timestamp `sec` seconds after 2026-01-01T00:00:00Z (fractions allowed). */
+export const at = (sec: number): string => new Date(Date.UTC(2026, 0, 1) + Math.round(sec * 1000)).toISOString();
+
 function rec(type: string, extra: Record<string, unknown>): string {
   counter++;
-  return JSON.stringify({
+  const o: Record<string, unknown> = {
     type,
     uuid: `00000000-0000-4000-8000-${String(counter).padStart(12, "0")}`,
     sessionId: "00000000-0000-4000-8000-000000000001",
@@ -15,19 +18,26 @@ function rec(type: string, extra: Record<string, unknown>): string {
     cwd: "/home/user/project",
     gitBranch: "main",
     ...extra,
-  });
+  };
+  // `timestamp: null` builds a record without a timestamp.
+  if (o.timestamp === null) delete o.timestamp;
+  return JSON.stringify(o);
 }
 
 export const prompt = (text: unknown, extra: Record<string, unknown> = {}): string =>
   rec("user", { message: { role: "user", content: text }, ...extra });
 
-export const toolUse = (id: string, name: string, input: Record<string, unknown>): string =>
-  rec("assistant", { message: { role: "assistant", content: [{ type: "tool_use", id, name, input }] } });
+/** `ts`: ISO string (see `at`), or null for a record without timestamp. */
+export const toolUse = (id: string, name: string, input: Record<string, unknown>, ts?: string | null): string =>
+  rec("assistant", {
+    message: { role: "assistant", content: [{ type: "tool_use", id, name, input }] },
+    ...(ts !== undefined ? { timestamp: ts } : {}),
+  });
 
 export const toolResult = (
   id: string,
   content: unknown,
-  opts: { isError?: boolean; toolUseResult?: unknown } = {},
+  opts: { isError?: boolean; toolUseResult?: unknown; ts?: string | null } = {},
 ): string =>
   rec("user", {
     message: {
@@ -35,6 +45,7 @@ export const toolResult = (
       content: [{ type: "tool_result", tool_use_id: id, content, ...(opts.isError ? { is_error: true } : {}) }],
     },
     ...(opts.toolUseResult !== undefined ? { toolUseResult: opts.toolUseResult } : {}),
+    ...(opts.ts !== undefined ? { timestamp: opts.ts } : {}),
   });
 
 export const patchResult = (added: string[], removed: string[]) => ({

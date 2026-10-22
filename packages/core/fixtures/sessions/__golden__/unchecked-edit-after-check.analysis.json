@@ -19,7 +19,15 @@
           "maybeIncomplete": false
         }
       ],
-      "partial": false
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check"
     }
   ],
   "warnings": []

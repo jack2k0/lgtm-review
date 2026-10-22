@@ -1,0 +1,12 @@
+{
+  "fixture": "timing-split",
+  "source": "synthetic",
+  "prompts": [
+    { "index": 0, "expectedStatus": "checked", "note": "read, edit, 400 s wait (excluded), passing check" },
+    { "index": 1, "expectedStatus": "checked", "note": "edit, failing check, read+edit while failing (fix), passing check" },
+    { "index": 2, "expectedStatus": "unchecked", "note": "two parallel reads, then an edit without any check" },
+    { "index": 3, "expectedStatus": "unchecked", "note": "edit whose result timestamp is earlier than its call (non-monotonic), no check" },
+    { "index": 4, "expectedStatus": "checked", "note": "records without timestamps inherit the previous one; passing check" },
+    { "index": 5, "expectedStatus": "no-changes", "note": "no tool calls: no timing data" }
+  ]
+}

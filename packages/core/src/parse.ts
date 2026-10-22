@@ -28,7 +28,8 @@ export interface BashEdit {
 }
 
 export type PromptEvent = { type: "prompt"; uuid: string; text: string; ts: string | null; line: number };
-export type ToolUseEvent = { type: "tool_use"; id: string; name: string; input: ToolInput; line: number };
+/** `ts` is the raw record timestamp (ISO string) or null when the record has none. */
+export type ToolUseEvent = { type: "tool_use"; id: string; name: string; input: ToolInput; ts: string | null; line: number };
 export type ToolResultEvent = {
   type: "tool_result";
   toolUseId: string;
@@ -43,6 +44,8 @@ export type ToolResultEvent = {
   bashEditDiff?: BashEdit[];
   /** The command was started in the background; the exit code is unknown. */
   background: boolean;
+  /** Raw record timestamp (ISO string) or null when the record has none. */
+  ts: string | null;
   line: number;
 };
 export type BoundaryEvent = { type: "boundary"; kind: "compact" | "interrupt" };
@@ -232,7 +235,7 @@ export function createParser(opts: { file?: string } = {}): Parser {
         }
         const isError = b.is_error === true;
         const text = blocksText(b.content, RESULT_TEXT_MAX, "\n");
-        const ev: ToolResultEvent = { type: "tool_result", toolUseId: id, isError, text, background: false, line: lineNo };
+        const ev: ToolResultEvent = { type: "tool_result", toolUseId: id, isError, text, background: false, ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo };
         if (isError) {
           const m = /^\s*(?:Error:\s*)?Exit code (\d+)/.exec(text);
           if (m && m[1] !== undefined) ev.exitCode = Number(m[1]);
@@ -284,7 +287,7 @@ export function createParser(opts: { file?: string } = {}): Parser {
     });
   }
 
-  function handleAssistant(message: Record<string, unknown>, out: Event[]): void {
+  function handleAssistant(rec: Record<string, unknown>, message: Record<string, unknown>, out: Event[]): void {
     if (!Array.isArray(message.content)) return;
     for (const b of message.content) {
       if (!isObj(b) || b.type !== "tool_use") continue;
@@ -294,7 +297,7 @@ export function createParser(opts: { file?: string } = {}): Parser {
         continue;
       }
       const name = str(b.name) ?? "";
-      out.push({ type: "tool_use", id, name, input: sanitizeInput(name, b.input), line: lineNo });
+      out.push({ type: "tool_use", id, name, input: sanitizeInput(name, b.input), ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo });
     }
   }
 
@@ -319,7 +322,7 @@ export function createParser(opts: { file?: string } = {}): Parser {
       return;
     }
     if (type === "user") handleUser(rec, message, out);
-    else handleAssistant(message, out);
+    else handleAssistant(rec, message, out);
   }
 
   return {

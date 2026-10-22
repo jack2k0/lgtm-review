@@ -19,7 +19,15 @@
           "maybeIncomplete": false
         }
       ],
-      "partial": false
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check"
     },
     {
       "index": 1,
@@ -36,7 +44,15 @@
           "maybeIncomplete": false
         }
       ],
-      "partial": false
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly writing (100%), 0 checks"
     }
   ],
   "warnings": []
