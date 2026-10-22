@@ -1,0 +1,16 @@
+{
+  "fixture": "mixed-unknown-records",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "no-changes",
+      "note": "read-only prompt, no edits"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "checked",
+      "note": "edit followed by a passing test command"
+    }
+  ]
+}

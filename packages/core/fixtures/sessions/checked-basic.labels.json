@@ -1,0 +1,11 @@
+{
+  "fixture": "checked-basic",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "edit followed by a passing test command; nothing edited afterwards"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "totalLines": 12,
+  "malformedLines": 1,
+  "types": {
+    "assistant": 5,
+    "future-record-type": 1,
+    "user": 5
+  }
+}

@@ -336,10 +336,10 @@ Not applicable.
 
 #### Automated
 
-- [ ] 4.1 `pnpm check` green; core tests include golden + secret-scan tests
-- [ ] 4.2 Golden files exist for all 4 fixtures and core tests pass twice without `-u`
-- [ ] 4.3 Negative check: `sk-ant-test` in a fixture fails the secret scan (reverted)
-- [ ] 4.4 `packages/core/src/index.ts` has no `node:` imports
+- [x] 4.1 `pnpm check` green; core tests include golden + secret-scan tests
+- [x] 4.2 Golden files exist for all 4 fixtures and core tests pass twice without `-u`
+- [x] 4.3 Negative check: `sk-ant-test` in a fixture fails the secret scan (reverted)
+- [x] 4.4 `packages/core/src/index.ts` has no `node:` imports
 
 #### Manual
 

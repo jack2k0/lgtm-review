@@ -1,0 +1,11 @@
+{
+  "fixture": "unchecked-edit-after-check",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "note": "a passing check ran, but a further edit came after it"
+    }
+  ]
+}

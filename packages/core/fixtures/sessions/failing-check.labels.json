@@ -1,0 +1,11 @@
+{
+  "fixture": "failing-check",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "failing",
+      "note": "the last check after the edit failed (is_error, Exit code 1)"
+    }
+  ]
+}
