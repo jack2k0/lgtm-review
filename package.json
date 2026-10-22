@@ -1,0 +1,14 @@
+{
+  "name": "strata",
+  "private": true,
+  "packageManager": "pnpm@11.2.2",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "check": "turbo run typecheck test build"
+  },
+  "devDependencies": { "turbo": "^2.5.0", "typescript": "^5.8.0" }
+}

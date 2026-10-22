@@ -1,0 +1,15 @@
+{
+  "name": "lgtm-review",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": { "lgtm-review": "dist/cli.js" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "echo no tests"
+  },
+  "devDependencies": { "@lgtm/core": "workspace:*", "@types/node": "^22.0.0", "tsup": "^8.4.0", "typescript": "^5.8.0" }
+}
