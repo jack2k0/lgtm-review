@@ -220,7 +220,7 @@ Streaming reads; cheap substring prefilter before `JSON.parse` for `api-request*
 
 #### Manual
 
-- [ ] 1.3 New fixtures read against spike facts
+- [x] 1.3 New fixtures read against spike facts
 
 ### Phase 2: Status rule, check detection, file changes
 
@@ -231,7 +231,7 @@ Streaming reads; cheap substring prefilter before `JSON.parse` for `api-request*
 
 #### Manual
 
-- [ ] 2.3 Goldens and reason wording reviewed
+- [x] 2.3 Goldens and reason wording reviewed
 
 ### Phase 3: Node IO
 
@@ -249,7 +249,7 @@ Streaming reads; cheap substring prefilter before `JSON.parse` for `api-request*
 
 #### Manual
 
-- [ ] 4.3 Real-session sanity run reviewed
+- [x] 4.3 Real-session sanity run reviewed
 
 ## Plan-review amendments (accepted by orchestrator, 2026-10-23)
 

@@ -1,7 +1,7 @@
 ---
 change_id: parser-statuses
 title: Parse Claude Code sessions and print per-prompt verification statuses in the terminal
-status: planned
+status: implemented
 created: 2026-10-23
 updated: 2026-10-23
 archived_at: null
