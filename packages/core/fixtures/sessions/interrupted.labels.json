@@ -1,0 +1,16 @@
+{
+  "fixture": "interrupted",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "note": "the test command never returned a result (interrupted): check did not complete"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "explanation only; the log ends with a truncated line"
+    }
+  ]
+}

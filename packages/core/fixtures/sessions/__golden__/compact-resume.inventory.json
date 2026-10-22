@@ -1,0 +1,9 @@
+{
+  "totalLines": 15,
+  "malformedLines": 0,
+  "types": {
+    "assistant": 5,
+    "system": 1,
+    "user": 9
+  }
+}

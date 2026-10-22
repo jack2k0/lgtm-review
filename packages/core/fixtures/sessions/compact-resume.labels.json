@@ -1,0 +1,16 @@
+{
+  "fixture": "compact-resume",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "edit then passing test via cd && pnpm test"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "note": "new file written after compaction, no check ran; duplicated uuids and slash-command records are not prompts"
+    }
+  ]
+}

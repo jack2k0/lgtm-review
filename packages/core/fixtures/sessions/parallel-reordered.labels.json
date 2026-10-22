@@ -1,0 +1,16 @@
+{
+  "fixture": "parallel-reordered",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "tool_result records arrive in reverse order; pairing is by tool_use_id; edit then passing test"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "failing",
+      "note": "parallel ls + test; the failing test result arrives first, must not be paired with ls"
+    }
+  ]
+}
