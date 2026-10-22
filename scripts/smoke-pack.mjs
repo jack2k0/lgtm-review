@@ -39,7 +39,7 @@ try {
     if (String(spec).startsWith("workspace:")) fail(`dependency ${name} uses ${spec}`);
   }
 
-  const res = spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review"], { cwd: runDir, encoding: "utf8" });
+  const res = spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review", "--version"], { cwd: runDir, encoding: "utf8" });
   if (res.status !== 0) fail(`npx exited ${res.status}: ${(res.stderr || "").trim().split("\n").pop()}`);
   if (!/^lgtm-review \d+\.\d+\.\d+/m.test(res.stdout)) fail(`unexpected stdout: ${res.stdout.trim()}`);
   console.log(`smoke ok: ${res.stdout.trim()}`);

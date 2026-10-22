@@ -244,8 +244,8 @@ Streaming reads; cheap substring prefilter before `JSON.parse` for `api-request*
 
 #### Automated
 
-- [ ] 4.1 `pnpm check` green incl. pack smoke and CLI e2e
-- [ ] 4.2 CLI prints expected statuses for fixture sessions
+- [x] 4.1 `pnpm check` green incl. pack smoke and CLI e2e
+- [x] 4.2 CLI prints expected statuses for fixture sessions
 
 #### Manual
 

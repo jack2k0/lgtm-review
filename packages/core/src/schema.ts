@@ -42,3 +42,10 @@ export const SessionAnalysis = z.object({
   warnings: z.array(Warning),
 });
 export type SessionAnalysis = z.infer<typeof SessionAnalysis>;
+
+/** Result of analysing every session of a repo; the `--json` contract of the CLI. */
+export const Analysis = z.object({
+  dir: z.string(),
+  sessions: z.array(SessionAnalysis),
+});
+export type Analysis = z.infer<typeof Analysis>;

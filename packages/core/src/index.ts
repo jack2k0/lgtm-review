@@ -12,6 +12,7 @@ export {
   FileChange,
   PromptAnalysis,
   SessionAnalysis,
+  Analysis,
 } from "./schema.js";
 export { classifyCommand } from "./check-patterns.js";
 export type { CommandClass, RepoScripts } from "./check-patterns.js";
