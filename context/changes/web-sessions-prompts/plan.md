@@ -203,3 +203,17 @@ Streaming analysis from S-01 (20 MB in ~0.3 s); API caches by mtime; the list en
 #### Manual
 
 - [ ] 4.3 Real-session UI check
+
+## Plan-review amendments (accepted by orchestrator, 2026-10-23)
+
+- B1 (blocking): static file serving: `decodeURIComponent` in try/catch (URIError -> 400), reject `\0`, then `fs.realpath` the target and require it to start with `realpath(webRoot) + sep`. Add negative tests (`%2e%2e`, `%00`, symlink inside webRoot pointing outside).
+- B2 (blocking): token persistence: SPA reads `#k=` once, stores it in `sessionStorage`, then strips the fragment; on load it falls back to `sessionStorage`. F5 therefore keeps working in the same tab; a new tab needs the printed URL.
+- B3 (blocking): `Host` validation is the first check for ALL requests (static included); 403 otherwise.
+- B4: server has a fixed extension -> Content-Type map (html, js/mjs, css, svg, json, png, ico, woff2, map) with charset for text; unknown extension -> `application/octet-stream`.
+- B5: time split: sort/handle non-monotonic timestamps by clamping negative deltas to 0, and per phase merge overlapping intervals (interval union) so parallel tool calls are not double counted; `activeMs` = union of all phase intervals. Add tests for parallel calls and overlaps; fixture split numbers asserted exactly (hand-computed).
+- B6: build order enforced in turbo: web build -> cli build (tsup) -> copy web into `dist/web`; tsup `clean` must not remove it (copy runs after tsup, as a cli build step). Smoke test asserts `dist/web/index.html` exists in the tarball.
+- B7: CLI prints the URL with `process.stdout.write(url + "\n")`; smoke test waits for the URL with a 15 s timeout and always kills the child process and cleans temp dirs in `finally`.
+- B8: Phase 2 is executed as two briefs: 2A = server core (security middleware, static files, content types, tests of the attack matrix, no API); 2B = `/api/sessions*`, CLI flags (`--list`, `--no-open`, `--port`), `open.ts`, caching, tests. Progress checkboxes 2.1/2.2 are ticked after 2B.
+- B9: `Origin` rule: if the header is present it must equal exactly `http://127.0.0.1:PORT`; `null` and anything else -> 403. Add a negative test for `Origin: null`.
+- B10: printed and opened URL always uses the literal `127.0.0.1`; tests never use `localhost` as the connect address (the `localhost:PORT` Host value is still accepted).
+- B11: manual "read the file" items become automated where possible: attack-vector matrix test (Phase 2A), exact split assertions (Phase 1), tarball size assertion < 2 MB in the smoke test (Phase 4).
