@@ -343,7 +343,7 @@ Not applicable.
 
 #### Manual
 
-- [ ] 4.5 Reviewer agrees each fixture's expected status follows the PRD rule
+- [x] 4.5 Reviewer agrees each fixture's expected status follows the PRD rule
 
 ## Plan-review amendments (accepted by orchestrator)
 
