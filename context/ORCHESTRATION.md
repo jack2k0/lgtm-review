@@ -1,7 +1,7 @@
 # ORCHESTRATION state
 
 ## Faza łańcucha
-Etap A zakończony. F-01 (foundation-scaffold) zmergowany na main i zarchiwizowany 2026-10-23. Następnie: S-01 parser-statuses (B1 plan, spike logów przez agy).
+Etap A zakończony. F-01 i S-01 (parser-statuses) zmergowane na main i zarchiwizowane 2026-10-23. Następnie: S-02 web-sessions-prompts (north star).
 
 ## Decyzje właściciela (2026-10-23)
 - Nazwa projektu/pakietu npm: `lgtm-review` (wolne na npm 2026-10-23; GitHub/znak towarowy do sprawdzenia przed publikacją). Hasło robocze: "Earn your LGTM."
@@ -27,6 +27,8 @@ brak
 ## Log workerów
 - F-01 p1-2: Sonnet subagent, medium, 0 poprawek, OK. F-01 p3-4: Sonnet subagent, medium, 0 poprawek (2 odstępstwa uzasadnione: npx --package, negatyw 3.2 odwrócony).
 - Właściciel zdelegował wszystkie bramki do Opusa (2026-10-23): plan ok / merge ok daje orkiestrator. Push i publikacja nadal NIE (brak zgody). Skille /10x-* nie są zainstalowane - proces ręczny wg plików. Grok oszczędzać; agy/Sonnet do woli.
+
+- S-01: spike+plan Opus; plan-review agy Flash high (agy headless: bez narzędzi, prompt inline); impl Sonnet high (p1-2) + medium (p3-4), 0 poprawek. Prawdziwe logi NIE do agy/zewnętrznych modeli (klasyfikator zablokował) - tylko lokalne subagenty Claude.
 
 ## Notatki
 - Repo lokalne, bez remote. Nie pushować. Branch startowy `master`, docelowy `main` (do zmiany przy commicie fundamentu).

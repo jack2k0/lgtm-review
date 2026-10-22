@@ -41,7 +41,7 @@ An AI agent changes 6–60 files in about 15 minutes, but a reviewer sees only t
 | ID   | Change ID             | Outcome (user can …)                                                                                     | Prerequisites | PRD refs                                    | Status   |
 | ---- | --------------------- | -------------------------------------------------------------------------------------------------------- | ------------- | ------------------------------------------- | -------- |
 | F-01 | foundation-scaffold   | (foundation) CI, packaging smoke test, clean dev audit and a fixture corpus are in place                 | —             | NFR reproducible statuses, NFR no failure on unknown records, Guardrail no fixture secrets, Success Criterion ≥ 95% status match on fixture corpus | done     |
-| S-01 | parser-statuses       | Developer can run one terminal command and see the repo's sessions and each prompt's status, reason and changed files | F-01          | US-01, FR-001, FR-002, FR-004               | proposed |
+| S-01 | parser-statuses       | Developer can run one terminal command and see the repo's sessions and each prompt's status, reason and changed files | F-01          | US-01, FR-001, FR-002, FR-004               | done     |
 | S-02 | web-sessions-prompts  | Developer can start one command, open a session in the browser and see prompts with status, reason, time split and file counts | S-01          | US-01, FR-001, FR-003, FR-007               | proposed |
 | S-03 | steps-and-diff        | Developer can open a prompt's Steps view, expand raw actions and click a changed file to see its diff    | S-02          | US-02, FR-005, FR-006, FR-007               | proposed |
 
