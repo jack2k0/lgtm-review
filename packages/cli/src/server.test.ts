@@ -156,7 +156,7 @@ describe("token on /api/*", () => {
     expect(out).toMatch(/^HTTP\/1\.1 403/);
   });
   test("right token: unknown API path -> 404 JSON, never reaches static", async () => {
-    for (const p of ["/api", "/api/", "/api/nope", "/api/sessions"]) {
+    for (const p of ["/api", "/api/", "/api/nope", "/api/sessions/a/b", "/api/sessionsx"]) {
       const r = await get(p, { ...host(), ...auth() });
       expect(r.status, p).toBe(404);
       expect(r.headers["content-type"]).toBe("application/json; charset=utf-8");

@@ -175,8 +175,8 @@ Streaming analysis from S-01 (20 MB in ~0.3 s); API caches by mtime; the list en
 
 #### Automated
 
-- [ ] 2.1 `pnpm check` green incl. security tests
-- [ ] 2.2 `--list` output unchanged
+- [x] 2.1 `pnpm check` green incl. security tests — 11c6205
+- [x] 2.2 `--list` output unchanged — 11c6205
 
 #### Manual
 

@@ -3,6 +3,8 @@ import { createReadStream } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { pipeline } from "node:stream";
+import { createApi } from "./api.js";
+import { sendJson } from "./http.js";
 import { baseHeaders, contentTypeFor, hostAllowed, originAllowed, resolveStatic, TOKEN_HEADER, tokenValid } from "./security.js";
 
 export interface ServerOptions {
@@ -28,22 +30,9 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
-/** Handles an authenticated GET/HEAD under /api/. Return false when the path is unknown (-> 404). */
-export type ApiHandler = (req: IncomingMessage, res: ServerResponse, pathname: string) => Promise<boolean>;
-
-export function sendJson(req: IncomingMessage, res: ServerResponse, status: number, body: unknown): void {
-  const data = Buffer.from(JSON.stringify(body));
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Content-Length": data.length,
-    "Cache-Control": "no-store",
-  });
-  res.end(req.method === "HEAD" ? undefined : data);
-}
-
-export async function startServer(opts: ServerOptions, apiFactory?: (o: ServerOptions) => ApiHandler): Promise<RunningServer> {
+export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const token = opts.token ?? randomBytes(32).toString("hex");
-  const api = apiFactory?.(opts);
+  const api = createApi(opts);
   let port = 0; // set after listen; the Host/Origin checks read it per request
 
   const deny = (req: IncomingMessage, res: ServerResponse, status: number, error: string) => sendJson(req, res, status, { error });
@@ -66,7 +55,7 @@ export async function startServer(opts: ServerOptions, apiFactory?: (o: ServerOp
     if (pathname === "/api" || pathname.startsWith("/api/")) {
       // 4. Token for everything under /api/, before any routing.
       if (!tokenValid(req.headers[TOKEN_HEADER], token)) return deny(req, res, 403, "forbidden");
-      if (api && (await api(req, res, pathname))) return;
+      if (await api(req, res, pathname)) return;
       return deny(req, res, 404, "not found");
     }
 
