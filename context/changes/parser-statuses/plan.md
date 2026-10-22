@@ -215,8 +215,8 @@ Streaming reads; cheap substring prefilter before `JSON.parse` for `api-request*
 
 #### Automated
 
-- [ ] 1.1 `pnpm check` green with new parse tests
-- [ ] 1.2 No `node:` imports in index.ts, schema.ts, parse.ts
+- [x] 1.1 `pnpm check` green with new parse tests — 4fb0851
+- [x] 1.2 No `node:` imports in index.ts, schema.ts, parse.ts — 4fb0851
 
 #### Manual
 
@@ -226,8 +226,8 @@ Streaming reads; cheap substring prefilter before `JSON.parse` for `api-request*
 
 #### Automated
 
-- [ ] 2.1 `pnpm check` green; status match >= 95% test passes
-- [ ] 2.2 Negative check on edit/check order (reverted)
+- [x] 2.1 `pnpm check` green; status match >= 95% test passes
+- [x] 2.2 Negative check on edit/check order (reverted)
 
 #### Manual
 

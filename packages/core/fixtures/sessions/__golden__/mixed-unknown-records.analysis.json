@@ -1,0 +1,46 @@
+{
+  "sessionId": "mixed-unknown-records",
+  "title": "Explain what add does.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Explain what add does.",
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
+      "partial": false
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000005",
+      "text": "Now fix it.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false
+    }
+  ],
+  "warnings": [
+    {
+      "file": "mixed-unknown-records.jsonl",
+      "line": 5,
+      "reason": "unknown record type future-record-type (1 record)"
+    },
+    {
+      "file": "mixed-unknown-records.jsonl",
+      "line": 6,
+      "reason": "invalid JSON"
+    }
+  ]
+}

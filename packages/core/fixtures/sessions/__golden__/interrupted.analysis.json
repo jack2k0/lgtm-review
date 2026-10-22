@@ -1,0 +1,41 @@
+{
+  "sessionId": "interrupted",
+  "title": "Fix add and test it.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Fix add and test it.",
+      "status": "unchecked",
+      "reason": "check did not complete",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000006",
+      "text": "Never mind, just explain what add does.",
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
+      "partial": false
+    }
+  ],
+  "warnings": [
+    {
+      "file": "interrupted.jsonl",
+      "line": 8,
+      "reason": "truncated last line"
+    }
+  ]
+}

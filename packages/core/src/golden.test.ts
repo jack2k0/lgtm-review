@@ -1,43 +1,14 @@
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { analyzeSession } from "./analyze.js";
+import { SessionAnalysis } from "./schema.js";
 import { listFixtures, listLabelFiles, readFixtureLines, readLabels, sessionsDir } from "./testing/fixtures.js";
 
-// Placeholder analyzer for F-01: record inventory. S-01 replaces it with the real one.
-export interface Analyzer {
-  name: string;
-  run(lines: string[]): unknown;
-}
-
-export const inventory: Analyzer = {
-  name: "inventory",
-  run(lines) {
-    const types: Record<string, number> = {};
-    let malformed = 0;
-    for (const line of lines) {
-      let rec: unknown;
-      try {
-        rec = JSON.parse(line);
-      } catch {
-        malformed++;
-        continue;
-      }
-      const t =
-        rec !== null && typeof rec === "object" && typeof (rec as { type?: unknown }).type === "string"
-          ? (rec as { type: string }).type
-          : "(none)";
-      types[t] = (types[t] ?? 0) + 1;
-    }
-    const sorted = Object.fromEntries(Object.entries(types).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
-    return { totalLines: lines.length, malformedLines: malformed, types: sorted };
-  },
-};
-
-const analyzers: Analyzer[] = [inventory];
 const fixtures = listFixtures();
 
 describe("fixture corpus", () => {
   test("has fixtures", () => {
-    expect(fixtures.length).toBeGreaterThanOrEqual(4);
+    expect(fixtures.length).toBeGreaterThanOrEqual(7);
   });
 
   test("every jsonl has labels and vice versa", () => {
@@ -51,18 +22,45 @@ describe("fixture corpus", () => {
   });
 });
 
-describe.each(analyzers)("golden: $name", (analyzer) => {
+describe("golden: analysis", () => {
   test.each(fixtures)("%s", async (name) => {
     const lines = readFixtureLines(name);
-    const first = analyzer.run(lines);
-    const second = analyzer.run(lines);
-    expect(second).toEqual(first);
+    const first = analyzeSession(lines, { sessionId: name, file: `${name}.jsonl` });
+    const second = analyzeSession(lines, { sessionId: name, file: `${name}.jsonl` });
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+    expect(SessionAnalysis.safeParse(first).success).toBe(true);
     await expect(JSON.stringify(first, null, 2) + "\n").toMatchFileSnapshot(
-      join(sessionsDir, "__golden__", `${name}.${analyzer.name}.json`),
+      join(sessionsDir, "__golden__", `${name}.analysis.json`),
     );
   });
 
   test("never throws on malformed lines", () => {
-    expect(() => analyzer.run(["{ nope", "", "null", "42", '"str"', "[]"])).not.toThrow();
+    expect(() => analyzeSession(["{ nope", "", "null", "42", '"str"', "[]", '{"type":"user"}', '{"type":"user","message":5}'])).not.toThrow();
+  });
+});
+
+describe("status accuracy against labels", () => {
+  test("status match >= 95% over the whole corpus", () => {
+    let total = 0;
+    let matched = 0;
+    const misses: string[] = [];
+    for (const name of fixtures) {
+      const analysis = analyzeSession(readFixtureLines(name));
+      const labels = readLabels(name);
+      if (analysis.prompts.length !== labels.prompts.length) {
+        misses.push(`${name}: ${analysis.prompts.length} prompts, ${labels.prompts.length} labels`);
+      }
+      for (const l of labels.prompts) {
+        total++;
+        const got = analysis.prompts[l.index]?.status;
+        if (got === l.expectedStatus) matched++;
+        else misses.push(`${name}#${l.index}: expected ${l.expectedStatus}, got ${String(got)}`);
+      }
+    }
+    const ratio = matched / total;
+    // eslint-disable-next-line no-console
+    console.log(`status match: ${matched}/${total} (${(ratio * 100).toFixed(1)}%)`);
+    expect(misses, misses.join("\n")).toEqual([]);
+    expect(ratio).toBeGreaterThanOrEqual(0.95);
   });
 });

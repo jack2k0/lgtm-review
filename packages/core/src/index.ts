@@ -6,4 +6,14 @@ export const Story = z.object({
 });
 export type Story = z.infer<typeof Story>;
 
-export { Status, Warning, FileChange, PromptAnalysis, SessionAnalysis } from "./schema.js";
+export {
+  Status,
+  Warning,
+  FileChange,
+  PromptAnalysis,
+  SessionAnalysis,
+} from "./schema.js";
+export { classifyCommand } from "./check-patterns.js";
+export type { CommandClass, RepoScripts } from "./check-patterns.js";
+export { analyzeSession, createAnalyzer } from "./analyze.js";
+export type { AnalyzeOptions, Analyzer } from "./analyze.js";

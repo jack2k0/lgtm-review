@@ -1,0 +1,26 @@
+{
+  "sessionId": "unchecked-edit-after-check",
+  "title": "Fix add and then tidy its formatting.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Fix add and then tidy its formatting.",
+      "status": "unchecked",
+      "reason": "1 edit after last check",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 2,
+          "removed": 2,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false
+    }
+  ],
+  "warnings": []
+}
