@@ -301,10 +301,10 @@ Not applicable.
 
 #### Automated
 
-- [ ] 1.1 `pnpm install --frozen-lockfile` succeeds
-- [ ] 1.2 `pnpm audit` exits 0 with no findings
-- [ ] 1.3 `pnpm check` is green (typecheck, test, build for all packages)
-- [ ] 1.4 `node packages/cli/dist/cli.js` prints `lgtm-review 0.0.0`
+- [x] 1.1 `pnpm install --frozen-lockfile` succeeds
+- [x] 1.2 `pnpm audit` exits 0 with no findings
+- [x] 1.3 `pnpm check` is green (typecheck, test, build for all packages)
+- [x] 1.4 `node packages/cli/dist/cli.js` prints `lgtm-review 0.0.0`
 
 #### Manual
 
@@ -314,8 +314,8 @@ Not applicable.
 
 #### Automated
 
-- [ ] 2.1 Workflow YAML parses (actionlint when installed)
-- [ ] 2.2 `pnpm check` still green locally
+- [x] 2.1 Workflow YAML parses (actionlint when installed)
+- [x] 2.2 `pnpm check` still green locally
 
 #### Manual
 

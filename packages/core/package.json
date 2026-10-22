@@ -12,5 +12,5 @@
     "test": "vitest run"
   },
   "dependencies": { "zod": "^3.24.0" },
-  "devDependencies": { "tsup": "^8.4.0", "vitest": "^3.1.0", "typescript": "^5.8.0" }
+  "devDependencies": { "tsup": "^9.0.0", "vitest": "^4.1.12", "typescript": "^5.8.0" }
 }
