@@ -237,8 +237,8 @@ Streaming reads; cheap substring prefilter before `JSON.parse` for `api-request*
 
 #### Automated
 
-- [ ] 3.1 `pnpm check` green incl. 20 MB < 3 s test
-- [ ] 3.2 No `node:` imports in index.ts
+- [x] 3.1 `pnpm check` green incl. 20 MB < 3 s test
+- [x] 3.2 No `node:` imports in index.ts
 
 ### Phase 4: CLI output
 

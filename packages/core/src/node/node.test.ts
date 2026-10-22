@@ -1,0 +1,111 @@
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync, appendFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, test } from "vitest";
+import { analyzeFile, discoverSessions, loadRepoScripts, projectDirFor } from "./index.js";
+import { bash, edit, prompt, resetIds } from "../testing/records.js";
+
+function withTmp<T>(fn: (dir: string) => Promise<T> | T): Promise<T> {
+  const dir = mkdtempSync(join(tmpdir(), "lgtm-core-node-"));
+  return Promise.resolve()
+    .then(() => fn(dir))
+    .finally(() => rmSync(dir, { recursive: true, force: true }));
+}
+
+describe("projectDirFor", () => {
+  test("replaces / and . with -", () => {
+    expect(projectDirFor("/home/user/my.repo", "/p")).toBe("/p/-home-user-my-repo");
+  });
+});
+
+describe("discoverSessions", () => {
+  test("newest first, only top-level jsonl", () =>
+    withTmp(async (dir) => {
+      writeFileSync(join(dir, "old.jsonl"), "");
+      writeFileSync(join(dir, "new.jsonl"), "");
+      writeFileSync(join(dir, "notes.txt"), "");
+      mkdirSync(join(dir, "old", "subagents"), { recursive: true });
+      writeFileSync(join(dir, "old", "subagents", "agent-1.jsonl"), "");
+      utimesSync(join(dir, "old.jsonl"), 1000, 1000);
+      utimesSync(join(dir, "new.jsonl"), 2000, 2000);
+      const found = await discoverSessions(dir);
+      expect(found.map((f) => f.id)).toEqual(["new", "old"]);
+    }));
+
+  test("missing dir rejects", async () => {
+    await expect(discoverSessions(join(tmpdir(), "lgtm-does-not-exist-xyz"))).rejects.toThrow();
+  });
+});
+
+describe("analyzeFile", () => {
+  test("truncated last line is tolerated", () =>
+    withTmp(async (dir) => {
+      resetIds();
+      const f = join(dir, "s.jsonl");
+      writeFileSync(f, [prompt("do it"), ...edit("e1"), ...bash("b1", "pnpm test")].join("\n") + "\n");
+      appendFileSync(f, '{"type":"assistant","message":{"role":"assis');
+      const a = await analyzeFile(f, { sessionId: "s", file: "s.jsonl" });
+      expect(a.prompts).toHaveLength(1);
+      expect(a.prompts[0]?.status).toBe("checked");
+    }));
+
+  test("dedupe by uuid is per file, no cross-file seen-set", () =>
+    withTmp(async (dir) => {
+      resetIds();
+      const lines = [prompt("do it"), ...edit("e1")].join("\n") + "\n";
+      writeFileSync(join(dir, "a.jsonl"), lines);
+      writeFileSync(join(dir, "b.jsonl"), lines);
+      const a = await analyzeFile(join(dir, "a.jsonl"));
+      const b = await analyzeFile(join(dir, "b.jsonl"));
+      expect(a.prompts).toHaveLength(1);
+      expect(b.prompts).toHaveLength(1);
+      // repeated uuids inside one file are collapsed
+      writeFileSync(join(dir, "c.jsonl"), lines + lines);
+      expect((await analyzeFile(join(dir, "c.jsonl"))).prompts).toHaveLength(1);
+    }));
+
+  test("20 MB session analysed fast", () =>
+    withTmp(async (dir) => {
+      resetIds();
+      const f = join(dir, "big.jsonl");
+      const filler = "x".repeat(2000);
+      const chunks: string[] = [];
+      let size = 0;
+      let n = 0;
+      while (size < 20 * 1024 * 1024) {
+        const batch = [prompt(`task ${n}`), ...edit(`e${n}`), ...bash(`b${n}`, "pnpm test", { output: filler })];
+        const s = batch.join("\n") + "\n";
+        chunks.push(s);
+        size += s.length;
+        n++;
+      }
+      writeFileSync(f, chunks.join(""));
+      const t0 = performance.now();
+      const a = await analyzeFile(f);
+      const ms = performance.now() - t0;
+      console.log(`analyzed ${(size / 1048576).toFixed(1)} MB, ${a.prompts.length} prompts in ${Math.round(ms)} ms`);
+      expect(a.prompts.length).toBeGreaterThan(0);
+      expect(ms).toBeLessThan(process.env.CI ? 6000 : 3000);
+    }), 60_000);
+});
+
+describe("loadRepoScripts", () => {
+  test("missing files => empty", () =>
+    withTmp(async (dir) => {
+      expect(await loadRepoScripts(dir)).toEqual({ packageScripts: [], makeTargets: [], scriptFiles: [] });
+    }));
+
+  test("reads package.json, Makefile, scripts/", () =>
+    withTmp(async (dir) => {
+      writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { test: "x", dev: "y", lint: "z" } }));
+      writeFileSync(join(dir, "Makefile"), "build:\n\tx\ndeploy:\n\ty\ntest: build\n\tz\n");
+      mkdirSync(join(dir, "scripts"));
+      writeFileSync(join(dir, "scripts", "check-all.sh"), "");
+      writeFileSync(join(dir, "scripts", "dev.sh"), "");
+      expect(await loadRepoScripts(dir)).toEqual({
+        packageScripts: ["lint", "test"],
+        makeTargets: ["build", "test"],
+        scriptFiles: ["scripts/check-all.sh"],
+      });
+    }));
+});
