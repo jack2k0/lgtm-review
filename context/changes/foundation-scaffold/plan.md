@@ -344,3 +344,9 @@ Not applicable.
 #### Manual
 
 - [ ] 4.5 Reviewer agrees each fixture's expected status follows the PRD rule
+
+## Plan-review amendments (accepted by orchestrator)
+
+- F1 (blocking, Phase 4): add `@types/node` ^22 to `packages/core` devDependencies and `"types": ["node"]` to `packages/core/tsconfig.json`, otherwise typecheck fails.
+- F2: Current State is stale. Repo is on `main`, commit 263ca9a, origin `https://github.com/jack2k0/lgtm-review.git` (public). Worktrees and CI are available.
+- F3 (Phase 2): CI audit step uses `pnpm audit --audit-level=high` to avoid red CI on new low/moderate dev advisories.
