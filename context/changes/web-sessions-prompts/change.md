@@ -1,7 +1,7 @@
 ---
 change_id: web-sessions-prompts
 title: Local web UI showing sessions and prompts with status, reason, time split and file counts
-status: planned
+status: implemented
 created: 2026-10-23
 updated: 2026-10-23
 archived_at: null

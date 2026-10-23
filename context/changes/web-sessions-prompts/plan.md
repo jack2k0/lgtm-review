@@ -169,7 +169,7 @@ Streaming analysis from S-01 (20 MB in ~0.3 s); API caches by mtime; the list en
 
 #### Manual
 
-- [ ] 1.3 Golden split numbers reviewed
+- [x] 1.3 Golden split numbers reviewed
 
 ### Phase 2: Local server and JSON API
 
@@ -180,7 +180,7 @@ Streaming analysis from S-01 (20 MB in ~0.3 s); API caches by mtime; the list en
 
 #### Manual
 
-- [ ] 2.3 security.ts reviewed
+- [x] 2.3 security.ts reviewed
 
 ### Phase 3: React UI
 
@@ -191,7 +191,7 @@ Streaming analysis from S-01 (20 MB in ~0.3 s); API caches by mtime; the list en
 
 #### Manual
 
-- [ ] 3.3 UI reviewed on fixtures
+- [x] 3.3 UI reviewed on fixtures
 
 ### Phase 4: Bundle and end-to-end smoke
 
@@ -202,7 +202,7 @@ Streaming analysis from S-01 (20 MB in ~0.3 s); API caches by mtime; the list en
 
 #### Manual
 
-- [ ] 4.3 Real-session UI check
+- [x] 4.3 Real-session UI check
 
 ## Plan-review amendments (accepted by orchestrator, 2026-10-23)
 
