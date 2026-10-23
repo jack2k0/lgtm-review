@@ -206,7 +206,6 @@ Reserved IDs follow `docs/PROPOSAL.md` §17 so existing references (S-08, S-09) 
 - **Local archive (FR-008, second half)** — Why parked: only the export half shipped in S-06.
 - **S-07: "Play the change"** — Why parked: PRD §Non-Goals (after MVP, v0.2).
 - **S-08: LLM layer (titles and captions; default model decided in its plan)** — Why parked: PRD §Non-Goals; MVP titles come from templates and prompt text.
-- **S-09: Python projects (+ Django preset)** — Why parked: PRD §Non-Goals; owner decision: v0.2.
 - **S-10 (rest): demo page** — Why parked: not in PRD; live refresh was split off as its own slice, markdown summary shipped in S-05.
 - **Agents other than Claude Code** — Why parked: PRD §Non-Goals.
 - **"Partially checked" coverage detection** — Why parked: PRD §Non-Goals (v2).
@@ -214,4 +213,6 @@ Reserved IDs follow `docs/PROPOSAL.md` §17 so existing references (S-08, S-09) 
 - **Parallel worktrees** — Why parked: the MVP chain F-01 → S-01 → S-02 → S-03 is strictly sequential; the first parallel pairs appear post-MVP (S-03 ‖ S-04, S-07 ‖ S-08 per the proposal), capped at 2 by review capacity.
 
 ## Done
+
+- **S-09: Python imports in the import map (+ Django layers and hints)** — FR-013; done 2026-10-23 (`context/archive/python-map/`).
 

@@ -106,7 +106,7 @@ D8. Web: empty state text -> "No supported source files changed (TS/JS, Python)"
 - [x] 2.3 Web empty-state text
 
 ### Phase 3: Docs
-- [ ] 3.1 README, roadmap, PRD
+- [x] 3.1 README, roadmap, PRD
 
 ## Proposed PRD addition
 

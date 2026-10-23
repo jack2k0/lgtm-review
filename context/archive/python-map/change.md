@@ -1,10 +1,10 @@
 ---
 change_id: python-map
 title: Python imports in the import map (+ Django preset)
-status: planned
+status: done
 created: 2026-10-23
 updated: 2026-10-23
-archived_at: null
+archived_at: 2026-10-23
 ---
 
 ## Notes

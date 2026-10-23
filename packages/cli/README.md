@@ -33,6 +33,14 @@ Limits (so very large sessions stay fast): a diff shows at most 2000 lines and 2
 
 The same data is available from the local API (token required, as for the other routes): `GET /api/sessions/<id>/prompts/<index>` and `GET /api/sessions/<id>/prompts/<index>/diff?path=<file>`; `path` must be one of the prompt's files.
 
+## Import map
+
+The **Map** view (per session or per prompt) shows the changed source files and their direct in-repo neighbours: files they import and files that import them, one hop, at most 150 nodes. Nodes are grouped into layers by top-level directory (`packages/<x>` and `apps/<x>` per package) and coloured by the status of the prompt that last changed them; click a changed file to open its diff. The map reads the **current working tree** under `--dir` ("imports as of now"), not the tree at prompt time; it scans at most 5000 files of 512 KB each.
+
+- **TS/JS**: ESM `import`/`export … from`, literal `import()` and `require()`; relative paths and `tsconfig` `paths` aliases.
+- **Python**: `import a.b` and `from a import b` (relative imports too), resolved to `.py` files or `__init__.py` under the repository root, `src/` and every directory that contains a `manage.py`. Packages outside the repository (stdlib, virtualenv) are not shown. In a Django project each app is its own layer (`backend/shop`, `backend/core`).
+- Extraction is a regular-expression scan, not a parser: unusual syntax can produce a missing or an extra edge. `importlib`/`__import__` and computed specifiers are ignored.
+
 ## Live
 
 While a Claude Code session is still running, the page keeps itself up to date: every 5 seconds it asks the local API whether the current view changed, using conditional requests. The header shows **Live · updated HH:MM:SS** (the time new data last arrived) and a **Pause**/**Resume** button; the choice is remembered for the tab only (session storage), and live is on by default.
