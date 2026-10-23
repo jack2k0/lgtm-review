@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
-import { CONNECTION_LOST, LiveIndicator, lostNote } from "./Live";
+import { CONNECTION_LOST, LiveIndicator, lostNote } from "./LiveView";
 import { ApiError } from "./api";
 
 const at = new Date(2026, 0, 2, 3, 4, 5).getTime();
