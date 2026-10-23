@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FileDiff, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
 import { errorMessage, fetchFileDiff, fetchImportMap, fetchPlay, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
 import { DiffView } from "./DiffView";
-import { LiveContext, LiveIndicator, useLive, useLiveStatus, type Load } from "./Live";
+import { LiveContext, LiveIndicator, useLive, useLiveStatus, type Load } from "./LiveView";
 import { readPaused, writePaused } from "./live";
 import { MapView } from "./MapView";
 import { PlayView } from "./PlayView";
