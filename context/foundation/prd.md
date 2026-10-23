@@ -136,6 +136,8 @@ MVP (US-01, US-02, FR-001..FR-007) is delivered. v0.2 adds review guidance, stil
   > Socrates: Counter-argument considered: "Heuristics will cry wolf and be ignored." Resolution: kept; rules are explicit, each hint states its rule and evidence, severity high only for rules that indicate weakened verification; the recommendation is advice, never a verdict.
 - FR-010: Developer can print a markdown summary of a session (prompts, statuses, hints, files) for a PR description with one command. Priority: should-have.
   > Socrates: Counter-argument considered: "Summary could leak prompt text into PRs." Resolution: kept; summary contains status, reason, hints and file paths and the 80-char prompt title only; no command output, no file content; documented in README.
+- FR-011: Developer can keep the browser view open while a session is still running and see it update (statuses, steps, diffs) without reloading; updates pause when the tab is hidden. Priority: nice-to-have.
+  > Socrates: Counter-argument considered: "Polling wastes CPU and a half-written log line breaks parsing." Resolution: kept; conditional requests (ETag/304) make idle polls cheap, parsing already tolerates a truncated last line, interval 5 s, only while visible.
 - Still non-goals: isometric import map, "Play the change", HTML export with redaction, LLM layer, Python, other agents.
 
 ## Open Questions

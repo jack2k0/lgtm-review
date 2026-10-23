@@ -123,6 +123,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Prerequisites:** S-03
 - **Status:** done
 
+### S-10: Live refresh in the browser (v0.2, reduced scope of the parked S-10)
+
+- **Outcome:** Developer keeps the UI open during a running session and sees sessions, prompts, steps and diffs update within ~5 s, without reload; no updates while the tab is hidden.
+- **Change ID:** live-refresh
+- **PRD refs:** FR-011 (PRD v2)
+- **Prerequisites:** S-03
+- **Status:** in progress (planned 2026-10-23, orchestrator decision)
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
@@ -150,7 +158,7 @@ Reserved IDs follow `docs/PROPOSAL.md` §17 so existing references (S-08, S-09) 
 - **S-07: "Play the change"** — Why parked: PRD §Non-Goals (after MVP, v0.2).
 - **S-08: LLM layer (titles and captions; default model decided in its plan)** — Why parked: PRD §Non-Goals; MVP titles come from templates and prompt text.
 - **S-09: Python projects (+ Django preset)** — Why parked: PRD §Non-Goals; owner decision: v0.2.
-- **S-10: Live watch mode, markdown summary, demo page** — Why parked: not in PRD; listed only in the proposal draft.
+- **S-10 (rest): demo page** — Why parked: not in PRD; live refresh was split off as its own slice, markdown summary shipped in S-05.
 - **Agents other than Claude Code** — Why parked: PRD §Non-Goals.
 - **"Partially checked" coverage detection** — Why parked: PRD §Non-Goals (v2).
 - **Worktree filter in the session list** — Why parked: FR-001 note (all sessions of the repo path in MVP).
