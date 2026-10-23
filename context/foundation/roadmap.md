@@ -131,6 +131,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Prerequisites:** S-03
 - **Status:** done
 
+### S-06: Static HTML export with secret redaction (v0.2)
+
+- **Outcome:** Developer runs `lgtm-review --export <session-prefix> [--out file.html] [--no-diffs]` and gets one self-contained, script-free HTML file (prompts with status, hints, time split, steps, optional diffs) with secrets redacted, to attach to a PR or send to a colleague.
+- **Change ID:** html-export
+- **PRD refs:** FR-008 (nice-to-have, promoted by orchestrator in PRD v2 for the sharing use case), Guardrail "no data leaves the machine" (the file is written only on explicit command)
+- **Prerequisites:** S-03, S-05
+- **Status:** in progress (planned 2026-10-23, orchestrator decision)
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
@@ -154,7 +162,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 Reserved IDs follow `docs/PROPOSAL.md` §17 so existing references (S-08, S-09) stay valid. None of these are planned until the PRD declares them.
 
 - **S-04: Isometric import map** — Why parked: PRD §Non-Goals (after MVP, v0.2).
-- **S-06: HTML export with secret redaction + local archive (FR-008, nice-to-have)** — Why parked: PRD §Non-Goals; no sharing story in MVP.
+- **Local archive (FR-008, second half)** — Why parked: only the export half shipped in S-06.
 - **S-07: "Play the change"** — Why parked: PRD §Non-Goals (after MVP, v0.2).
 - **S-08: LLM layer (titles and captions; default model decided in its plan)** — Why parked: PRD §Non-Goals; MVP titles come from templates and prompt text.
 - **S-09: Python projects (+ Django preset)** — Why parked: PRD §Non-Goals; owner decision: v0.2.
