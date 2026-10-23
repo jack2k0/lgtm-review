@@ -1,4 +1,5 @@
 import { createPatch, extractPatch, type RawPatch } from "./diff.js";
+import { emptyStats, EVIDENCE_LINES_MAX, scanContent, scanDiffLines, type EditStats } from "./hints.js";
 import type { Warning } from "./schema.js";
 
 /**
@@ -23,6 +24,8 @@ export interface ToolInput {
   filePath?: string;
   /** Number of lines of `content` (Write only). */
   contentLines?: number;
+  /** Assertion and skip-marker counters of the written content (Write only; first 2000 lines). */
+  contentStats?: EditStats;
   /** Detail mode only: pattern, url, query, description or directory of the call (<= 200 chars). */
   hint?: string;
 }
@@ -33,6 +36,8 @@ export interface BashEdit {
   added: number;
   removed: number;
   maybeIncomplete: boolean;
+  /** Assertion and skip-marker counters of the recorded hunks (first 2000 lines). */
+  stats: EditStats;
   /** Detail mode only: the recorded hunks (capped); absent when the log has none. */
   patch?: RawPatch;
 }
@@ -51,6 +56,8 @@ export type ToolResultEvent = {
   resultType?: "create" | "update";
   structuredPatch?: { added: number; removed: number };
   createLines?: number;
+  /** Assertion and skip-marker counters of the patch, or of the created content (first 2000 lines). */
+  stats?: EditStats;
   /** Detail mode only: capped hunks of `structuredPatch` (Edit/MultiEdit/Write update). */
   patch?: RawPatch;
   /** Detail mode only: synthetic all-`+` hunk of the content of a created file. */
@@ -194,7 +201,12 @@ function sanitizeInput(name: string, input: unknown, detail: boolean): ToolInput
   }
   const p = str(input.file_path) ?? str(input.notebook_path);
   if (p !== undefined) out.filePath = truncate(p, PATH_MAX);
-  if (name === "Write" && typeof input.content === "string") out.contentLines = countLines(input.content);
+  if (name === "Write" && typeof input.content === "string") {
+    out.contentLines = countLines(input.content);
+    const stats = emptyStats();
+    scanContent(input.content, stats);
+    out.contentStats = stats;
+  }
   if (detail) {
     const h = hintOf(input);
     if (h !== undefined) out.hint = h;
@@ -213,10 +225,13 @@ function parseBashEdits(diff: unknown, detail: boolean): BashEdit[] | undefined 
     const hunks = Array.isArray(f.hunks) ? f.hunks.filter(isObj) : [];
     let added = 0;
     let removed = 0;
+    const stats = emptyStats();
+    const budget = { left: EVIDENCE_LINES_MAX };
     for (const h of hunks) {
       const c = countDiffLines(h.lines);
       added += c.added;
       removed += c.removed;
+      if (Array.isArray(h.lines)) scanDiffLines(h.lines, stats, budget);
     }
     // Unified-diff convention: "+0,0" side means the file no longer exists, "-0,0" side that it is new.
     const deleted = hunks.length > 0 && hunks.every((h) => h.newStart === 0 && h.newLines === 0);
@@ -227,6 +242,7 @@ function parseBashEdits(diff: unknown, detail: boolean): BashEdit[] | undefined 
       added,
       removed,
       maybeIncomplete: hunks.length === 0,
+      stats,
     };
     if (detail && hunks.length > 0) {
       const patch = extractPatch(hunks, Math.min(linesLeft, 2000));
@@ -300,13 +316,17 @@ export function createParser(opts: ParserOptions = {}): Parser {
           if (Array.isArray(tur.structuredPatch)) {
             let added = 0;
             let removed = 0;
+            const stats = emptyStats();
+            const budget = { left: EVIDENCE_LINES_MAX };
             for (const h of tur.structuredPatch) {
               if (!isObj(h)) continue;
               const c = countDiffLines(h.lines);
               added += c.added;
               removed += c.removed;
+              if (Array.isArray(h.lines)) scanDiffLines(h.lines, stats, budget);
             }
             ev.structuredPatch = { added, removed };
+            ev.stats = stats;
             if (detail) {
               const patch = extractPatch(tur.structuredPatch);
               if (patch) ev.patch = patch;
@@ -314,6 +334,9 @@ export function createParser(opts: ParserOptions = {}): Parser {
           }
           if (tur.type === "create" && typeof tur.content === "string") {
             ev.createLines = countLines(tur.content);
+            const stats = emptyStats();
+            scanContent(tur.content, stats);
+            ev.stats = stats;
             if (detail) ev.createPatch = createPatch(tur.content);
           }
           const be = parseBashEdits(tur.bashEditDiff, detail);

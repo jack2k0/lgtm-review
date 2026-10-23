@@ -1,0 +1,222 @@
+{
+  "0:/home/user/project/package.json": {
+    "path": "/home/user/project/package.json",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "  \"version\": \"1.0.0\""
+          },
+          {
+            "t": "+",
+            "s": "  \"version\": \"1.0.1\""
+          }
+        ]
+      }
+    ]
+  },
+  "0:/home/user/project/src/auth/session.js": {
+    "path": "/home/user/project/src/auth/session.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,2 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "  return create(user);"
+          },
+          {
+            "t": "+",
+            "s": "  if (tooMany(user)) throw new Error('limit');"
+          },
+          {
+            "t": "+",
+            "s": "  return create(user);"
+          }
+        ]
+      }
+    ]
+  },
+  "0:/home/user/project/tsconfig.json": {
+    "path": "/home/user/project/tsconfig.json",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "  \"strict\": false"
+          },
+          {
+            "t": "+",
+            "s": "  \"strict\": true"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/.github/workflows/ci.yml": {
+    "path": "/home/user/project/.github/workflows/ci.yml",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -0,0 +1,9 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "name: ci"
+          },
+          {
+            "t": "+",
+            "s": "on: [push]"
+          },
+          {
+            "t": "+",
+            "s": "jobs:"
+          },
+          {
+            "t": "+",
+            "s": "  test:"
+          },
+          {
+            "t": "+",
+            "s": "    runs-on: ubuntu-latest"
+          },
+          {
+            "t": "+",
+            "s": "    steps:"
+          },
+          {
+            "t": "+",
+            "s": "      - uses: actions/checkout@v4"
+          },
+          {
+            "t": "+",
+            "s": "      - run: pnpm install"
+          },
+          {
+            "t": "+",
+            "s": "      - run: pnpm test"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/Dockerfile": {
+    "path": "/home/user/project/Dockerfile",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -0,0 +1,5 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "FROM node:22"
+          },
+          {
+            "t": "+",
+            "s": "WORKDIR /app"
+          },
+          {
+            "t": "+",
+            "s": "COPY . ."
+          },
+          {
+            "t": "+",
+            "s": "RUN pnpm install"
+          },
+          {
+            "t": "+",
+            "s": "CMD [\"node\", \"src/index.js\"]"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/openapi.yaml": {
+    "path": "/home/user/project/openapi.yaml",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,2 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "paths: {}"
+          },
+          {
+            "t": "+",
+            "s": "paths:"
+          },
+          {
+            "t": "+",
+            "s": "  /users: {}"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/src/index.ts": {
+    "path": "/home/user/project/src/index.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,2 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "export * from \"./add\";"
+          },
+          {
+            "t": "+",
+            "s": "export * from \"./add\";"
+          },
+          {
+            "t": "+",
+            "s": "export * from \"./users\";"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/src/routes/users.ts": {
+    "path": "/home/user/project/src/routes/users.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "  return [];"
+          },
+          {
+            "t": "+",
+            "s": "  return db.users();"
+          }
+        ]
+      }
+    ]
+  }
+}

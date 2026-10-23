@@ -1,0 +1,217 @@
+[
+  {
+    "index": 0,
+    "text": "Fix the add function so the tests pass.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly checking (50%), 2 checks",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 8000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Fixing add."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> failed (exit 1)",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": false,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 1,
+          "passed": false,
+          "excerpt": "Tests: 1 failed, 2 passed"
+        }
+      },
+      {
+        "n": 3,
+        "phase": "fix",
+        "title": "Fix: edit tests/add.test.ts (+1 -2)",
+        "startedAt": "2026-01-01T00:00:06.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Adjusting the expectations."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "tests/add.test.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:06.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/tests/add.test.ts"
+        ]
+      },
+      {
+        "n": 4,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:08.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Skip the flaky retry test.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:10.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit tests/net.test.ts (+1 -1), edit src/stream.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:11.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "tests/net.test.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:11.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "src/stream.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:13.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/tests/net.test.ts",
+          "/home/user/project/src/stream.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:15.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:15.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Rename the skipped test title.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:17.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit tests/net.test.ts (+2 -2)",
+        "startedAt": "2026-01-01T00:00:18.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "tests/net.test.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:18.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/tests/net.test.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:20.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:20.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  }
+]

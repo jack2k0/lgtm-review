@@ -20,6 +20,8 @@ function session(id: string, startedAt: string | null, extra: Partial<SessionAna
         timeSplit: { readMs: 0, writeMs: 0, checkMs: 0, fixMs: 0 },
         activeMs: 0,
         headline: "No timing data",
+        hints: [],
+        recommendation: "read-flagged",
       },
     ],
     warnings: [],

@@ -1,0 +1,232 @@
+{
+  "sessionId": "hints-large-collisions",
+  "title": "Generate the big parser.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Generate the big parser.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/parser.js",
+          "kind": "A",
+          "added": 350,
+          "removed": 0,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [
+        {
+          "rule": "large-change",
+          "severity": "info",
+          "path": "/home/user/project/src/parser.js",
+          "reason": "350 changed lines (limit 300)"
+        }
+      ],
+      "recommendation": "skim"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000006",
+      "text": "Tweak design tokens and the tokenizer.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/author.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/authors.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/design-tokens.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/tokenizer.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/styles/tokens.css",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 10000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 12000,
+      "headline": "Mostly writing (83%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000019",
+      "text": "Rework the auth service and token refresh.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/AuthService.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/tokens/refresh-token.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [
+        {
+          "rule": "sensitive-path",
+          "severity": "high",
+          "path": "/home/user/project/src/AuthService.ts",
+          "reason": "path matches sensitive pattern \"auth\""
+        },
+        {
+          "rule": "sensitive-path",
+          "severity": "high",
+          "path": "/home/user/project/src/tokens/refresh-token.ts",
+          "reason": "path matches sensitive pattern \"tokens\""
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000026",
+      "text": "Clean up the tests with sed.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/tests/x.test.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 4,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [
+        {
+          "rule": "assertions-removed",
+          "severity": "high",
+          "path": "/home/user/project/tests/x.test.ts",
+          "reason": "3 assertion lines removed, 0 added"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 4,
+      "uuid": "00000000-0000-4000-8000-000000000031",
+      "text": "Make the payment tests pass.",
+      "status": "failing",
+      "reason": "pnpm test failed: Tests: 1 failed",
+      "files": [
+        {
+          "path": "/home/user/project/src/pay.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/tests/pay.test.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 3,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 4000,
+        "fixMs": 2000
+      },
+      "activeMs": 8000,
+      "headline": "Mostly checking (50%), 2 checks",
+      "hints": [
+        {
+          "rule": "assertions-removed",
+          "severity": "high",
+          "path": "/home/user/project/tests/pay.test.ts",
+          "reason": "2 assertion lines removed, 0 added"
+        },
+        {
+          "rule": "test-modified-during-fix",
+          "severity": "high",
+          "path": "/home/user/project/tests/pay.test.ts",
+          "reason": "test file edited 1 time while fixing a failing check"
+        },
+        {
+          "rule": "test-skipped",
+          "severity": "high",
+          "path": "/home/user/project/tests/pay.test.ts",
+          "reason": "1 skip marker added"
+        }
+      ],
+      "recommendation": "read-all"
+    }
+  ],
+  "warnings": []
+}

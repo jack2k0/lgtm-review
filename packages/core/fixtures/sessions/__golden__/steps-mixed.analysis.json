@@ -34,7 +34,16 @@
         "fixMs": 4000
       },
       "activeMs": 21400,
-      "headline": "Mostly checking (33%), 2 checks"
+      "headline": "Mostly checking (33%), 2 checks",
+      "hints": [
+        {
+          "rule": "test-modified-during-fix",
+          "severity": "high",
+          "path": "/home/user/project/src/add.test.js",
+          "reason": "test file edited 1 time while fixing a failing check"
+        }
+      ],
+      "recommendation": "read-flagged"
     },
     {
       "index": 1,
@@ -51,7 +60,9 @@
         "fixMs": 0
       },
       "activeMs": 2000,
-      "headline": "Mostly reading (100%), 0 checks"
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
     }
   ],
   "warnings": []

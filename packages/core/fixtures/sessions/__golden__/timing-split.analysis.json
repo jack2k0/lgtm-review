@@ -27,7 +27,9 @@
         "fixMs": 0
       },
       "activeMs": 18000,
-      "headline": "Mostly checking (56%), 1 check"
+      "headline": "Mostly checking (56%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
     },
     {
       "index": 1,
@@ -52,7 +54,9 @@
         "fixMs": 5000
       },
       "activeMs": 14000,
-      "headline": "Mostly checking (50%), 2 checks"
+      "headline": "Mostly checking (50%), 2 checks",
+      "hints": [],
+      "recommendation": "skim"
     },
     {
       "index": 2,
@@ -77,7 +81,16 @@
         "fixMs": 0
       },
       "activeMs": 9000,
-      "headline": "Mostly reading (67%), 0 checks"
+      "headline": "Mostly reading (67%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/add.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
     },
     {
       "index": 3,
@@ -102,7 +115,16 @@
         "fixMs": 0
       },
       "activeMs": 9000,
-      "headline": "Mostly reading (80%), 0 checks"
+      "headline": "Mostly reading (80%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/add.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
     },
     {
       "index": 4,
@@ -127,7 +149,9 @@
         "fixMs": 0
       },
       "activeMs": 6000,
-      "headline": "Mostly reading (50%), 1 check"
+      "headline": "Mostly reading (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
     },
     {
       "index": 5,
@@ -144,7 +168,9 @@
         "fixMs": 0
       },
       "activeMs": 0,
-      "headline": "No timing data"
+      "headline": "No timing data",
+      "hints": [],
+      "recommendation": "skim"
     }
   ],
   "warnings": []

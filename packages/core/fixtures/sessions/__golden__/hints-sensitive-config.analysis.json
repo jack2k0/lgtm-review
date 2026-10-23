@@ -1,0 +1,213 @@
+{
+  "sessionId": "hints-sensitive-config",
+  "title": "Add a login rate limit.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Add a login rate limit.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/package.json",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/auth/session.js",
+          "kind": "M",
+          "added": 2,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/tsconfig.json",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 6000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 8000,
+      "headline": "Mostly writing (75%), 1 check",
+      "hints": [
+        {
+          "rule": "sensitive-path",
+          "severity": "high",
+          "path": "/home/user/project/src/auth/session.js",
+          "reason": "path matches sensitive pattern \"auth\""
+        },
+        {
+          "rule": "dependency-change",
+          "severity": "warn",
+          "path": "/home/user/project/package.json",
+          "reason": "dependency manifest or lockfile edited"
+        },
+        {
+          "rule": "config-change",
+          "severity": "info",
+          "path": "/home/user/project/tsconfig.json",
+          "reason": "build, lint, TypeScript or CI configuration edited"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000010",
+      "text": "Add a CI step and a Dockerfile.",
+      "status": "unchecked",
+      "reason": "no checks ran",
+      "files": [
+        {
+          "path": "/home/user/project/.github/workflows/ci.yml",
+          "kind": "A",
+          "added": 9,
+          "removed": 0,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/Dockerfile",
+          "kind": "A",
+          "added": 5,
+          "removed": 0,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "sensitive-path",
+          "severity": "high",
+          "path": "/home/user/project/.github/workflows/ci.yml",
+          "reason": "path matches sensitive pattern \".github/workflows\""
+        },
+        {
+          "rule": "sensitive-path",
+          "severity": "high",
+          "path": "/home/user/project/Dockerfile",
+          "reason": "path matches sensitive pattern \"Dockerfile\""
+        },
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/.github/workflows/ci.yml",
+          "reason": "edited and no check completed in this prompt"
+        },
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/Dockerfile",
+          "reason": "edited and no check completed in this prompt"
+        },
+        {
+          "rule": "config-change",
+          "severity": "info",
+          "path": "/home/user/project/.github/workflows/ci.yml",
+          "reason": "build, lint, TypeScript or CI configuration edited"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000015",
+      "text": "Explain how the repo is laid out.",
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000018",
+      "text": "Expose the users endpoint in the public API.",
+      "status": "failing",
+      "reason": "pnpm test failed: Tests: 2 failed",
+      "files": [
+        {
+          "path": "/home/user/project/openapi.yaml",
+          "kind": "M",
+          "added": 2,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/index.ts",
+          "kind": "M",
+          "added": 2,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/routes/users.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 6000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 8000,
+      "headline": "Mostly writing (75%), 1 check",
+      "hints": [
+        {
+          "rule": "public-surface",
+          "severity": "warn",
+          "path": "/home/user/project/openapi.yaml",
+          "reason": "public surface edited (schema or OpenAPI)"
+        },
+        {
+          "rule": "public-surface",
+          "severity": "warn",
+          "path": "/home/user/project/src/index.ts",
+          "reason": "public surface edited (package entry point)"
+        },
+        {
+          "rule": "public-surface",
+          "severity": "warn",
+          "path": "/home/user/project/src/routes/users.ts",
+          "reason": "public surface edited (routes or API)"
+        }
+      ],
+      "recommendation": "read-flagged"
+    }
+  ],
+  "warnings": []
+}

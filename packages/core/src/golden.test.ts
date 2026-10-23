@@ -8,7 +8,7 @@ const fixtures = listFixtures();
 
 describe("fixture corpus", () => {
   test("has fixtures", () => {
-    expect(fixtures.length).toBeGreaterThanOrEqual(7);
+    expect(fixtures.length).toBeGreaterThanOrEqual(14);
   });
 
   test("every jsonl has labels and vice versa", () => {
@@ -73,6 +73,50 @@ describe("golden: steps and diffs (detail mode)", () => {
       }
     }
     await expect(JSON.stringify(diffs, null, 2) + "\n").toMatchFileSnapshot(join(sessionsDir, "__golden__", `${name}.diffs.json`));
+  });
+});
+
+describe("hints and recommendation against labels", () => {
+  const cwd = "/home/user/project/";
+  test.each(fixtures)("%s", (name) => {
+    const analysis = analyzeSession(readFixtureLines(name));
+    for (const l of readLabels(name).prompts) {
+      const p = analysis.prompts[l.index];
+      if (l.expectedRecommendation !== undefined) expect(p?.recommendation, `${name}#${l.index} recommendation`).toBe(l.expectedRecommendation);
+      if (l.expectedHints !== undefined) {
+        const got = (p?.hints ?? []).map((h) => `${h.rule}:${(h.path ?? "").replace(cwd, "")}`).sort();
+        expect(got, `${name}#${l.index} hints`).toEqual([...l.expectedHints].sort());
+      }
+    }
+  });
+
+  test("every prompt of the hints fixtures is labelled with a recommendation", () => {
+    for (const name of fixtures.filter((f) => f.startsWith("hints-"))) {
+      for (const l of readLabels(name).prompts) {
+        expect(l.expectedRecommendation, `${name}#${l.index}`).toBeDefined();
+        expect(l.expectedHints, `${name}#${l.index}`).toBeDefined();
+      }
+    }
+  });
+
+  test("hints are sorted by severity, rule, path and unique per (rule, path)", () => {
+    const rank = { high: 0, warn: 1, info: 2 } as const;
+    for (const name of fixtures) {
+      for (const p of analyzeSession(readFixtureLines(name)).prompts) {
+        const keys = p.hints.map((h) => `${h.rule}\u0000${h.path}`);
+        expect(new Set(keys).size).toBe(keys.length);
+        const sorted = [...p.hints].sort((a, b) => rank[a.severity] - rank[b.severity] || (a.rule < b.rule ? -1 : a.rule > b.rule ? 1 : 0) || ((a.path ?? "") < (b.path ?? "") ? -1 : 1));
+        expect(p.hints).toEqual(sorted);
+      }
+    }
+  });
+
+  test("hint reasons never carry command output or file content", () => {
+    for (const name of fixtures) {
+      for (const p of analyzeSession(readFixtureLines(name)).prompts) {
+        for (const h of p.hints) expect(h.reason.length).toBeLessThan(120);
+      }
+    }
   });
 });
 

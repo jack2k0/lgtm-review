@@ -28,6 +28,35 @@ export const TimeSplit = z.object({
 });
 export type TimeSplit = z.infer<typeof TimeSplit>;
 
+export const Severity = z.enum(["high", "warn", "info"]);
+export type Severity = z.infer<typeof Severity>;
+
+export const HintRule = z.enum([
+  "test-modified-during-fix",
+  "assertions-removed",
+  "test-skipped",
+  "sensitive-path",
+  "unchecked-edit",
+  "dependency-change",
+  "public-surface",
+  "config-change",
+  "large-change",
+]);
+export type HintRule = z.infer<typeof HintRule>;
+
+/** One "look here" pointer. `reason` states the evidence (counts, matched pattern); never command output or file content. */
+export const Hint = z.object({
+  rule: HintRule,
+  severity: Severity,
+  /** Path as in `PromptAnalysis.files`; null for prompt-level hints. */
+  path: z.string().nullable(),
+  reason: z.string(),
+});
+export type Hint = z.infer<typeof Hint>;
+
+export const Recommendation = z.enum(["skim", "read-flagged", "read-all"]);
+export type Recommendation = z.infer<typeof Recommendation>;
+
 export const PromptAnalysis = z.object({
   index: z.number().int().nonnegative(),
   uuid: z.string(),
@@ -43,6 +72,9 @@ export const PromptAnalysis = z.object({
   activeMs: z.number().int().nonnegative(),
   /** One sentence, e.g. "Mostly writing (62%), 1 check"; "No timing data" when activeMs is 0. */
   headline: z.string(),
+  /** Deduplicated per (rule, path), sorted by severity (high, warn, info), then rule, then path. */
+  hints: z.array(Hint),
+  recommendation: Recommendation,
 });
 export type PromptAnalysis = z.infer<typeof PromptAnalysis>;
 

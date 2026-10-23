@@ -27,7 +27,9 @@
         "fixMs": 0
       },
       "activeMs": 6000,
-      "headline": "Mostly writing (33%), 1 check"
+      "headline": "Mostly writing (33%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
     }
   ],
   "warnings": []

@@ -14,6 +14,10 @@ export const Labels = z.object({
       index: z.number().int().nonnegative(),
       expectedStatus: z.enum(["checked", "unchecked", "failing", "no-changes"]),
       note: z.string(),
+      /** Hand-derived recommendation (optional; checked by the golden test when present). */
+      expectedRecommendation: z.enum(["skim", "read-flagged", "read-all"]).optional(),
+      /** Hand-derived hints as `rule:path` (path relative to the project dir), sorted; checked when present. */
+      expectedHints: z.array(z.string()).optional(),
     }),
   ),
 });

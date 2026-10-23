@@ -1,5 +1,6 @@
 import { classifyCommand, type RepoScripts } from "./check-patterns.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
+import { computeHints, emptyStats, recommend, type EditEvidence, type EditStats } from "./hints.js";
 import { createParser, type Event, type ToolInput, type ToolResultEvent } from "./parse.js";
 import { ACTIONS_MAX, buildSteps, failureExcerpt, kindOf, oneLine, QUOTES_PER_STEP, type ActionRec } from "./steps.js";
 import { actionPhase, createTimingTracker, parseTs, type TimingTracker } from "./timing.js";
@@ -45,6 +46,10 @@ interface FileTouch {
   added: number;
   removed: number;
   maybeIncomplete: boolean;
+  /** The edit was made in the Fix phase (the last completed check had failed). */
+  inFix: boolean;
+  /** Counters of assertion-like and skip-marker lines; the lines themselves are never kept. */
+  stats: EditStats;
   /** Detail mode: retained hunks of this edit; `undefined` when the log recorded none. */
   patch?: RawPatch | undefined;
 }
@@ -99,21 +104,38 @@ interface PendingUse {
   action: ActionRec | null;
 }
 
-function editTouch(use: PendingUse, res: ToolResultEvent): FileTouch | null {
+function editTouch(use: PendingUse, res: ToolResultEvent, inFix: boolean): FileTouch | null {
   const path = use.input.filePath;
   if (path === undefined) return null;
   const isWrite = use.name === "Write";
+  // A written file without patch counts the written content as added (nothing is known about the old one).
+  const stats = res.stats ?? (isWrite ? use.input.contentStats : undefined) ?? emptyStats();
   if (isWrite && res.resultType === "create") {
-    return { path, kind: "A", added: res.createLines ?? use.input.contentLines ?? 0, removed: 0, maybeIncomplete: false };
+    return { path, kind: "A", added: res.createLines ?? use.input.contentLines ?? 0, removed: 0, maybeIncomplete: false, inFix, stats };
   }
   if (res.structuredPatch) {
-    return { path, kind: "M", added: res.structuredPatch.added, removed: res.structuredPatch.removed, maybeIncomplete: false };
+    return { path, kind: "M", added: res.structuredPatch.added, removed: res.structuredPatch.removed, maybeIncomplete: false, inFix, stats };
   }
   if (isWrite) {
     // No create marker and no patch: whole-file write of unknown previous content.
-    return { path, kind: "M", added: use.input.contentLines ?? 0, removed: 0, maybeIncomplete: true };
+    return { path, kind: "M", added: use.input.contentLines ?? 0, removed: 0, maybeIncomplete: true, inFix, stats };
   }
-  return { path, kind: "M", added: 0, removed: 0, maybeIncomplete: true };
+  return { path, kind: "M", added: 0, removed: 0, maybeIncomplete: true, inFix, stats };
+}
+
+/** Sequence number at which the last completed (non-ignored) check finished; null when none did. */
+function lastCheckSeq(p: PromptState): number | null {
+  let last: number | null = null;
+  for (const c of p.checks) if (!c.ignored && c.completed && (last === null || c.resultSeq > last)) last = c.resultSeq;
+  return last;
+}
+
+function evidenceOf(p: PromptState): EditEvidence[] {
+  const out: EditEvidence[] = [];
+  for (const e of p.edits) {
+    for (const t of e.files) out.push({ seq: e.seq, path: t.path, inFix: t.inFix, changed: t.added + t.removed, stats: t.stats });
+  }
+  return out;
 }
 
 function aggregateFiles(edits: EditRec[]): FileChange[] {
@@ -339,14 +361,22 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
         if (ev.isError) return;
         let touches: FileTouch[] = [];
         if (EDIT_TOOLS.has(use.name)) {
-          const t = editTouch(use, ev);
+          const t = editTouch(use, ev, phase === "fix");
           if (t) {
             if (detail) t.patch = retain(use.prompt, t.path, t.kind === "A" ? ev.createPatch : ev.patch);
             touches = [t];
           }
         } else if (use.name === "Bash" && ev.bashEditDiff && ev.bashEditDiff.length > 0) {
           touches = ev.bashEditDiff.map((f) => {
-            const t: FileTouch = { path: f.path, kind: f.kind, added: f.added, removed: f.removed, maybeIncomplete: f.maybeIncomplete };
+            const t: FileTouch = {
+              path: f.path,
+              kind: f.kind,
+              added: f.added,
+              removed: f.removed,
+              maybeIncomplete: f.maybeIncomplete,
+              inFix: phase === "fix",
+              stats: f.stats,
+            };
             if (detail) t.patch = retain(use.prompt, f.path, f.patch);
             return t;
           });
@@ -375,6 +405,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
       const meta = parser.meta();
       const out: PromptAnalysis[] = prompts.map((p) => {
         const j = judge(p);
+        const hints = computeHints({ edits: evidenceOf(p), lastCheckSeq: lastCheckSeq(p), cwd: meta.cwd });
         return {
           index: p.index,
           uuid: p.uuid,
@@ -384,6 +415,8 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           files: aggregateFiles(p.edits),
           partial: p.partial,
           ...p.timing.result(p.checks.filter((c) => !c.ignored).length),
+          hints,
+          recommendation: recommend(hints, j.status),
         };
       });
       const first = prompts[0];

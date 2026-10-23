@@ -1,0 +1,32 @@
+{
+  "fixture": "hints-test-edits",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "assertions-removed:tests/add.test.ts",
+        "test-modified-during-fix:tests/add.test.ts"
+      ],
+      "note": "test edited after a failing check (Fix) and 2 expects replaced by 1; the final check passes"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "test-skipped:tests/net.test.ts"
+      ],
+      "note": "it.skip added in a test; a .skip( in a non-test file is not flagged"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "skipped test renamed (skip marker and expect line replaced one for one): no hints"
+    }
+  ]
+}

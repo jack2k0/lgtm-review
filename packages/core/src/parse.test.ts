@@ -3,6 +3,7 @@ import { createParser, parseLines } from "./parse.js";
 import { bash, edit, prompt, rec, resetIds, toolResult, toolUse } from "./testing/records.js";
 
 beforeEach(resetIds);
+const NO_STATS = { assertAdded: 0, assertRemoved: 0, skipAdded: 0, skipRemoved: 0 };
 
 const kinds = (lines: string[]) => parseLines(lines).events.map((e) => (e.type === "boundary" ? `boundary:${e.kind}` : e.type));
 
@@ -103,8 +104,8 @@ describe("tool pairing data", () => {
       }),
     ]);
     expect((events[0] as { bashEditDiff: unknown }).bashEditDiff).toEqual([
-      { path: "/home/user/project/x.txt", kind: "M", added: 1, removed: 2, maybeIncomplete: false },
-      { path: "/home/user/project/gone.txt", kind: "D", added: 0, removed: 2, maybeIncomplete: false },
+      { path: "/home/user/project/x.txt", kind: "M", added: 1, removed: 2, maybeIncomplete: false, stats: NO_STATS },
+      { path: "/home/user/project/gone.txt", kind: "D", added: 0, removed: 2, maybeIncomplete: false, stats: NO_STATS },
     ]);
   });
 

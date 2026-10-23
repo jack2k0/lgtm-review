@@ -19,7 +19,9 @@
         "fixMs": 0
       },
       "activeMs": 2000,
-      "headline": "Mostly reading (100%), 0 checks"
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
     },
     {
       "index": 1,
@@ -44,7 +46,9 @@
         "fixMs": 0
       },
       "activeMs": 4000,
-      "headline": "Mostly writing (50%), 1 check"
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
     }
   ],
   "warnings": [

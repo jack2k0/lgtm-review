@@ -11,6 +11,10 @@ export {
   Warning,
   FileChange,
   TimeSplit,
+  Severity,
+  HintRule,
+  Hint,
+  Recommendation,
   PromptAnalysis,
   SessionAnalysis,
   Analysis,
@@ -26,6 +30,7 @@ export {
   FileDiff,
 } from "./schema.js";
 export { makeHeadline } from "./timing.js";
+export { computeHints, recommend, isTestPath, sensitiveMatch, isManifestPath, isConfigPath, publicSurfaceKind } from "./hints.js";
 export { classifyCommand } from "./check-patterns.js";
 export type { CommandClass, RepoScripts } from "./check-patterns.js";
 export { analyzeSession, createAnalyzer } from "./analyze.js";

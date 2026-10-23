@@ -1,0 +1,48 @@
+{
+  "fixture": "hints-sensitive-config",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "sensitive-path:src/auth/session.js",
+        "dependency-change:package.json",
+        "config-change:tsconfig.json"
+      ],
+      "note": "auth directory, package.json and tsconfig edited; check passes"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "sensitive-path:.github/workflows/ci.yml",
+        "sensitive-path:Dockerfile",
+        "unchecked-edit:.github/workflows/ci.yml",
+        "unchecked-edit:Dockerfile",
+        "config-change:.github/workflows/ci.yml"
+      ],
+      "note": "CI workflow and Dockerfile written, no check ran"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "read only"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "failing",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "public-surface:openapi.yaml",
+        "public-surface:src/index.ts",
+        "public-surface:src/routes/users.ts"
+      ],
+      "note": "public surface edited and the check fails; only warn hints but failing status raises the recommendation"
+    }
+  ]
+}

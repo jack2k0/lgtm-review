@@ -27,7 +27,16 @@
         "fixMs": 0
       },
       "activeMs": 2000,
-      "headline": "Mostly writing (100%), 1 check"
+      "headline": "Mostly writing (100%), 1 check",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/add.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
     },
     {
       "index": 1,
@@ -44,7 +53,9 @@
         "fixMs": 0
       },
       "activeMs": 0,
-      "headline": "No timing data"
+      "headline": "No timing data",
+      "hints": [],
+      "recommendation": "skim"
     }
   ],
   "warnings": [

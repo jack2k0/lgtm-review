@@ -1,0 +1,52 @@
+{
+  "fixture": "hints-large-collisions",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [
+        "large-change:src/parser.js"
+      ],
+      "note": "350-line file created; info only"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "design-tokens.ts, tokenizer.ts, authors.ts, author.ts and a .css file are not sensitive"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "sensitive-path:src/AuthService.ts",
+        "sensitive-path:src/tokens/refresh-token.ts"
+      ],
+      "note": "camelCase file name and a tokens directory are sensitive"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "assertions-removed:tests/x.test.ts"
+      ],
+      "note": "three expect lines deleted by a shell edit"
+    },
+    {
+      "index": 4,
+      "expectedStatus": "failing",
+      "expectedRecommendation": "read-all",
+      "expectedHints": [
+        "assertions-removed:tests/pay.test.ts",
+        "test-modified-during-fix:tests/pay.test.ts",
+        "test-skipped:tests/pay.test.ts"
+      ],
+      "note": "test edited during Fix with expects removed and describe.skip added: three distinct high rules"
+    }
+  ]
+}

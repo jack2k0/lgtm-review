@@ -75,8 +75,8 @@ Three phases: (1) core hints + recommendation with goldens, (2) web display, (3)
 
 ### Phase 1: Core hints
 
-- [ ] 1.1 `pnpm check` green, node-free grep empty, determinism
-- [ ] 1.2 Goldens reviewed (new fields only)
+- [x] 1.1 `pnpm check` green, node-free grep empty, determinism
+- [x] 1.2 Goldens reviewed (new fields only; verified by script: 11 existing analysis goldens differ only by `hints`/`recommendation`, steps and diffs goldens unchanged; orchestrator may re-check)
 
 ### Phase 2: Web display
 

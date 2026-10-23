@@ -1,0 +1,119 @@
+{
+  "0:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "  return a - b;"
+          },
+          {
+            "t": "+",
+            "s": "  return a * b;"
+          }
+        ]
+      }
+    ]
+  },
+  "0:/home/user/project/tests/add.test.ts": {
+    "path": "/home/user/project/tests/add.test.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,2 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "  expect(add(2, 3)).toBe(5);"
+          },
+          {
+            "t": "-",
+            "s": "  expect(add(0, 0)).toBe(0);"
+          },
+          {
+            "t": "+",
+            "s": "  expect(add(2, 3)).toBe(6);"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/src/stream.js": {
+    "path": "/home/user/project/src/stream.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "  return s.read(4);"
+          },
+          {
+            "t": "+",
+            "s": "  return s.skip(4);"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/tests/net.test.ts": {
+    "path": "/home/user/project/tests/net.test.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "  it(\"retries\", () => {"
+          },
+          {
+            "t": "+",
+            "s": "  it.skip(\"retries\", () => {"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/tests/net.test.ts": {
+    "path": "/home/user/project/tests/net.test.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,2 +1,2 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "  it.skip(\"retries\", () => {"
+          },
+          {
+            "t": "-",
+            "s": "    expect(retry()).toBe(1);"
+          },
+          {
+            "t": "+",
+            "s": "  it.skip(\"retries twice\", () => {"
+          },
+          {
+            "t": "+",
+            "s": "    expect(retry()).toBe(2);"
+          }
+        ]
+      }
+    ]
+  }
+}

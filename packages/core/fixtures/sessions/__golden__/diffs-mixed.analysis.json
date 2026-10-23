@@ -62,7 +62,46 @@
         "fixMs": 0
       },
       "activeMs": 14000,
-      "headline": "Mostly writing (100%), 0 checks"
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/a.js",
+          "reason": "edited and no check completed in this prompt"
+        },
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/empty.js",
+          "reason": "edited and no check completed in this prompt"
+        },
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/greet.js",
+          "reason": "edited and no check completed in this prompt"
+        },
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/new.js",
+          "reason": "edited and no check completed in this prompt"
+        },
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/old.js",
+          "reason": "edited and no check completed in this prompt"
+        },
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/shell.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
     },
     {
       "index": 1,
@@ -94,7 +133,28 @@
         "fixMs": 0
       },
       "activeMs": 4000,
-      "headline": "Mostly writing (100%), 0 checks"
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/data/big.txt",
+          "reason": "edited and no check completed in this prompt"
+        },
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/data/wide.txt",
+          "reason": "edited and no check completed in this prompt"
+        },
+        {
+          "rule": "large-change",
+          "severity": "info",
+          "path": "/home/user/project/data/big.txt",
+          "reason": "2500 changed lines (limit 300)"
+        }
+      ],
+      "recommendation": "read-flagged"
     }
   ],
   "warnings": []

@@ -27,7 +27,16 @@
         "fixMs": 0
       },
       "activeMs": 6000,
-      "headline": "Mostly writing (67%), 1 check"
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/add.js",
+          "reason": "edited after the last completed check"
+        }
+      ],
+      "recommendation": "read-flagged"
     }
   ],
   "warnings": []
