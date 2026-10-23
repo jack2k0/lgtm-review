@@ -172,6 +172,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Prerequisites:** S-11
 - **Status:** done (2026-10-23; core Sonnet, consumers Haiku, plan-review OpenCode Big Pickle). Real-log audit pending (reading ~/.claude blocked by auto-mode classifier; needs owner permission)
 
+### S-04: Import map (2D, reduced) (v0.2)
+
+- **Outcome:** Developer can open a 2D layered architectural map for a session or individual prompt showing modified TS/JS files and their direct in-repo import neighbours (1 hop both directions, max 150 nodes) from the current working tree snapshot, grouped into horizontal layers by top-level directory or package, with status-coloured nodes linking directly to file diffs.
+- **Change ID:** import-map
+- **PRD refs:** FR-012
+- **Prerequisites:** S-03
+- **Status:** in progress (2026-10-23, orchestrator decision; owner delegated open question 6)
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
@@ -194,7 +202,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 Reserved IDs follow `docs/PROPOSAL.md` §17 so existing references (S-08, S-09) stay valid. None of these are planned until the PRD declares them.
 
-- **S-04: Isometric import map** — Why parked: PRD §Non-Goals (after MVP, v0.2).
+- **S-04: Isometric import map** — Why parked: PRD §Non-Goals; reduced 2D version moved to active section (S-04), isometric stays parked.
 - **Local archive (FR-008, second half)** — Why parked: only the export half shipped in S-06.
 - **S-07: "Play the change"** — Why parked: PRD §Non-Goals (after MVP, v0.2).
 - **S-08: LLM layer (titles and captions; default model decided in its plan)** — Why parked: PRD §Non-Goals; MVP titles come from templates and prompt text.

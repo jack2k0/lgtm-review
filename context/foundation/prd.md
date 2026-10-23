@@ -119,7 +119,7 @@ Single user; no auth; data lives on-device only. The web UI is reachable only fr
 
 ## Non-Goals
 
-- Isometric import map, review hints, "Play the change": after MVP (v0.2); MVP stays at prompts / steps / diff.
+- Isometric 3D import map (reduced 2D import map in v0.2), review hints, "Play the change": after MVP (v0.2); MVP stays at prompts / steps / diff.
 - HTML export with secret redaction and the local archive (FR-008): after MVP; no sharing story in MVP.
 - LLM-generated titles and captions: MVP titles come from templates and the prompt text; LLM layer is later.
 - Agents other than Claude Code, and Python projects: later.
@@ -138,9 +138,11 @@ MVP (US-01, US-02, FR-001..FR-007) is delivered. v0.2 adds review guidance, stil
   > Socrates: Counter-argument considered: "Summary could leak prompt text into PRs." Resolution: kept; summary contains status, reason, hints and file paths and the 80-char prompt title only; no command output, no file content; documented in README.
 - FR-011: Developer can keep the browser view open while a session is still running and see it update (statuses, steps, diffs) without reloading; updates pause when the tab is hidden. Priority: nice-to-have.
   > Socrates: Counter-argument considered: "Polling wastes CPU and a half-written log line breaks parsing." Resolution: kept; conditional requests (ETag/304) make idle polls cheap, parsing already tolerates a truncated last line, interval 5 s, only while visible.
+- FR-012: Developer can open a 2D layered import map for a session or individual prompt showing modified TS/JS files and their direct in-repo import neighbours (1 hop in both directions: outgoing imports and incoming importers) against the current working tree snapshot (imports as of now), grouped into horizontal layers by top-level directory or package, capped at 150 nodes, with modified nodes coloured by verification status and linking to diffs. Priority: should-have.
+  > Socrates: Counter-argument considered: "An architectural import map without full repository indexing or isometric depth is incomplete and adds overhead." Resolution: kept with reduced scope; a 2D working-tree snapshot of changed files and their direct 1-hop neighbours in both directions (capped at 150 nodes) provides immediate architectural context without full-repo indexing overhead or 3D complexity; isometric 3D remains a non-goal.
 - FR-008 (export half) promoted to v0.2: the export is a single script-free HTML file produced only by an explicit command; secrets are redacted by a documented, tested pattern set (best effort, the README says so); `--no-diffs` omits file content entirely.
 - Decision (S-11, 2026-10-23): edits that come only from git operations (`merge`, `rebase`, `pull`, `checkout`, `stash`, `cherry-pick`, `mv`, `restore`, `reset`) are listed in the file list but do not invalidate an earlier passing check. Measured on the owner's real logs (audit after S-11): status match 97.1% on prompts without subagent activity, 94.5% overall; the gap is subagent transcripts (S-12) and fork/resume duplicates (S-13).
-- Still non-goals: isometric import map, "Play the change", HTML export with redaction, LLM layer, Python, other agents.
+- Still non-goals: isometric 3D import map (reduced 2D map added in FR-012), "Play the change", HTML export with redaction, LLM layer, Python, other agents.
 
 ## Open Questions
 
