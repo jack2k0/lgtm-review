@@ -3,7 +3,7 @@ import type { PromptAnalysis } from "@lgtm/core";
 import {
   PROMPT_PAGE, actionsLabel, checkOutcome, fileTotals, filesText, formatClock, formatDuration, formatStarted, formatStepDuration,
   incompleteMarkers, nextLimit, parseRoute, phaseLabel, promptHeading, routeHref, statusCountItems, statusLabel, stepTitle,
-  timeBarText, timeSegments, visiblePrompts,
+  retainKeys, timeBarText, timeSegments, toggleKey, visiblePrompts,
 } from "./viewmodel";
 
 const file = (added: number, removed: number, maybeIncomplete = false) => ({ path: "a", kind: "M" as const, added, removed, maybeIncomplete });
@@ -141,5 +141,32 @@ describe("step formatting", () => {
     expect(actionsLabel(12)).toBe("12 actions");
     expect(promptHeading(0, "Fix the bug")).toBe("Prompt 1: Fix the bug");
     expect(promptHeading(4, "  ")).toBe("Prompt 5: (empty prompt)");
+  });
+});
+
+describe("expanded state across live refreshes", () => {
+  const promptsV1 = [{ index: 0 }, { index: 1 }, { index: 2 }];
+  const promptsV2 = [...promptsV1, { index: 3 }]; // a new prompt was appended
+
+  test("toggleKey flips a key without mutating", () => {
+    const a: ReadonlySet<number> = new Set([1]);
+    const b = toggleKey(a, 2);
+    expect([...b].sort()).toEqual([1, 2]);
+    expect([...a]).toEqual([1]);
+    expect([...toggleKey(b, 1)]).toEqual([2]);
+  });
+
+  test("fresh data with the same prompt indices keeps the expanded rows (same set instance)", () => {
+    const open: ReadonlySet<number> = new Set([0, 2]);
+    expect(retainKeys(open, promptsV1.map((p) => p.index))).toBe(open);
+    expect(retainKeys(open, promptsV2.map((p) => p.index))).toBe(open);
+  });
+
+  test("same step numbers keep expanded step lists; keys that vanished are dropped", () => {
+    const open: ReadonlySet<number> = new Set([1, 3]);
+    expect(retainKeys(open, [1, 2, 3, 4])).toBe(open);
+    expect([...retainKeys(open, [1, 2])]).toEqual([1]);
+    const empty: ReadonlySet<number> = new Set();
+    expect(retainKeys(empty, [1])).toBe(empty);
   });
 });

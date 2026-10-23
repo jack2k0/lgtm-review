@@ -139,6 +139,22 @@ try {
   if (noPrompt.status !== 404) fail(`unknown prompt: expected 404, got ${noPrompt.status}`);
   console.log("smoke ok: detail routes (steps, diff, 403, 404)");
 
+  // Conditional requests: 200 with an ETag, then 304 (empty body, same ETag) for each data route; no token still 403.
+  for (const p of ["/api/sessions", `/api/sessions/${sessionId}`, stepsPath, diffPath]) {
+    const first = await get(p);
+    const etag = first.headers.get("etag");
+    if (first.status !== 200 || !/^"[0-9a-f]{16}"$/.test(etag ?? "")) fail(`GET ${p}: expected 200 with a strong ETag, got ${first.status} ${etag}`);
+    if (first.headers.get("cache-control") !== "no-cache, private") fail(`GET ${p}: cache-control ${first.headers.get("cache-control")}`);
+    await first.arrayBuffer();
+    const cond = await fetch(`${url.origin}${p}`, { headers: { "X-Lgtm-Token": token, "If-None-Match": etag } });
+    if (cond.status !== 304) fail(`GET ${p} with If-None-Match: expected 304, got ${cond.status}`);
+    if (cond.headers.get("etag") !== etag) fail(`GET ${p}: 304 ETag ${cond.headers.get("etag")} != ${etag}`);
+    if ((await cond.text()) !== "") fail(`GET ${p}: 304 has a body`);
+    const denied304 = await fetch(`${url.origin}${p}`, { headers: { "If-None-Match": etag } });
+    if (denied304.status !== 403 || denied304.headers.get("etag") !== null) fail(`GET ${p} with If-None-Match, no token: expected 403 without ETag, got ${denied304.status}`);
+  }
+  console.log("smoke ok: conditional requests (200 -> 304, same ETag)");
+
   // Bundled UI: index.html and a JS asset with the right Content-Type.
   const root = await fetch(`${url.origin}/`);
   if (root.status !== 200) fail(`GET /: expected 200, got ${root.status}`);

@@ -313,3 +313,22 @@ export function rulesByPath(hints: readonly Hint[]): Map<string, string[]> {
 
 /** Shown instead of a path for prompt-level hints. */
 export const PROMPT_LEVEL = "(whole prompt)";
+
+/**
+ * Expanded rows / step lists are keyed by prompt index / step number, which are append-only within a session
+ * file, so they survive a data refresh. `toggleKey` flips one key without mutating the set.
+ */
+export function toggleKey<K>(set: ReadonlySet<K>, key: K): ReadonlySet<K> {
+  const next = new Set(set);
+  if (!next.delete(key)) next.add(key);
+  return next;
+}
+
+/** The expanded keys that still exist in fresh data; the same set when nothing was dropped. */
+export function retainKeys<K>(set: ReadonlySet<K>, existing: Iterable<K>): ReadonlySet<K> {
+  if (set.size === 0) return set;
+  const have = new Set(existing);
+  const kept = new Set<K>();
+  for (const k of set) if (have.has(k)) kept.add(k);
+  return kept.size === set.size ? set : kept;
+}

@@ -1,29 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FileDiff, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
 import { errorMessage, fetchFileDiff, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
 import { DiffView } from "./DiffView";
+import { LiveContext, LiveIndicator, useLive, useLiveStatus, type Load } from "./Live";
+import { readPaused, writePaused } from "./live";
 import { PromptTable } from "./PromptTable";
 import { SessionList } from "./SessionList";
 import { StepsView } from "./StepsView";
+import { sessionStore } from "./token";
 import { parseRoute, routeHref, type Route } from "./viewmodel";
-
-type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ok"; data: T };
-
-function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key: string): Load<T> {
-  const [res, setRes] = useState<{ key: string; value: Load<T> }>({ key, value: { state: "loading" } });
-  useEffect(() => {
-    const ac = new AbortController();
-    load(ac.signal).then(
-      (data) => setRes({ key, value: { state: "ok", data } }),
-      (e: unknown) => {
-        if (!ac.signal.aborted) setRes({ key, value: { state: "error", message: errorMessage(e) } });
-      },
-    );
-    return () => ac.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-  return res.key === key ? res.value : { state: "loading" };
-}
 
 function Status<T>({ res, back, children }: { res: Load<T>; back?: string; children: (data: T) => React.ReactNode }) {
   const link = back ? <p><a href={back}>&larr; Back to steps</a></p> : null;
@@ -33,12 +18,12 @@ function Status<T>({ res, back, children }: { res: Load<T>; back?: string; child
 }
 
 function ListView({ token }: { token: string | null }) {
-  const res = useLoad<SessionsResponse>((s) => fetchSessions(token, s), "list");
+  const res = useLive<SessionsResponse>((e, s) => fetchSessions(token, e, s), "list");
   return <Status res={res}>{(d) => <SessionList data={d} />}</Status>;
 }
 
 function SessionView({ token, id }: { token: string | null; id: string }) {
-  const res = useLoad<SessionAnalysis>((s) => fetchSession(token, id, s), `s:${id}`);
+  const res = useLive<SessionAnalysis>((e, s) => fetchSession(token, id, e, s), `s:${id}`);
   return (
     <>
       <p><a href={routeHref({ kind: "list" })}>&larr; All sessions</a></p>
@@ -48,7 +33,7 @@ function SessionView({ token, id }: { token: string | null; id: string }) {
 }
 
 function StepsRoute({ token, id, index }: { token: string | null; id: string; index: number }) {
-  const res = useLoad<PromptDetail>((s) => fetchPromptDetail(token, id, index, s), `p:${id}:${index}`);
+  const res = useLive<PromptDetail>((e, s) => fetchPromptDetail(token, id, index, e, s), `p:${id}:${index}`);
   return (
     <Status res={res}>
       {(d) => <StepsView sessionId={id} detail={d} onOpenFile={(path) => { window.location.hash = routeHref({ kind: "diff", id, index, path }); }} />}
@@ -57,7 +42,7 @@ function StepsRoute({ token, id, index }: { token: string | null; id: string; in
 }
 
 function DiffRoute({ token, id, index, path }: { token: string | null; id: string; index: number; path: string }) {
-  const res = useLoad<FileDiff>((s) => fetchFileDiff(token, id, index, path, s), `d:${id}:${index}:${path}`);
+  const res = useLive<FileDiff>((e, s) => fetchFileDiff(token, id, index, path, e, s), `d:${id}:${index}:${path}`);
   // Escape goes back to the steps of this prompt.
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
@@ -94,12 +79,20 @@ export function App({ token }: { token: string | null }) {
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
+  const [paused, setPaused] = useState<boolean>(() => readPaused(sessionStore()));
+  const [status, report] = useLiveStatus();
+  const ctx = useMemo(() => ({ paused, report }), [paused, report]);
+  const toggle = () => {
+    writePaused(sessionStore(), !paused);
+    setPaused(!paused);
+  };
   return (
-    <>
+    <LiveContext.Provider value={ctx}>
       <header className="top">
         <h1><a href={routeHref({ kind: "list" })}>lgtm-review</a></h1>
+        <LiveIndicator paused={paused} status={status} onToggle={toggle} />
       </header>
       <main><Routed token={token} route={route} /></main>
-    </>
+    </LiveContext.Provider>
   );
 }

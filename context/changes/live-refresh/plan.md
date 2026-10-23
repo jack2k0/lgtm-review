@@ -63,8 +63,8 @@ Two phases: (1) server conditional requests with tests; (2) web live polling, UI
 
 ### Phase 2: Web live polling
 
-- [ ] 2.1 `pnpm check` green incl. smoke 200 -> 304
-- [ ] 2.2 Live update observed in a headless browser
+- [x] 2.1 `pnpm check` green incl. smoke 200 -> 304
+- [x] 2.2 Live update observed in a headless browser
 
 ## Plan-review amendments (accepted by orchestrator, 2026-10-23)
 

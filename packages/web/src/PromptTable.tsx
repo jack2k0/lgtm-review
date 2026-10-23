@@ -3,7 +3,7 @@ import type { PromptAnalysis, SessionAnalysis } from "@lgtm/core";
 import { HintList, ReviewCell, RuleMarkers } from "./Hints";
 import { StatusTag } from "./StatusDot";
 import { TimeBar, TimeLegend } from "./TimeBar";
-import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, plural, routeHref, rulesByPath, shortPath, visiblePrompts } from "./viewmodel";
+import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, plural, routeHref, retainKeys, rulesByPath, shortPath, toggleKey, visiblePrompts } from "./viewmodel";
 
 /** Changed files of a prompt; each path links to its diff (the link carries the exact path from the list). */
 export function FileList({ sessionId, p }: { sessionId: string; p: PromptAnalysis }) {
@@ -68,15 +68,12 @@ export function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: Pr
 
 export function PromptTable({ session }: { session: SessionAnalysis }) {
   const [limit, setLimit] = useState(PROMPT_PAGE);
-  const [openIdx, setOpenIdx] = useState<ReadonlySet<number>>(new Set());
+  // Keyed by prompt index (append-only in a session file), so rows stay expanded across live refreshes.
+  const [openState, setOpenIdx] = useState<ReadonlySet<number>>(new Set());
+  const openIdx = retainKeys(openState, session.prompts.map((p) => p.index));
   const { shown, hidden } = visiblePrompts(session.prompts, limit);
 
-  const toggle = (i: number) =>
-    setOpenIdx((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(i)) next.add(i);
-      return next;
-    });
+  const toggle = (i: number) => setOpenIdx((prev) => toggleKey(prev, i));
 
   return (
     <>

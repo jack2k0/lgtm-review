@@ -6,8 +6,7 @@ import { actionsLabel, checkOutcome, formatClock, formatStepDuration, phaseLabel
 export const ACTION_PAGE = 200;
 
 /** Every string below comes from a session log and is rendered as a React text node only. */
-export function StepCard({ step, onOpenFile, pathLabel }: { step: Step; onOpenFile?: (path: string) => void; pathLabel?: (path: string) => string }) {
-  const [open, setOpen] = useState(false);
+export function StepCard({ step, open, onToggle, onOpenFile, pathLabel }: { step: Step; open: boolean; onToggle: () => void; onOpenFile?: (path: string) => void; pathLabel?: (path: string) => string }) {
   const [limit, setLimit] = useState(ACTION_PAGE);
   const listId = `actions-${step.n}`;
   const check = step.check;
@@ -52,7 +51,7 @@ export function StepCard({ step, onOpenFile, pathLabel }: { step: Step; onOpenFi
       ) : null}
       {step.actions.length > 0 ? (
         <>
-          <button type="button" className="disclosure" aria-expanded={open} aria-controls={open ? listId : undefined} onClick={() => setOpen(!open)}>
+          <button type="button" className="disclosure" aria-expanded={open} aria-controls={open ? listId : undefined} onClick={onToggle}>
             <span className="chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
             {actionsLabel(step.actions.length)}
           </button>

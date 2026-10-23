@@ -1,11 +1,15 @@
+import { useState } from "react";
 import type { PromptDetail } from "@lgtm/core";
 import { WhereToLook } from "./Hints";
 import { StepCard } from "./StepCard";
 import { StatusTag } from "./StatusDot";
-import { formatDuration, formatStarted, plural, promptHeading, routeHref, shortPath } from "./viewmodel";
+import { formatDuration, formatStarted, plural, promptHeading, retainKeys, routeHref, shortPath, toggleKey } from "./viewmodel";
 
 /** Steps of one prompt. The header comes from the same response, so a deep link needs no other request. */
 export function StepsView({ sessionId, detail, onOpenFile }: { sessionId: string; detail: PromptDetail; onOpenFile?: (path: string) => void }) {
+  // Expanded action lists are keyed by step number, which is stable across live refreshes.
+  const [openState, setOpen] = useState<ReadonlySet<number>>(new Set());
+  const openSteps = retainKeys(openState, detail.steps.map((s) => s.n));
   const allFiles = [...new Set([...detail.steps.flatMap((s) => s.files), ...detail.hints.flatMap((h) => (h.path === null ? [] : [h.path]))])];
   const pathLabel = (p: string): string => shortPath(p, allFiles);
   return (
@@ -32,7 +36,7 @@ export function StepsView({ sessionId, detail, onOpenFile }: { sessionId: string
       ) : (
         <ol className="steps">
           {detail.steps.map((s) => (
-            <StepCard key={s.n} step={s} pathLabel={pathLabel} {...(onOpenFile ? { onOpenFile } : {})} />
+            <StepCard key={s.n} step={s} open={openSteps.has(s.n)} onToggle={() => setOpen((prev) => toggleKey(prev, s.n))} pathLabel={pathLabel} {...(onOpenFile ? { onOpenFile } : {})} />
           ))}
         </ol>
       )}

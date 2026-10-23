@@ -33,6 +33,16 @@ Limits (so very large sessions stay fast): a diff shows at most 2000 lines and 2
 
 The same data is available from the local API (token required, as for the other routes): `GET /api/sessions/<id>/prompts/<index>` and `GET /api/sessions/<id>/prompts/<index>/diff?path=<file>`; `path` must be one of the prompt's files.
 
+## Live
+
+While a Claude Code session is still running, the page keeps itself up to date: every 5 seconds it asks the local API whether the current view changed, using conditional requests. The header shows **Live · updated HH:MM:SS** (the time new data last arrived) and a **Pause**/**Resume** button; the choice is remembered for the tab only (session storage), and live is on by default.
+
+- Each of the four data routes (`/api/sessions`, `/api/sessions/<id>`, `.../prompts/<index>`, `.../diff?path=`) answers with a strong `ETag` derived from the size and modification time of the session files it depends on (all session files of the project for the list, the one file otherwise). Send it back as `If-None-Match` and an unchanged view costs a `304` with no body and no re-analysis, only a `stat` per session file. The routes use `Cache-Control: no-cache, private`; the Host, Origin and token checks run before anything is compared, and a `304` is never sent for a session, prompt or file that does not exist.
+- Polling pauses while the tab is hidden and refetches immediately when you come back; it also stops while paused and is cancelled when you leave the view. Requests never overlap.
+- If the server cannot be reached the old data stays on screen with a "Connection lost, retrying" note; retries back off from 5 s to 10 s to 30 s and return to 5 s after a success.
+- Expanded rows (by prompt number), expanded action lists (by step number), "show more" counts and the scroll position survive a refresh.
+- A line that is still being written can show up as a transient "truncated last line" warning; the next refresh clears it.
+
 ## Review hints
 
 Each prompt gets a **recommendation** and a list of **hints** that say where to look first. They come from the edits in the session log only (small counters per edit; no file contents are kept), are deterministic and are heuristics, not verdicts.
