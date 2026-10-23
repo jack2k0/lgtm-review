@@ -89,8 +89,8 @@ D7. Web:
 - [x] 1.2 `buildBeats` + tests
 
 ### Phase 2: CLI
-- [ ] 2.1 New-edge detection in map build + tests
-- [ ] 2.2 `/prompts/:n/play` route + tests
+- [x] 2.1 New-edge detection in map build + tests
+- [x] 2.2 `/prompts/:n/play` route + tests
 
 ### Phase 3: Web
 - [ ] 3.1 Route + PlayView + keyboard/autoplay

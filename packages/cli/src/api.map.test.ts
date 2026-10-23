@@ -321,4 +321,116 @@ describe("GET /api/sessions/:id/map", () => {
       "app/main.py>vendor/liby/src/liby/util.py:import",
     ]);
   });
+
+  test("new-edge detection in TS and Python, created file, unrelated edit", async () => {
+    const newRepo = join(tmp, "new-edge-repo");
+    mkdirSync(newRepo);
+    write(newRepo, "src/a.ts", 'import { b } from "./b";\nimport { c } from "./c";\nexport const a = 1;\n');
+    write(newRepo, "src/b.ts", "export const b = 2;\n");
+    write(newRepo, "src/c.ts", "export const c = 3;\n");
+    write(newRepo, "src/newfile.ts", 'import { b } from "./b";\nexport const n = 1;\n');
+    write(newRepo, "shop/models.py", "class M:\n    pass\n");
+    write(newRepo, "shop/views.py", "from .models import M\ndef v():\n    pass\n");
+    execFileSync("git", ["init", "-q"], { cwd: newRepo });
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"], { cwd: newRepo });
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"], { cwd: newRepo });
+
+    const root = join(tmp, "p-new-edge");
+    const sessionLines: string[] = [];
+    let t = 0;
+    const addPrompt = (text: string, edits: { file: string; isCreate?: boolean; patchLines?: string[]; content?: string }[]) => {
+      sessionLines.push(rec("user", newRepo, { message: { role: "user", content: text } }));
+      for (const e of edits) {
+        const id = `toolu_ne_${++t}`;
+        const filePath = join(newRepo, e.file);
+        if (e.isCreate) {
+          sessionLines.push(
+            rec("assistant", newRepo, {
+              message: { role: "assistant", content: [{ type: "tool_use", id, name: "Write", input: { file_path: filePath, content: e.content ?? 'import { b } from "./b";\n' } }] },
+            }),
+          );
+          sessionLines.push(
+            rec("user", newRepo, {
+              message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "Created" }] },
+              toolUseResult: { type: "create" },
+            }),
+          );
+        } else {
+          sessionLines.push(
+            rec("assistant", newRepo, {
+              message: { role: "assistant", content: [{ type: "tool_use", id, name: "Edit", input: { file_path: filePath, old_string: "x", new_string: "y" } }] },
+            }),
+          );
+          sessionLines.push(
+            rec("user", newRepo, {
+              message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "Updated" }] },
+              toolUseResult: {
+                type: "update",
+                structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: e.patchLines?.length ?? 1, lines: e.patchLines ?? ["-old", "+new"] }],
+              },
+            }),
+          );
+        }
+      }
+    };
+
+    // Prompt 0: adds import to src/c.ts in src/a.ts
+    addPrompt("add import", [{ file: "src/a.ts", patchLines: ["-export const a = 1;", '+import { c } from "./c";', "+export const a = 1;"] }]);
+    // Prompt 1: unrelated edit to src/a.ts
+    addPrompt("unrelated edit", [{ file: "src/a.ts", patchLines: ["-export const a = 1;", "+export const a = 99;"] }]);
+    // Prompt 2: created file src/newfile.ts
+    addPrompt("create file", [{ file: "src/newfile.ts", isCreate: true, content: 'import { b } from "./b";\n' }]);
+    // Prompt 3: python file adds import
+    addPrompt("python import", [{ file: "shop/views.py", patchLines: ["-def v():", "+from .models import M", "+def v():"] }]);
+
+    writeFileSync(join(projectDir(root, newRepo), "new-edge-session.jsonl"), sessionLines.join("\n") + "\n");
+    const newSrv = await startServer({ dir: newRepo, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web") });
+
+    try {
+      // Prompt 0: a.ts -> c.ts is new; a.ts -> b.ts is NOT new
+      const p0 = await get(newSrv, "/api/sessions/new-edge-session/map?prompt=0");
+      expect(p0.status).toBe(200);
+      expect(p0.json.playable).toBe(true);
+      const e0_ac = p0.json.edges.find((e: any) => e.from === "src/a.ts" && e.to === "src/c.ts");
+      const e0_ab = p0.json.edges.find((e: any) => e.from === "src/a.ts" && e.to === "src/b.ts");
+      expect(e0_ac?.new).toBe(true);
+      expect(e0_ab?.new).toBeUndefined();
+
+      // Prompt 1: unrelated edit -> no new edges
+      const p1 = await get(newSrv, "/api/sessions/new-edge-session/map?prompt=1");
+      expect(p1.status).toBe(200);
+      expect(p1.json.playable).toBe(true);
+      for (const e of p1.json.edges) {
+        expect(e.new).toBeUndefined();
+      }
+
+      // Prompt 2: created file -> all edges new
+      const p2 = await get(newSrv, "/api/sessions/new-edge-session/map?prompt=2");
+      expect(p2.status).toBe(200);
+      const e2 = p2.json.edges.find((e: any) => e.from === "src/newfile.ts");
+      expect(e2?.new).toBe(true);
+
+      // Prompt 3: Python import -> new
+      const p3 = await get(newSrv, "/api/sessions/new-edge-session/map?prompt=3");
+      expect(p3.status).toBe(200);
+      const e3 = p3.json.edges.find((e: any) => e.from === "shop/views.py" && e.to === "shop/models.py");
+      expect(e3?.new).toBe(true);
+
+      // Session map: prompt is null, playable is omitted, union of new edges
+      const s = await get(newSrv, "/api/sessions/new-edge-session/map");
+      expect(s.status).toBe(200);
+      expect(s.json.prompt).toBeNull();
+      expect(s.json.playable).toBeUndefined();
+      const s_ac = s.json.edges.find((e: any) => e.from === "src/a.ts" && e.to === "src/c.ts");
+      const s_ab = s.json.edges.find((e: any) => e.from === "src/a.ts" && e.to === "src/b.ts");
+      const s_nf = s.json.edges.find((e: any) => e.from === "src/newfile.ts");
+      const s_py = s.json.edges.find((e: any) => e.from === "shop/views.py" && e.to === "shop/models.py");
+      expect(s_ac?.new).toBe(true);
+      expect(s_ab?.new).toBeUndefined();
+      expect(s_nf?.new).toBe(true);
+      expect(s_py?.new).toBe(true);
+    } finally {
+      await newSrv.close();
+    }
+  });
 });
