@@ -14,12 +14,14 @@ import {
   MAP_NODE_MAX,
   normalizePath,
   selectMapNodes,
+  type FileDiff,
   type ImportMapResponse,
   type MapEdgeInput,
   type MapHost,
   type MapNodeInput,
   type SessionAnalysis,
   type Status,
+  type Step,
 } from "@lgtm/core";
 
 /** Caps of the neighbour scan and the node selection (plan M1/M3); overridable for tests. */
@@ -80,8 +82,10 @@ export interface MapPlan {
   build(): ImportMapResponse;
 }
 
+export type DiffForCallback = (promptIndex: number, path: string) => FileDiff | null;
+
 /** Repo-relative path of a session file path (absolute or already relative); null when outside the dir. */
-function toRepoRelative(p: string, roots: readonly string[]): string | null {
+export function toRepoRelative(p: string, roots: readonly string[]): string | null {
   let path = p.replaceAll("\\", "/");
   if (path === "" || path.startsWith("~") || path.includes("\0")) return null;
   if (isAbsolute(path)) {
@@ -100,6 +104,18 @@ function toRepoRelative(p: string, roots: readonly string[]): string | null {
   return n === "." || n === ".." || n.startsWith("../") || n.startsWith("/") ? null : n;
 }
 
+function pseudoSourceFromDiff(diff: FileDiff): string {
+  if (!diff.hunks || diff.hunks.length === 0) return "";
+  const hunkTexts: string[] = [];
+  for (const h of diff.hunks) {
+    const lines = h.lines.filter((l) => l.t === "+").map((l) => l.s);
+    if (lines.length > 0) {
+      hunkTexts.push(lines.join("\n"));
+    }
+  }
+  return hunkTexts.join("\n;\n\n");
+}
+
 /**
  * Prepares the import map of one session (`promptIndex` null) or one prompt. Cheap part (git ls-files + stat)
  * yields the fingerprint used as the ETag; `build()` reads and parses the files. Never reads outside `dir` (M4).
@@ -109,6 +125,8 @@ export async function planImportMap(
   analysis: SessionAnalysis,
   promptIndex: number | null,
   capsIn: Partial<MapCaps> = {},
+  diffFor?: DiffForCallback | null,
+  steps?: readonly Step[] | null,
 ): Promise<MapPlan> {
   const caps: MapCaps = { ...MAP_CAPS, ...capsIn };
   let root: string;
@@ -310,6 +328,58 @@ export async function planImportMap(
       const layout = layoutImportMap(nodes, edges, { layerRoots });
       if (sel.hiddenNeighbours > 0) buildNotes.push(`${sel.hiddenNeighbours} neighbour file${sel.hiddenNeighbours === 1 ? "" : "s"} hidden by the ${caps.maxNodes}-node cap.`);
 
+      const newEdgeKeys = new Set<string>();
+      const createdFiles = new Set<string>();
+
+      if (diffFor) {
+        const relevantPrompts = analysis.prompts.filter((p) => {
+          if (p.inheritedFrom !== undefined) return false;
+          if (promptIndex !== null && p.index !== promptIndex) return false;
+          return true;
+        });
+
+        for (const p of relevantPrompts) {
+          for (const f of p.files) {
+            const rel = toRepoRelative(f.path, [dir, root]);
+            if (rel === null || !changed.has(rel)) continue;
+            const diff = diffFor(p.index, f.path) ?? diffFor(p.index, rel);
+            if (!diff) continue;
+            if (diff.kind === "A") {
+              createdFiles.add(rel);
+            }
+            const pseudo = pseudoSourceFromDiff(diff);
+            if (pseudo === "") continue;
+            const lang = mapLanguageOf(rel);
+            if (lang === "ts") {
+              for (const imp of extractImports(pseudo)) {
+                const to = tsResolver.resolve(imp.specifier, rel);
+                if (to !== null && to !== rel) {
+                  newEdgeKeys.add(`${rel}\0${to}`);
+                }
+              }
+            } else if (lang === "py") {
+              for (const imp of extractPythonImports(pseudo)) {
+                for (const to of pyResolver.resolve(imp, rel)) {
+                  if (to !== rel) {
+                    newEdgeKeys.add(`${rel}\0${to}`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      let isPlayable = false;
+      if (promptIndex !== null) {
+        const pr = analysis.prompts[promptIndex];
+        if (pr && pr.inheritedFrom === undefined) {
+          if (steps && steps.some((s) => (s.files && s.files.length > 0) || s.check != null)) {
+            isPlayable = true;
+          }
+        }
+      }
+
       return {
         sessionId: analysis.sessionId,
         prompt: promptIndex,
@@ -318,10 +388,14 @@ export async function planImportMap(
         hiddenNeighbours: sel.hiddenNeighbours,
         layers: layout.layers,
         nodes: layout.nodes.map((n) => ({ ...n, promptIndex: n.kind === "changed" ? (changed.get(n.id)?.promptIndex ?? null) : null })),
-        edges: layout.edges,
+        edges: layout.edges.map((e) => {
+          const isNew = createdFiles.has(e.from) || newEdgeKeys.has(`${e.from}\0${e.to}`);
+          return isNew ? { ...e, new: true } : e;
+        }),
         width: layout.width,
         height: layout.height,
         ...(buildNotes.length > 0 ? { notes: buildNotes } : {}),
+        ...(isPlayable ? { playable: true } : promptIndex !== null ? { playable: false } : {}),
       };
     },
   };

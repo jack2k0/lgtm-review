@@ -85,16 +85,16 @@ D7. Web:
 ## Progress
 
 ### Phase 1: Core
-- [ ] 1.1 Schema `MapEdge.new`, `PlayBeat`, `PlayResponse`
-- [ ] 1.2 `buildBeats` + tests
+- [x] 1.1 Schema `MapEdge.new`, `PlayBeat`, `PlayResponse`
+- [x] 1.2 `buildBeats` + tests
 
 ### Phase 2: CLI
-- [ ] 2.1 New-edge detection in map build + tests
-- [ ] 2.2 `/prompts/:n/play` route + tests
+- [x] 2.1 New-edge detection in map build + tests
+- [x] 2.2 `/prompts/:n/play` route + tests
 
 ### Phase 3: Web
-- [ ] 3.1 Route + PlayView + keyboard/autoplay
-- [ ] 3.2 Legend counts, new-edge style, play link + tests
+- [x] 3.1 Route + PlayView + keyboard/autoplay
+- [x] 3.2 Legend counts, new-edge style, play link + tests
 
 ### Phase 4: Docs
 - [ ] 4.1 README, PRD, roadmap

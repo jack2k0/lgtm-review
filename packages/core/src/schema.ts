@@ -249,6 +249,8 @@ export const MapEdge = z.object({
   from: z.string(),
   to: z.string(),
   kind: z.enum(["import", "type"]),
+  /** True when the import line was added by the prompt / session (plan D1). */
+  new: z.boolean().optional(),
   /** Straight/elbow path from the source node border to the target node border. */
   points: z.array(MapPoint),
 });
@@ -283,5 +285,56 @@ export const ImportMapResponse = z.object({
   height: z.number().nonnegative(),
   /** Human-readable notes, e.g. "Neighbour scan unavailable (git ls-files failed): showing outgoing imports only." */
   notes: z.array(z.string()).optional(),
+  /** True for a per-prompt map of a non-inherited prompt that has at least one step with files or a check (plan B2). */
+  playable: z.boolean().optional(),
 });
 export type ImportMapResponse = z.infer<typeof ImportMapResponse>;
+
+export const PlayBeatKind = z.enum([
+  "file-added",
+  "file-changed",
+  "file-deleted",
+  "import-added",
+  "check-passed",
+  "check-failed",
+  "check-unknown",
+]);
+export type PlayBeatKind = z.infer<typeof PlayBeatKind>;
+
+export const PlayBeatFocusEdge = z.object({
+  from: z.string(),
+  to: z.string(),
+});
+export type PlayBeatFocusEdge = z.infer<typeof PlayBeatFocusEdge>;
+
+export const PlayBeatFocus = z.object({
+  nodes: z.array(z.string()),
+  edges: z.array(PlayBeatFocusEdge),
+});
+export type PlayBeatFocus = z.infer<typeof PlayBeatFocus>;
+
+export const PlayBeat = z.object({
+  /** 1-based position in the beat sequence. */
+  n: z.number().int().positive(),
+  kind: PlayBeatKind,
+  /** True when the beat belongs to a Fix-phase step. */
+  fix: z.boolean(),
+  /** Step.n it comes from (1-based). */
+  step: z.number().int().positive(),
+  /** Template text, <= 160 chars. */
+  text: z.string(),
+  /** Check excerpt (<= 200 chars) for failed checks. */
+  detail: z.string().optional(),
+  /** The file (for file beats) or the importer (for import beats). */
+  path: z.string().optional(),
+  focus: PlayBeatFocus,
+});
+export type PlayBeat = z.infer<typeof PlayBeat>;
+
+export const PlayResponse = z.object({
+  sessionId: z.string(),
+  prompt: z.number().int().nonnegative(),
+  beats: z.array(PlayBeat),
+  truncated: z.boolean(),
+});
+export type PlayResponse = z.infer<typeof PlayResponse>;

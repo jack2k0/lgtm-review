@@ -1,9 +1,10 @@
+import { realpathSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { analyzeFile, analyzeFileDetail, discoverSessions, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile } from "@lgtm/core/node";
-import { markInherited } from "@lgtm/core";
-import type { Analyzer, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
-import { planImportMap } from "./map.js";
+import { buildBeats, markInherited } from "@lgtm/core";
+import type { Analyzer, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
+import { planImportMap, toRepoRelative } from "./map.js";
 import { sortSessions } from "./format.js";
 import { etagFor, ifNoneMatch, sendJson, sendNotModified, type ApiHandler } from "./http.js";
 import type { ServerOptions } from "./server.js";
@@ -263,6 +264,8 @@ export function createApi(opts: ServerOptions): ApiHandler {
 
   // Import maps: body cached under the fingerprint that doubles as the ETag source (plan M6).
   const mapCache = new Map<string, { key: string; body: unknown }>();
+  // Play responses: body cached under per-prompt map key + "\0play" (plan B3).
+  const playCache = new Map<string, { key: string; body: unknown }>();
   const MAP_CACHE_MAX = 32;
 
   /** `?prompt=N` of the map route: absent -> null, malformed or repeated -> "bad". */
@@ -290,7 +293,10 @@ export function createApi(opts: ServerOptions): ApiHandler {
     const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     if (prompt !== null && !analysis.prompts[prompt]) return false;
-    const plan = await planImportMap(opts.dir, analysis, prompt, opts.mapCaps);
+    const d = await detailFor(file);
+    const diffFor = d ? (idx: number, path: string) => d.analyzer.diffFor(idx, path) : null;
+    const promptSteps = prompt !== null && d ? d.details[prompt]?.steps ?? null : null;
+    const plan = await planImportMap(opts.dir, analysis, prompt, opts.mapCaps, diffFor, promptSteps);
     const key = `${stamp}\0${prompt ?? "s"}\0${plan.fingerprint}`;
     const etag = etagFor(`map\0${file.id}\0${key}`);
     if (notModifiedEarly(req, res, etag)) return true;
@@ -306,9 +312,91 @@ export function createApi(opts: ServerOptions): ApiHandler {
     return true;
   }
 
+  async function playRoute(
+    req: IncomingMessage,
+    res: ServerResponse,
+    file: SessionFile | undefined,
+    files: SessionFile[],
+    stamp: string,
+    rawIndex: string,
+  ): Promise<boolean> {
+    if (!INDEX_RE.test(rawIndex)) {
+      sendJson(req, res, 400, { error: "bad request" });
+      return true;
+    }
+    const index = Number(rawIndex);
+    if (!file || (await versionOf(file)) === null) return false;
+    const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
+    if (!analysis) return false;
+    const prompt = analysis.prompts[index];
+    if (!prompt) return false;
+    if (prompt.inheritedFrom !== undefined) return false;
+
+    const d = await detailFor(file);
+    const promptDetail = d?.details[index];
+    if (!d || !promptDetail) return false;
+
+    const diffFor = (idx: number, path: string) => d.analyzer.diffFor(idx, path);
+    const plan = await planImportMap(opts.dir, analysis, index, opts.mapCaps, diffFor, promptDetail.steps);
+    const mapKey = `${stamp}\0${index}\0${plan.fingerprint}`;
+    const playKey = `${mapKey}\0play`;
+    const etag = etagFor(`play\0${file.id}\0${playKey}`);
+    if (notModifiedEarly(req, res, etag)) return true;
+
+    const slot = `${file.id}\0${index}`;
+    let hit = playCache.get(slot);
+    if (!hit || hit.key !== playKey) {
+      let mapHit = mapCache.get(slot);
+      if (!mapHit || mapHit.key !== mapKey) {
+        mapHit = { key: mapKey, body: plan.build() };
+        mapCache.delete(slot);
+        mapCache.set(slot, mapHit);
+        while (mapCache.size > MAP_CACHE_MAX) mapCache.delete(mapCache.keys().next().value!);
+      }
+      const mapBody = mapHit.body as ImportMapResponse;
+
+      let root: string;
+      try {
+        root = realpathSync(opts.dir);
+      } catch {
+        root = opts.dir;
+      }
+
+      const mappedSteps = promptDetail.steps.map((s) => ({
+        ...s,
+        // Files outside --dir (scratch notes, briefs) are not part of the change shown on the map.
+        files: s.files.map((p) => toRepoRelative(p, [opts.dir, root])).filter((p): p is string => p !== null),
+      }));
+
+      const diffsCallback = (path: string) => {
+        const known = prompt.files.find((f) => f.path === path || toRepoRelative(f.path, [opts.dir, root]) === path);
+        return known ? d.analyzer.diffFor(index, known.path) : d.analyzer.diffFor(index, path);
+      };
+
+      const { beats, truncated } = buildBeats({
+        steps: mappedSteps,
+        diffs: diffsCallback,
+        map: mapBody,
+      });
+
+      const body: PlayResponse = {
+        sessionId: file.id,
+        prompt: index,
+        beats,
+        truncated,
+      };
+      hit = { key: playKey, body };
+      playCache.delete(slot);
+      playCache.set(slot, hit);
+      while (playCache.size > MAP_CACHE_MAX) playCache.delete(playCache.keys().next().value!);
+    }
+    reply(req, res, etag, hit.body);
+    return true;
+  }
+
   return async (req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> => {
     const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
-    const match = /^\/api\/sessions(?:\/([^/]+)(?:\/prompts\/([^/]+)(\/diff)?|(\/map))?)?$/.exec(path);
+    const match = /^\/api\/sessions(?:\/([^/]+)(?:\/prompts\/([^/]+)(\/diff|\/play)?|(\/map))?)?$/.exec(path);
     if (!match) return false;
     try {
       const files = await discover();
@@ -329,7 +417,8 @@ export function createApi(opts: ServerOptions): ApiHandler {
       // The id is only ever compared against the discovered list; it never becomes a path.
       const file = files.find((f) => f.id === id);
       if (match[4] !== undefined) return await mapRoute(req, res, file, files, stamp);
-      if (match[2] !== undefined) return await promptRoute(req, res, file, file ? stamp : null, match[2], match[3] !== undefined);
+      if (match[3] === "/play") return await playRoute(req, res, file, files, stamp, match[2]);
+      if (match[2] !== undefined) return await promptRoute(req, res, file, file ? stamp : null, match[2], match[3] === "/diff");
       if (!file || (await versionOf(file)) === null) return false;
       const etag = etagFor(`session\0${file.id}\0${stamp}`);
       if (notModifiedEarly(req, res, etag)) return true;

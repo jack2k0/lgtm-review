@@ -128,6 +128,33 @@ describe("map routing", () => {
   });
 });
 
+describe("play routing", () => {
+  test("play route parses and round-trips with default beat=1 and explicit beat", () => {
+    expect(parseRoute("#/session/abc/prompt/0/play")).toEqual({ kind: "play", id: "abc", index: 0, beat: 1 });
+    expect(parseRoute("#/session/abc/prompt/0/play?beat=1")).toEqual({ kind: "play", id: "abc", index: 0, beat: 1 });
+    expect(parseRoute("#/session/a%2Fb/prompt/12/play?beat=5")).toEqual({ kind: "play", id: "a/b", index: 12, beat: 5 });
+    expect(parseRoute("#/session/abc/prompt/3/play?beat=0")).toEqual({ kind: "play", id: "abc", index: 3, beat: 1 }); // clamped
+    expect(routeHref({ kind: "play", id: "a/b", index: 0, beat: 1 })).toBe("#/session/a%2Fb/prompt/0/play");
+    expect(routeHref({ kind: "play", id: "a/b", index: 2, beat: 4 })).toBe("#/session/a%2Fb/prompt/2/play?beat=4");
+    for (const r of [
+      { kind: "play", id: "x y", index: 0, beat: 1 },
+      { kind: "play", id: "x/y", index: 5, beat: 3 },
+    ] as const) expect(parseRoute(routeHref(r))).toEqual(r);
+  });
+
+  test("bad play routes fall back to the list", () => {
+    for (const h of [
+      "#/session/abc/play",
+      "#/session/abc/prompt/play",
+      "#/session/abc/prompt/-1/play",
+      "#/session/abc/prompt/0/play?beat=-1",
+      "#/session/abc/prompt/0/play?beat=abc",
+      "#/session/abc/prompt/0/play?beat=1&extra=2",
+      "#/session/abc/prompt/0/play?x=1",
+    ]) expect(parseRoute(h), h).toEqual({ kind: "list" });
+  });
+});
+
 describe("step formatting", () => {
   test("formatStepDuration", () => {
     expect(formatStepDuration(0)).toBe("<1s");

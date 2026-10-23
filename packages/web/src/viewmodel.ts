@@ -126,7 +126,8 @@ export type Route =
   | { kind: "session"; id: string }
   | { kind: "steps"; id: string; index: number }
   | { kind: "diff"; id: string; index: number; path: string }
-  | { kind: "map"; id: string; index: number | null };
+  | { kind: "map"; id: string; index: number | null }
+  | { kind: "play"; id: string; index: number; beat: number };
 
 const INDEX_RE = /^(?:0|[1-9]\d{0,8})$/;
 
@@ -138,26 +139,41 @@ function decode(s: string): string | null {
   }
 }
 
-/** Hash routes: `#/session/<id>`, `#/session/<id>/map`, `#/session/<id>/prompt/<index>[/map]`, `#/session/<id>/prompt/<index>/diff?path=<file>`. Anything else is the list. */
+/** Hash routes: `#/session/<id>`, `#/session/<id>/map`, `#/session/<id>/prompt/<index>[/map|play]`, `#/session/<id>/prompt/<index>/diff?path=<file>`. Anything else is the list. */
 export function parseRoute(hash: string): Route {
-  const m = /^#\/session\/([^/?]+)(?:\/prompt\/([^/?]+))?(?:\/(map|diff)(?:\?path=([^&]*))?)?$/.exec(hash);
+  const m = /^#\/session\/([^/?]+)(?:\/prompt\/([^/?]+))?(?:\/(map|diff|play)(?:[?]([^#]*))?)?$/.exec(hash);
   if (!m) return { kind: "list" };
   const id = decode(m[1]!);
   if (id === null) return { kind: "list" };
   const index = m[2];
   const action = m[3];
+  const query = m[4];
   if (index === undefined) {
-    if (action === undefined) return { kind: "session", id };
-    if (action === "map") return { kind: "map", id, index: null };
+    if (action === undefined && query === undefined) return { kind: "session", id };
+    if (action === "map" && query === undefined) return { kind: "map", id, index: null };
     return { kind: "list" };
   }
   if (!INDEX_RE.test(index)) return { kind: "list" };
   const n = Number(index);
-  if (action === undefined) return { kind: "steps", id, index: n };
-  if (action === "map") return { kind: "map", id, index: n };
-  const path = decode(m[4] ?? "");
-  if (!path) return { kind: "list" };
-  return { kind: "diff", id, index: n, path };
+  if (action === undefined && query === undefined) return { kind: "steps", id, index: n };
+  if (action === "map" && query === undefined) return { kind: "map", id, index: n };
+  if (action === "diff") {
+    if (!query) return { kind: "list" };
+    const pMatch = /^path=([^&]+)$/.exec(query);
+    if (!pMatch) return { kind: "list" };
+    const path = decode(pMatch[1]!);
+    if (!path) return { kind: "list" };
+    return { kind: "diff", id, index: n, path };
+  }
+  if (action === "play") {
+    if (query === undefined || query === "") return { kind: "play", id, index: n, beat: 1 };
+    const bMatch = /^beat=([^&]+)$/.exec(query);
+    if (!bMatch) return { kind: "list" };
+    if (!INDEX_RE.test(bMatch[1]!)) return { kind: "list" };
+    const b = Number(bMatch[1]!);
+    return { kind: "play", id, index: n, beat: Math.max(1, b) };
+  }
+  return { kind: "list" };
 }
 
 export function routeHref(r: Route): string {
@@ -174,6 +190,10 @@ export function routeHref(r: Route): string {
       return r.index === null
         ? `#/session/${encodeURIComponent(r.id)}/map`
         : `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}/map`;
+    case "play":
+      return r.beat <= 1
+        ? `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}/play`
+        : `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}/play?beat=${r.beat}`;
   }
 }
 

@@ -128,4 +128,52 @@ describe("MapView markup", () => {
     expect(html).toContain("&lt;img");
     expect(html).toContain("&lt;script&gt;");
   });
+
+  test("legend shows new import and existing counts, and new edges get edge-new class", () => {
+    const html = render({
+      edges: [
+        { from: "src/a.ts", to: "src/util.ts", kind: "import", new: true, points: [{ x: 1, y: 1 }, { x: 2, y: 2 }] },
+        { from: "src/a.ts", to: "src/other.ts", kind: "import", points: [{ x: 3, y: 3 }, { x: 4, y: 4 }] },
+      ],
+    });
+    expect(html).toContain("New import 1 · Existing 1");
+    expect(html).toContain("edge-new");
+  });
+
+  test("play link is visible only when playable === true on a per-prompt map", () => {
+    // Session map (prompt null): no play link even if playable
+    expect(render({ prompt: null, playable: true })).not.toContain("▶ Play the change");
+    // Per-prompt map with playable === false/undefined: no play link
+    expect(render({ prompt: 0, playable: false })).not.toContain("▶ Play the change");
+    expect(render({ prompt: 0 })).not.toContain("▶ Play the change");
+    // Per-prompt map with playable === true: play link shown
+    const html = render({ prompt: 0, playable: true });
+    expect(html).toContain("▶ Play the change");
+    expect(html).toContain('href="#/session/s/prompt/0/play"');
+  });
+
+  test("focus prop dims non-focused nodes and edges, keeps focused elements bright", () => {
+    const m = map({
+      nodes: [
+        node({ id: "src/a.ts", path: "src/a.ts" }),
+        node({ id: "src/b.ts", path: "src/b.ts" }),
+      ],
+      edges: [
+        { from: "src/a.ts", to: "src/b.ts", kind: "import", points: [{ x: 1, y: 1 }, { x: 2, y: 2 }] },
+      ],
+    });
+    const focus = {
+      nodes: new Set(["src/a.ts"]),
+      edges: new Set<string>(), // no edges focused
+    };
+    const html = renderToStaticMarkup(<MapView sessionId="s" map={m} focus={focus} />);
+    // src/a.ts node is not dimmed
+    // In React static markup, check class on node g containing a.ts
+    expect(html).toMatch(/map-node[^"]*map-status-checked[^"]*"><title>src\/a\.ts/);
+    expect(html).not.toMatch(/map-node[^"]*dim[^"]*"><title>src\/a\.ts/);
+    // src/b.ts node is dimmed
+    expect(html).toMatch(/map-node[^"]*dim[^"]*"><title>src\/b\.ts/);
+    // Edge is dimmed
+    expect(html).toMatch(/map-edge[^"]*dim/);
+  });
 });
