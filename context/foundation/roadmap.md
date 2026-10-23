@@ -170,7 +170,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** bg-checks
 - **PRD refs:** FR-002 (status accuracy); Success Criterion status match >= 95%
 - **Prerequisites:** S-11
-- **Status:** planned (2026-10-23, orchestrator decision)
+- **Status:** done (2026-10-23; core Sonnet, consumers Haiku, plan-review OpenCode Big Pickle). Real-log audit pending (reading ~/.claude blocked by auto-mode classifier; needs owner permission)
 
 ## Backlog Handoff
 
