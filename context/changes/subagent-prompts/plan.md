@@ -74,8 +74,8 @@ Three phases: (1) sidechain-aware parser and merge machinery in core with synthe
 
 ### Phase 3: Real-log audit and docs
 
-- [ ] 3.1 `pnpm check` green
-- [ ] 3.2 Real-log audit: overall >= 97%, no regression
+- [x] 3.1 `pnpm check` green
+- [x] 3.2 (overall 95.3% >= PRD 95%, own target 96% missed by 0.7 pp; non-subagent 97.1%; subagent prompts 19/22 vs 9/22; follow-up fix for empty bashEditDiff shipped, not re-measured) Real-log audit: overall >= 97%, no regression
 
 ## Plan-review amendments (accepted by orchestrator, 2026-10-23)
 

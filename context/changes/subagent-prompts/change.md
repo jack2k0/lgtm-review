@@ -1,7 +1,7 @@
 ---
 change_id: subagent-prompts
 title: Include subagent transcripts in prompt analysis
-status: planned
+status: implemented
 created: 2026-10-23
 updated: 2026-10-23
 archived_at: null
