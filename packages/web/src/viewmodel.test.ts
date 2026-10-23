@@ -3,7 +3,7 @@ import type { PromptAnalysis } from "@lgtm/core";
 import {
   PROMPT_PAGE, actionsLabel, checkOutcome, fileTotals, filesText, formatClock, formatDuration, formatStarted, formatStepDuration,
   incompleteMarkers, nextLimit, parseRoute, phaseLabel, promptHeading, routeHref, statusCountItems, statusLabel, stepTitle,
-  retainKeys, timeBarText, timeSegments, toggleKey, visiblePrompts,
+  retainKeys, splitInherited, timeBarText, timeSegments, toggleKey, visiblePrompts,
 } from "./viewmodel";
 
 const file = (added: number, removed: number, maybeIncomplete = false) => ({ path: "a", kind: "M" as const, added, removed, maybeIncomplete });
@@ -173,5 +173,32 @@ describe("expanded state across live refreshes", () => {
     expect([...retainKeys(open, [1, 2])]).toEqual([1]);
     const empty: ReadonlySet<number> = new Set();
     expect(retainKeys(empty, [1])).toBe(empty);
+  });
+});
+
+describe("splitInherited", () => {
+  const p = (index: number, inheritedFrom?: string) => ({ index, inheritedFrom }) as PromptAnalysis;
+
+  test("no inherited prompts", () => {
+    const prompts = [p(0), p(1)];
+    const r = splitInherited(prompts);
+    expect(r.own).toEqual(prompts);
+    expect(r.inherited).toEqual([]);
+    expect(r.from).toBe("");
+  });
+
+  test("keeps original order and index values; from is the first inheritedFrom", () => {
+    const prompts = [p(0, "sess-a"), p(1, "sess-b"), p(2), p(3, "sess-a"), p(4)];
+    const r = splitInherited(prompts);
+    expect(r.inherited.map((x) => x.index)).toEqual([0, 1, 3]);
+    expect(r.own.map((x) => x.index)).toEqual([2, 4]);
+    expect(r.from).toBe("sess-a");
+  });
+
+  test("all inherited: own is empty", () => {
+    const r = splitInherited([p(0, "abc"), p(1, "abc")]);
+    expect(r.own).toEqual([]);
+    expect(r.inherited.map((x) => x.index)).toEqual([0, 1]);
+    expect(r.from).toBe("abc");
   });
 });
