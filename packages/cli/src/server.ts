@@ -77,6 +77,10 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     });
   });
 
+  server.headersTimeout = 10_000;
+  server.requestTimeout = 30_000;
+  server.maxConnections = 64;
+
   await new Promise<void>((resolveListen, reject) => {
     server.once("error", reject);
     server.listen(opts.port ?? 0, "127.0.0.1", () => {

@@ -120,12 +120,14 @@ describe("Host (first check, all requests)", () => {
 });
 
 describe("Origin", () => {
-  test.each(["null", "http://evil.example", `http://localhost:${0}`, "https://127.0.0.1", "", "http://127.0.0.1:1"])("refused: %j", async (o) => {
+  test.each(["null", "http://evil.example", "https://127.0.0.1", "", "http://127.0.0.1:1"])("refused: %j", async (o) => {
     expect((await get("/", { ...host(), Origin: o })).status).toBe(403);
     expect((await get("/api/sessions", { ...host(), ...auth(), Origin: o })).status).toBe(403);
   });
-  test("refused: localhost origin with the right port (exact match only)", async () => {
-    expect((await get("/", { ...host(), Origin: `http://localhost:${srv.port}` })).status).toBe(403);
+  test("localhost origin accepted only with the right port", async () => {
+    expect((await get("/", { ...host(), Origin: `http://localhost:${srv.port}` })).status).toBe(200);
+    expect((await get("/", { ...host(), Origin: `http://localhost:${srv.port + 1}` })).status).toBe(403);
+    expect((await get("/", { ...host(), Origin: `http://LOCALHOST:${srv.port}` })).status).toBe(403);
   });
   test("exact origin accepted; absent accepted", async () => {
     expect((await get("/", { ...host(), Origin: srv.origin })).status).toBe(200);
@@ -136,6 +138,9 @@ describe("Origin", () => {
     expect(originAllowed("null", 5)).toBe(false);
     expect(originAllowed("http://127.0.0.1:5", 5)).toBe(true);
     expect(originAllowed("http://127.0.0.1:5/", 5)).toBe(false);
+    expect(originAllowed("http://localhost:5", 5)).toBe(true);
+    expect(originAllowed("http://localhost:6", 5)).toBe(false);
+    expect(originAllowed("null", 5)).toBe(false);
   });
 });
 
@@ -185,8 +190,9 @@ describe("response headers", () => {
     const r = await get(path, { ...host(), ...(withToken ? auth() : {}) });
     expect(r.headers["content-security-policy"]).toBe(CSP);
     expect(CSP).toBe(
-      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
+      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
     );
+    expect(r.headers["x-frame-options"]).toBe("DENY");
     expect(r.headers["x-content-type-options"]).toBe("nosniff");
     expect(r.headers["referrer-policy"]).toBe("no-referrer");
     if (path.startsWith("/api")) expect(r.headers["cache-control"]).toBe("no-store");

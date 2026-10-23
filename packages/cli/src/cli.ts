@@ -5,7 +5,7 @@ import type { SessionFile } from "@lgtm/core/node";
 import { discoverSessions, loadRepoScripts, projectDirFor, analyzeFile, defaultProjectsDir } from "@lgtm/core/node";
 import type { Analysis, SessionAnalysis } from "@lgtm/core";
 import { formatText, sortSessions } from "./format.js";
-import { openBrowser } from "./open.js";
+import { createLauncher, openBrowser, type Launcher } from "./open.js";
 import { startServer } from "./server.js";
 
 const VERSION = "0.0.0";
@@ -39,9 +39,27 @@ async function serve(dir: string, projectsDir: string, port: number, noOpen: boo
   }
   process.stdout.write(`${running.url}\n`);
   console.error("lgtm-review: serving on 127.0.0.1 only; press Ctrl+C to stop");
-  if (!noOpen) openBrowser(running.url);
+  let launcher: Launcher | undefined;
+  let timer: NodeJS.Timeout | undefined;
+  const cleanup = () => {
+    if (timer) clearTimeout(timer);
+    launcher?.cleanup();
+    launcher = undefined;
+  };
+  process.once("exit", cleanup);
+  if (!noOpen) {
+    try {
+      launcher = createLauncher(running.url);
+      timer = setTimeout(cleanup, 60_000);
+      timer.unref();
+      if (!openBrowser(launcher.fileUrl)) cleanup();
+    } catch {
+      cleanup();
+    }
+  }
   return new Promise<number>((done) => {
     const stop = () => {
+      cleanup();
       void running.close().then(() => done(0));
     };
     process.once("SIGINT", stop);

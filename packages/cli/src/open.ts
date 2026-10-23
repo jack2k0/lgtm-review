@@ -1,4 +1,8 @@
 import { spawn, type SpawnOptions } from "node:child_process";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 export type SpawnFn = (command: string, args: string[], options: SpawnOptions) => { on(ev: "error", cb: () => void): unknown; unref(): void };
 
@@ -31,5 +35,38 @@ export function openBrowser(url: string, opts: OpenOptions = {}): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** HTML that forwards to `url`; keeps the token out of the argv of the process that opens the browser. */
+export function redirectHtml(url: string): string {
+  const a = escapeAttr(url);
+  const js = JSON.stringify(url).replace(/</g, "\\u003c");
+  return `<!doctype html>\n<meta charset="utf-8">\n<meta http-equiv="refresh" content="0;url=${a}">\n<title>lgtm-review</title>\n<a href="${a}">Continue</a>\n<script>location.replace(${js})</script>\n`;
+}
+
+export interface Launcher {
+  dir: string;
+  file: string;
+  fileUrl: string;
+  cleanup(): void;
+}
+
+/** Writes the redirect page to `<mkdtemp dir 0700>/open.html` (0600). The caller must `cleanup()`. */
+export function createLauncher(url: string, baseDir: string = tmpdir()): Launcher {
+  const dir = mkdtempSync(join(baseDir, "lgtm-review-"));
+  try {
+    chmodSync(dir, 0o700);
+    const file = join(dir, "open.html");
+    writeFileSync(file, redirectHtml(url), { mode: 0o600 });
+    chmodSync(file, 0o600);
+    return { dir, file, fileUrl: pathToFileURL(file).href, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  } catch (err) {
+    rmSync(dir, { recursive: true, force: true });
+    throw err;
   }
 }

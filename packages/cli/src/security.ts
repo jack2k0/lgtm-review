@@ -6,12 +6,13 @@ import { extname, join, resolve, sep } from "node:path";
 export const TOKEN_HEADER = "x-lgtm-token";
 
 export const CSP =
-  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'";
+  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
 /** Headers set on every response. No CORS headers are ever set. */
 export function baseHeaders(): Record<string, string> {
   return {
     "Content-Security-Policy": CSP,
+    "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
   };
@@ -24,10 +25,10 @@ export function hostAllowed(host: string | undefined, port: number): boolean {
   return h === `127.0.0.1:${port}` || h === `localhost:${port}`;
 }
 
-/** Origin is optional; when present it must equal the server origin exactly (`null` and anything else is refused). */
+/** Origin is optional; when present it must be `http://127.0.0.1:PORT` or `http://localhost:PORT` (`null` and anything else is refused). */
 export function originAllowed(origin: string | string[] | undefined, port: number): boolean {
   if (origin === undefined) return true;
-  return origin === `http://127.0.0.1:${port}`;
+  return origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}`;
 }
 
 /** Constant-time token comparison. Both sides are hashed first so length does not leak. */

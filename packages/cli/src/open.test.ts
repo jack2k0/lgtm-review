@@ -1,6 +1,9 @@
 import type { SpawnOptions } from "node:child_process";
 import { describe, expect, test, vi } from "vitest";
-import { openBrowser, openCommand } from "./open.js";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createLauncher, openBrowser, openCommand, redirectHtml } from "./open.js";
 
 function fakeSpawn() {
   const calls: [string, string[], SpawnOptions][] = [];
@@ -41,5 +44,32 @@ describe("openBrowser", () => {
         },
       }),
     ).toBe(false);
+  });
+});
+
+describe("launcher", () => {
+  const url = "http://127.0.0.1:1234/#k=abcdef0123";
+  test("file 0600 in dir 0700, contains escaped URL, cleanup removes it", () => {
+    const base = mkdtempSync(join(tmpdir(), "lgtm-test-"));
+    try {
+      const l = createLauncher(url, base);
+      expect(statSync(l.dir).mode & 0o777).toBe(0o700);
+      expect(statSync(l.file).mode & 0o777).toBe(0o600);
+      expect(l.fileUrl.startsWith("file://")).toBe(true);
+      expect(l.fileUrl).not.toContain("abcdef0123");
+      const html = readFileSync(l.file, "utf8");
+      expect(html).toContain(`content="0;url=${url}"`);
+      expect(html).toContain(`location.replace(${JSON.stringify(url)})`);
+      l.cleanup();
+      expect(existsSync(l.dir)).toBe(false);
+      l.cleanup();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+  test("HTML escapes attribute-breaking characters", () => {
+    const html = redirectHtml(`http://x/"><script>&'`);
+    expect(html).not.toContain(`"><script>`);
+    expect(html).toContain("&quot;&gt;&lt;script&gt;&amp;&#39;");
   });
 });
