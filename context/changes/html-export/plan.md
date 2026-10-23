@@ -77,3 +77,14 @@ Three phases: (1) core redaction module with corpus tests; (2) renderer + CLI fl
 
 - [ ] 3.1 `pnpm check` green incl. smoke
 - [ ] 3.2 Real-session export reviewed locally
+
+## Plan-review amendments (accepted by orchestrator, 2026-10-23)
+
+- F1: order is fixed: `redact` on the raw string first, `escapeHtml` after; test with a secret containing a literal `&` and with HTML-entity-looking input.
+- F2: add patterns: `client_secret`, `access_token`, `auth_token`, `api-token`, `x-api-key` and `api-key` headers (Azure), `Cookie:`/`Set-Cookie:` values for session/token-like names, DeepSeek/Vertex style keys covered by the generic `KEY=value` rule; add >= 10 positive samples.
+- F3: high-entropy rule fires only with context (a secret-like key name nearby, or inside `Authorization`/`Bearer`, or the string is >= 40 chars and not hex/UUID/`data:` URL/path/URL); 40/64-hex and `data:` URLs never redacted without secret-like key context; tests for each.
+- F4: PEM redaction is a single pass over the whole joined text (per hunk body or per string), regex `-----BEGIN [A-Z ]+-----[\s\S]*?-----END [A-Z ]+-----` (bounded length 100 KB, unterminated `BEGIN` redacts to end of the text); line count of diffs is preserved afterwards; boundary tests (start/end, split, multiple blocks, unterminated).
+- F5: the entropy scan is a manual single-pass tokenizer (no nested quantifiers); dedicated adversarial 1 MB tests (long runs of alphabet characters, repeated near-matches) < 500 ms.
+- F6: `<style>` content is a constant (no interpolation); malicious-string injection test across all text fields (`</style>`, `<img onerror>`, `javascript:`, `"` and `'` in attributes).
+- F7: username detection: `os.userInfo().username`, `USER`, `USERNAME`, `LOGNAME` (deduplicated, length >= 3, excluding `root`, `user`, `admin` generic names which are not redacted in free text but home-path rules still apply); paths `/home/<x>/`, `/Users/<x>/`, `/root/` -> `~/`; the absolute repo dir (`--dir`) is rewritten to `<repo>/`; tests with usernames `jack`, `root`, `admin`.
+- F8: the reported count is the total number of replacements (documented); idempotence test remains.

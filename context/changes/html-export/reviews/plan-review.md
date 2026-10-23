@@ -1,0 +1,51 @@
+# Plan review (OpenCode via herdr, 2026-10-23)
+
+# HTML Export Redaction Security Review
+
+**File reviewed:** `/home/jack/git/lgtm-review/context/changes/html-export/plan.md`
+**Scope:** Secret redaction completeness, HTML security, privacy, measurable criteria, phase size
+
+## Findings (8 max)
+
+### 1. BLOCKING: Redaction order — escape after redact risks incomplete redaction of escaped sequences
+- **Location:** Renderer `packages/cli/src/export-html.ts`, line: "All text passes through `escapeHtml` AND `redact` (order: redact then escape)."
+- **Detail:** The plan states order is "redact then escape." If redaction replaces a secret with `[redacted:key]` containing characters like `:` or digits, escaping those afterward is fine. However, if any redaction output contains characters that re-escape (e.g., if the replacement string itself contains `&`, `<`, `>`), escaping after redaction could produce double-escaped text that visually looks like `[redacted:key]` but with escaped entities. More critically, if redaction runs *after* escape, any secret containing HTML entities in the original text won't be found by the redact patterns (since `&` won't match `&`). The plan must confirm redact runs on *raw* text before any HTML escaping.
+- **Fix:** Explicitly document that `redact` operates on the original unescaped string, and `escapeHtml` is applied *after* redaction. Add a test verifying a secret like `sk-ant-abc&def` is redacted correctly (the `&` in the secret is literal, not an entity).
+
+### 2. BLOCKING: Secret pattern gaps — no coverage for API keys with variable prefixes, OAuth client secrets, or generative AI keys
+- **Location:** Core redaction module `packages/core/src/redact.ts`, pattern set definition.
+- **Detail:** The plan lists patterns for Anthropic (`sk-ant-...`), OpenAI (`sk-... >= 20`), GitHub (`ghp_`, `gho_`, `ghs_`, `github_pat_`), AWS, Google, Slack, Stripe, JWTs, PEM keys, Bearer/Basic headers, URL credentials, and `KEY=value`/`key: value` assignments. However, it omits: API keys for Deepseek, Google Vertex AI, Azure OpenAI (`api-key` headers), Anthropic `claude-` prefixed keys, OAuth `client_secret` parameters, and bearer tokens in cookie form. These are common in log files and their absence = false negatives.
+- **Fix:** Add patterns for `ai_key`, `api_key` (generic key regex), `client_secret`, and generative AI variants. Ensure the `KEY=value`/`key: value` catch-all includes `api_key|api-token|access_token|client_secret|auth_token`. Add 10+ new positive samples to the corpus.
+
+### 3. WARNING: Entropy rule may false-positive on git SHAs, base64 image data, or long UUIDs in diffs
+- **Location:** Core redaction `packages/core/src/redact.ts`, "generic high-entropy strings (>= 32 chars of base64/hex alphabet with entropy >= 4.0 bits/char)."
+- **Detail:** The plan includes a small allowlist: "40/64-hex strings are redacted ONLY if the surrounding key name looks secret; UUIDs never redacted." However, git SHAs appear in diff headers (e.g., `commit abc123...`), and base64-encoded images in `data:` URLs can easily exceed 32 chars with high entropy. The allowlist for 40/64-hex strings depends on "surrounding key name looks secret," which is subjective and may miss context or over-flag. UUIDs in prompts or file paths could also trigger.
+- **Fix:** Tighten the entropy heuristic: require surrounding contextual clues (e.g., `key=`, `token=`, `secret=`, or within a `KEY=value` block) before applying the entropy test. Add test cases: a 48-char hex string in a diff header without a secret-key context should NOT be redacted; a base64 data: URL with 80+ chars should NOT be redacted.
+
+### 4. WARNING: PEM block redaction across diff line boundaries may leak key material
+- **Location:** Core redaction `packages/core/src/redact.ts`, multi-line PEM handling.
+- **Detail:** The plan says: "diff lines are redacted per line but multi-line constructs (PEM blocks) are handled by redacting the diff body joined with `\n` per hunk before splitting back (line count preserved: replace block lines with `[redacted:private-key]` on the first line and empty-marker lines `[redacted]` for the rest)." If a PEM block is split across hunks or if the join/split logic misaligns line numbers, partial key material (e.g., `-----BEGIN` or `-----END` markers) could remain in the output. The "line count preserved" claim does not guarantee content safety if the join logic misfires.
+- **Fix:** Implement PEM redaction as a single-pass regex on the entire diff text (not per-line), replacing `-----BEGIN .+?-----.*?-----END .+?-----` with `[redacted:private-key]` block marker. Add boundary tests: PEM at start/end of diff, PEM split across line boundaries, multiple PEM blocks in one diff.
+
+### 5. WARNING: No ReDoS test for the entropy calculation regex against adversarial 1 MB strings
+- **Location:** Core redaction performance requirement, `redact.test.ts`.
+- **Detail:** The plan requires "linear-time (no catastrophic regexes; test with a 1 MB adversarial string < 500 ms)." However, the entropy calculation (likely using `match()` or `replace()` with a regex over base64/hex alphabet) is not explicitly shown to be ReDoS-free. A regex like `/[A-Za-z0-9+/]{32,}/g` on adversarial input (e.g., carefully crafted strings that trigger backtracking) could exceed 500 ms or hang. The plan mentions testing but does not specify the ReDoS test exists in the corpus.
+- **Fix:** Add a dedicated ReDoS test: run the entropy function against 1 MB strings designed to trigger backtracking (e.g., nested quantifiers, repeated classes). Assert completion < 500 ms. Use `timeout` or `performance.now()` monitoring. If the entropy function uses a safe approach (single-pass scanning), document why; otherwise, refactor to use a non-backtracking regex or manual entropy scanning.
+
+### 6. OBSERVATION: CSP `default-src 'none'` is correct but `style-src 'unsafe-inline'` may enable XSS if any CSS injection vector exists
+- **Location:** Renderer `packages/cli/src/export-html.ts`, CSP meta: `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`.
+- **Detail:** The CSP is strict (`default-src 'none'`) which prevents scripts, fonts, etc. However, `style-src 'unsafe-inline'` allows inline styles. The export generates inline `<style>` with palette/tokens. If any redaction or text insertion inadvertently places user-controlled content inside the `<style>` block (e.g., via a bug where hint text or step quotes is interpolated into the style template), CSS injection/XSS could occur. The plan says "All text passes through `escapeHtml` AND `redact`" but the style block itself may not go through redaction if it's generated programmatically.
+- **Fix:** Ensure the `<style>` block content is generated from a fixed token set without any text interpolation. Add a test injecting malicious strings ( `<img onerror>`, `</style>`, `javascript:`) into all text fields that end up in the HTML and verify they are inert (no execution, no breaking out of the style block). Consider moving to `style-src 'unsafe-hashes'` or adding a nonce if dynamic styles are ever needed.
+
+### 7. OBSERVATION: Home path and username redaction depends on OS detection logic not shown
+- **Location:** Desired end state: "Home directory paths: `/home/<user>/` and `/Users/<user>/` -> `~/`; the current OS username in free text -> `<user>`; email addresses -> `[redacted:email]`."
+- **Detail:** The plan mentions home path and username redaction but does not specify the implementation: how is "current OS username" determined? Is it `os.userInfo().username` (Node) or a CLI flag? If the export runs on a server where the username is `root` or a different naming scheme, the redaction may not match (`/root/` -> `~/` should work, but what about `/home/jack/`?). Similarly, free-text username redaction pattern is unspecified — a regex like `\b(username|user)\s*:\s*\S+` may miss many forms. Without knowing the detection logic, we cannot verify completeness.
+- **Fix:** Document the exact detection mechanism: e.g., "strip leading `/home/` or `/Users/` and replace with `~/`; detect current user via `process.env.USER`/`USERNAME`/`LOGNAME` and redact all standalone occurrences of that username in text." Add test fixtures with usernames `root`, `jack`, `admin`, and verify redaction in each case.
+
+### 8. OBSERVATION: Replacement count reported to user may not match actual redacted occurrences if redaction is not truly deterministic
+- **Location:** CLI output: "prints the output path and the redaction count to stderr/stdout (one line)."
+- **Detail:** The plan states the CLI prints a "redaction count to stderr/stdout." For this to be reliable, `redact()` must be deterministic and idempotent (`redact(redact(x).text).text === redact(x).text`). The plan requires idempotence, but the count reported on first run must equal the count of unique secrets replaced. If redaction replaces the same secret twice (e.g., a secret appearing in both prompt text and a diff), the count could double-count. The plan does not address whether the count is "unique redactions" or "total replacement events."
+- **Fix:** Clarify that the count reports *unique* redactions (replace-first-occurrence-only per secret kind) or document that double replacements are impossible due to per-string application. Add a test: input containing the same secret in two places; verify the count is 1 (not 2) and the output contains `[redacted:kind]` only once (or both are redacted if intentional, but count is 1).
+
+---
+**Summary:** The plan is well-structured and addresses FR-008's second half (redaction for export) thoroughly. The eight findings above identify one blocking issue (redaction order + pattern gaps), two warnings (entropy false-positives, PEM boundary leaks), and five observations (CSP scope, username detection, count semantics, ReDoS readiness, style-block safety). Resolving these before Phase 1 ship will ensure the export is both secure and reliablyredacts secrets across diverse log content.
