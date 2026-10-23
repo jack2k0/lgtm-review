@@ -1,4 +1,4 @@
-import { FileDiff, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
+import { FileDiff, ImportMapResponse, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
 
 /** Structural subset of a zod schema, so the web package needs no direct zod dependency. */
 interface Schema<T> {
@@ -79,3 +79,7 @@ export const fetchPromptDetail = (token: string | null, id: string, index: numbe
 
 export const fetchFileDiff = (token: string | null, id: string, index: number, path: string, etag: string | null, signal?: AbortSignal): Promise<Conditional<FileDiff>> =>
   getConditional(`api/sessions/${encodeURIComponent(id)}/prompts/${index}/diff?path=${encodeURIComponent(path)}`, token, FileDiff, etag, signal);
+
+/** Session map (`prompt` null) or per-prompt map; always the current working tree (plan M2). */
+export const fetchImportMap = (token: string | null, id: string, prompt: number | null, etag: string | null, signal?: AbortSignal): Promise<Conditional<ImportMapResponse>> =>
+  getConditional(`api/sessions/${encodeURIComponent(id)}/map${prompt === null ? "" : `?prompt=${prompt}`}`, token, ImportMapResponse, etag, signal);

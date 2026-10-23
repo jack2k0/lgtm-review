@@ -110,7 +110,21 @@ describe("steps routing", () => {
       "#/session/abc/prompt/-1", "#/session/abc/prompt/1e3", "#/session/abc/prompt/NaN", "#/session/abc/prompt/01",
       "#/session/abc/prompt/", "#/session/abc/prompt/1/other", "#/session/abc/prompt/1/diff", "#/session/abc/prompt/1/diff?path=",
       "#/session/abc/prompt/1/diff?path=%E0%A4%A", "#/session/abc/prompt/1234567890123", "#/session/abc/prompt/1/diff?path=a&x=1",
+      "#/session/abc/diff?path=a.ts", "#/session/abc/prompt/01/map", "#/session/abc/map?x=1", "#/session/abc/prompt/1/map?x=1",
     ]) expect(parseRoute(h), h).toEqual({ kind: "list" });
+  });
+});
+
+describe("map routing", () => {
+  test("session and prompt maps parse and round-trip", () => {
+    expect(parseRoute("#/session/abc/map")).toEqual({ kind: "map", id: "abc", index: null });
+    expect(parseRoute("#/session/abc/prompt/7/map")).toEqual({ kind: "map", id: "abc", index: 7 });
+    expect(routeHref({ kind: "map", id: "a/b", index: null })).toBe("#/session/a%2Fb/map");
+    expect(routeHref({ kind: "map", id: "a/b", index: 2 })).toBe("#/session/a%2Fb/prompt/2/map");
+    for (const r of [
+      { kind: "map", id: "x y", index: null },
+      { kind: "map", id: "x/y", index: 12 },
+    ] as const) expect(parseRoute(routeHref(r))).toEqual(r);
   });
 });
 

@@ -44,6 +44,7 @@ const pairs: [string, string, number][] = [
   ["rec-all", "surface", 4.5], ["rec-flagged", "surface", 4.5], ["rec-skim", "surface", 4.5],
   ["muted", "bg", 4.5], ["link", "bg", 4.5], ["live-lost", "bg", 4.5], ["live-lost", "surface", 4.5],
   ["live-dot", "bg", 3], ["live-paused", "bg", 3],
+  ["text", "map-band", 4.5], ["map-edge", "bg", 3],
   ["seg-read", "surface", 3], ["seg-write", "surface", 3], ["seg-check", "surface", 3], ["seg-fix", "surface", 3],
 ];
 

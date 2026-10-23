@@ -50,6 +50,8 @@ export function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: Pr
         </td>
         <td className="nowrap">
           <a href={routeHref({ kind: "steps", id: sessionId, index: p.index })} aria-label={`Steps of prompt ${p.index + 1}`}>Steps</a>
+          {" · "}
+          <a href={routeHref({ kind: "map", id: sessionId, index: p.index })} aria-label={`Import map of prompt ${p.index + 1}`}>Map</a>
         </td>
       </tr>
       {open ? (

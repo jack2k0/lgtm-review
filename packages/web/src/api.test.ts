@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { ApiError, fetchFileDiff, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
+import { ApiError, fetchFileDiff, fetchImportMap, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
 
 const TOKEN = "t".repeat(32);
 const listBody = { dir: "/x", sessions: [] };
@@ -107,7 +107,15 @@ describe("conditional client", () => {
     await fetchSession(TOKEN, "a b", '"1"');
     await fetchPromptDetail(TOKEN, "s", 3, '"2"');
     await fetchFileDiff(TOKEN, "s", 3, "src/a b.ts", '"3"');
-    expect(calls.map((c) => c.url)).toEqual(["api/sessions/a%20b", "api/sessions/s/prompts/3", "api/sessions/s/prompts/3/diff?path=src%2Fa%20b.ts"]);
-    expect(calls.map((c) => c.headers["If-None-Match"])).toEqual(['"1"', '"2"', '"3"']);
+    await fetchImportMap(TOKEN, "s", null, '"4"');
+    await fetchImportMap(TOKEN, "s", 3, '"5"');
+    expect(calls.map((c) => c.url)).toEqual([
+      "api/sessions/a%20b",
+      "api/sessions/s/prompts/3",
+      "api/sessions/s/prompts/3/diff?path=src%2Fa%20b.ts",
+      "api/sessions/s/map",
+      "api/sessions/s/map?prompt=3",
+    ]);
+    expect(calls.map((c) => c.headers["If-None-Match"])).toEqual(['"1"', '"2"', '"3"', '"4"', '"5"']);
   });
 });
