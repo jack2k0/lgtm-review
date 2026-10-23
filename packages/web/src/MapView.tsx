@@ -8,6 +8,11 @@ export function truncationNote(map: Pick<ImportMapResponse, "truncated" | "hidde
   return null;
 }
 
+export interface MapFocus {
+  nodes: ReadonlySet<string>;
+  edges: ReadonlySet<string>;
+}
+
 function nodeTitle(n: MapNode): string {
   const parts = [n.path];
   if (n.kind === "neighbour") parts.push("linked, unchanged");
@@ -16,12 +21,26 @@ function nodeTitle(n: MapNode): string {
   return parts.join(" — ");
 }
 
-function nodeClass(n: MapNode): string {
+function nodeClass(n: MapNode, focus?: MapFocus): string {
+  const isDim = focus !== undefined && !focus.nodes.has(n.path) && !focus.nodes.has(n.id);
   return [
     "map-node",
     n.kind === "changed" ? "map-node-changed" : "map-node-neighbour",
     `map-status-${n.status ?? "none"}`,
     n.deleted ? "map-node-deleted" : "",
+    isDim ? "dim" : "",
+  ]
+    .filter((c) => c !== "")
+    .join(" ");
+}
+
+function edgeClass(e: ImportMapResponse["edges"][number], focus?: MapFocus): string {
+  const isDim = focus !== undefined && !focus.edges.has(`${e.from}\0${e.to}`);
+  return [
+    "map-edge",
+    e.new ? "edge-new map-edge-new" : "",
+    e.kind === "type" ? "map-edge-type" : "",
+    isDim ? "dim" : "",
   ]
     .filter((c) => c !== "")
     .join(" ");
@@ -32,19 +51,41 @@ function nodeClass(n: MapNode): string {
  * edges. Changed files that still exist link to their prompt's diff; neighbours and deleted files stay text
  * (plan M5/M9). Every server string is a React text node inside the SVG — never markup.
  */
-export function MapView({ sessionId, map }: { sessionId: string; map: ImportMapResponse }) {
+export function MapView({
+  sessionId,
+  map,
+  focus,
+}: {
+  sessionId: string;
+  map: ImportMapResponse;
+  focus?: MapFocus;
+}) {
   const back =
     map.prompt === null
       ? { href: routeHref({ kind: "session", id: sessionId }), label: "← Back to session" }
       : { href: routeHref({ kind: "steps", id: sessionId, index: map.prompt }), label: "← Back to steps" };
   const note = truncationNote(map);
+  const newCount = map.edges.filter((e) => e.new === true).length;
+  const existingCount = map.edges.length - newCount;
 
   return (
     <>
       <p><a href={back.href}>{back.label}</a></p>
       <div className="session-head">
-        <h2>Import map</h2>
-        <p className="muted">{map.prompt === null ? "Whole session" : `Prompt ${map.prompt + 1}`}</p>
+        <div>
+          <h2>Import map</h2>
+          <p className="muted">{map.prompt === null ? "Whole session" : `Prompt ${map.prompt + 1}`}</p>
+        </div>
+        {focus === undefined && map.playable === true && map.prompt !== null && (
+          <p>
+            <a
+              className="play-link"
+              href={routeHref({ kind: "play", id: sessionId, index: map.prompt, beat: 1 })}
+            >
+              ▶ Play the change
+            </a>
+          </p>
+        )}
       </div>
       <p className="muted map-caption">Imports as of now (working tree)</p>
       {map.notes?.map((n, i) => (
@@ -69,6 +110,10 @@ export function MapView({ sessionId, map }: { sessionId: string; map: ImportMapR
         <li className="legend-item">
           <span className="map-legend-dash" aria-hidden="true" />
           Type-only import
+        </li>
+        <li className="legend-item">
+          <span className="map-legend-edge-new" aria-hidden="true" />
+          {`New import ${newCount} · Existing ${existingCount}`}
         </li>
       </ul>
       {map.nodes.length === 0 ? (
@@ -96,7 +141,7 @@ export function MapView({ sessionId, map }: { sessionId: string; map: ImportMapR
               {map.edges.map((e) => (
                 <polyline
                   key={`${e.from}\u0000${e.to}\u0000${e.kind}`}
-                  className={`map-edge${e.kind === "type" ? " map-edge-type" : ""}`}
+                  className={edgeClass(e, focus)}
                   points={e.points.map((p) => `${p.x},${p.y}`).join(" ")}
                 />
               ))}
@@ -108,7 +153,7 @@ export function MapView({ sessionId, map }: { sessionId: string; map: ImportMapR
                   ? routeHref({ kind: "diff", id: sessionId, index, path: n.path })
                   : null;
                 const shape = (
-                  <g className={nodeClass(n)}>
+                  <g className={nodeClass(n, focus)}>
                     <title>{nodeTitle(n)}</title>
                     <rect className="map-rect" x={n.x} y={n.y} width={n.width} height={n.height} rx={4} />
                     <text className="map-label" x={n.x + 10} y={n.y + n.height / 2 + 4}>{n.label}</text>

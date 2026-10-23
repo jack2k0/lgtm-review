@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FileDiff, ImportMapResponse, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
-import { errorMessage, fetchFileDiff, fetchImportMap, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
+import type { FileDiff, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
+import { errorMessage, fetchFileDiff, fetchImportMap, fetchPlay, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
 import { DiffView } from "./DiffView";
 import { LiveContext, LiveIndicator, useLive, useLiveStatus, type Load } from "./Live";
 import { readPaused, writePaused } from "./live";
 import { MapView } from "./MapView";
+import { PlayView } from "./PlayView";
 import { PromptTable } from "./PromptTable";
 import { SessionList } from "./SessionList";
 import { StepsView } from "./StepsView";
 import { sessionStore } from "./token";
 import { parseRoute, routeHref, type Route } from "./viewmodel";
 
-function Status<T>({ res, back, children }: { res: Load<T>; back?: string; children: (data: T) => React.ReactNode }) {
-  const link = back ? <p><a href={back}>&larr; Back to steps</a></p> : null;
+function Status<T>({ res, back, backLabel = "← Back to steps", children }: { res: Load<T>; back?: string; backLabel?: string; children: (data: T) => React.ReactNode }) {
+  const link = back ? <p><a href={back}>{backLabel}</a></p> : null;
   if (res.state === "loading") return <>{link}<p className="muted" role="status">Loading…</p></>;
   if (res.state === "error") return <>{link}<p className="error" role="alert">{res.message}</p></>;
   return <>{children(res.data)}</>;
@@ -68,6 +69,22 @@ function MapRoute({ token, id, index }: { token: string | null; id: string; inde
   return <Status res={res}>{(d) => <MapView sessionId={id} map={d} />}</Status>;
 }
 
+function PlayRoute({ token, id, index, beat }: { token: string | null; id: string; index: number; beat: number }) {
+  const mapRes = useLive<ImportMapResponse>((e, s) => fetchImportMap(token, id, index, e, s), `m:${id}:${index}`);
+  const playRes = useLive<PlayResponse>((e, s) => fetchPlay(token, id, index, e, s), `p:${id}:${index}`);
+  return (
+    <Status res={mapRes} back={routeHref({ kind: "map", id, index })} backLabel="← Back to map">
+      {(mapData) => (
+        <Status res={playRes} back={routeHref({ kind: "map", id, index })} backLabel="← Back to map">
+          {(playData) => (
+            <PlayView sessionId={id} map={mapData} play={playData} initialBeat={beat} />
+          )}
+        </Status>
+      )}
+    </Status>
+  );
+}
+
 function Routed({ token, route }: { token: string | null; route: Route }) {
   switch (route.kind) {
     case "session":
@@ -78,6 +95,8 @@ function Routed({ token, route }: { token: string | null; route: Route }) {
       return <DiffRoute token={token} id={route.id} index={route.index} path={route.path} />;
     case "map":
       return <MapRoute token={token} id={route.id} index={route.index} />;
+    case "play":
+      return <PlayRoute token={token} id={route.id} index={route.index} beat={route.beat} />;
     case "list":
       return <ListView token={token} />;
   }

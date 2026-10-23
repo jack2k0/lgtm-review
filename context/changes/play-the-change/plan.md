@@ -93,8 +93,8 @@ D7. Web:
 - [x] 2.2 `/prompts/:n/play` route + tests
 
 ### Phase 3: Web
-- [ ] 3.1 Route + PlayView + keyboard/autoplay
-- [ ] 3.2 Legend counts, new-edge style, play link + tests
+- [x] 3.1 Route + PlayView + keyboard/autoplay
+- [x] 3.2 Legend counts, new-edge style, play link + tests
 
 ### Phase 4: Docs
 - [ ] 4.1 README, PRD, roadmap
