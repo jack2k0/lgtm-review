@@ -1,0 +1,11 @@
+{
+  "fixture": "subagent-missing",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "no transcript: parent edit and check decide; partial"
+    }
+  ]
+}

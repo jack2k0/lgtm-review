@@ -46,7 +46,18 @@ export interface BashEdit {
 
 export type PromptEvent = { type: "prompt"; uuid: string; text: string; ts: string | null; line: number };
 /** `ts` is the raw record timestamp (ISO string) or null when the record has none. */
-export type ToolUseEvent = { type: "tool_use"; id: string; name: string; input: ToolInput; ts: string | null; line: number };
+export type ToolUseEvent = {
+  type: "tool_use";
+  id: string;
+  name: string;
+  input: ToolInput;
+  ts: string | null;
+  line: number;
+  /** Set for events of a subagent transcript (sidechain parser): the subagent's id. */
+  agentId?: string;
+  /** Set by the subagent merge on an `Agent` call: a transcript was merged, is missing, or lies deeper than the depth limit. */
+  subagent?: "found" | "missing" | "depth";
+};
 export type ToolResultEvent = {
   type: "tool_result";
   toolUseId: string;
@@ -72,10 +83,12 @@ export type ToolResultEvent = {
   /** Raw record timestamp (ISO string) or null when the record has none. */
   ts: string | null;
   line: number;
+  /** Set for events of a subagent transcript (sidechain parser): the subagent's id. */
+  agentId?: string;
 };
 export type BoundaryEvent = { type: "boundary"; kind: "compact" | "interrupt" };
 /** Detail mode only: an agent text block (first 400 characters). */
-export type TextEvent = { type: "text"; text: string };
+export type TextEvent = { type: "text"; text: string; agentId?: string };
 export type Event = PromptEvent | ToolUseEvent | ToolResultEvent | BoundaryEvent | TextEvent;
 
 export interface ParserMeta {
@@ -90,6 +103,14 @@ export interface ParserOptions {
   file?: string;
   /** Opt-in retention of hunks, agent text and call hints for the steps and diff views. */
   detail?: boolean;
+  /**
+   * Parse a subagent transcript (`<session>/subagents/agent-<id>.jsonl`): its records are the main thread
+   * (`isSidechain` is expected, not skipped), no prompts or boundaries are emitted (the first user record is the
+   * task the parent gave the subagent, not a human prompt), and tool_use/tool_result/text events carry the agent id.
+   */
+  sidechain?: boolean;
+  /** Agent id used for events whose record has no `agentId` (sidechain only). */
+  agentId?: string;
 }
 
 export interface Parser {
@@ -308,6 +329,9 @@ function exitCodeOf(structured: string | undefined, text: string): number | unde
 
 export function createParser(opts: ParserOptions = {}): Parser {
   const detail = opts.detail === true;
+  const sidechain = opts.sidechain === true;
+  /** Agent id of the record being handled (sidechain only). */
+  let agentTag: string | undefined;
   const warnings: Warning[] = [];
   let omitted = 0;
   let lineNo = 0;
@@ -349,6 +373,7 @@ export function createParser(opts: ParserOptions = {}): Parser {
         const isError = b.is_error === true;
         const text = blocksText(b.content, RESULT_TEXT_MAX, "\n");
         const ev: ToolResultEvent = { type: "tool_result", toolUseId: id, isError, text, background: false, ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo };
+        if (agentTag !== undefined) ev.agentId = agentTag;
         if (text.length >= RESULT_TEXT_MAX) {
           const tail = blocksTail(b.content, RESULT_TAIL_MAX);
           if (tail.length > 0) ev.tail = tail;
@@ -394,6 +419,8 @@ export function createParser(opts: ParserOptions = {}): Parser {
       return;
     }
 
+    // A subagent transcript has no human prompts: its first user record is the task given by the parent.
+    if (sidechain) return;
     if (rec.isMeta === true || rec.isCompactSummary === true) return;
     if (rec.scheduledTaskId !== undefined && rec.scheduledTaskId !== null) return;
     if (isObj(rec.origin)) {
@@ -434,7 +461,7 @@ export function createParser(opts: ParserOptions = {}): Parser {
     for (const b of message.content) {
       if (detail && isObj(b) && b.type === "text" && typeof b.text === "string") {
         const t = b.text.trim();
-        if (t !== "") out.push({ type: "text", text: truncate(t, QUOTE_MAX) });
+        if (t !== "") out.push(agentTag !== undefined ? { type: "text", text: truncate(t, QUOTE_MAX), agentId: agentTag } : { type: "text", text: truncate(t, QUOTE_MAX) });
         continue;
       }
       if (!isObj(b) || b.type !== "tool_use") continue;
@@ -444,12 +471,15 @@ export function createParser(opts: ParserOptions = {}): Parser {
         continue;
       }
       const name = str(b.name) ?? "";
-      out.push({ type: "tool_use", id, name, input: sanitizeInput(name, b.input, detail), ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo });
+      const use: ToolUseEvent = { type: "tool_use", id, name, input: sanitizeInput(name, b.input, detail), ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo };
+      if (agentTag !== undefined) use.agentId = agentTag;
+      out.push(use);
     }
   }
 
   function handleMessageRecord(type: string, rec: Record<string, unknown>, out: Event[]): void {
-    if (rec.isSidechain === true) return;
+    if (rec.isSidechain === true && !sidechain) return;
+    if (sidechain) agentTag = nonEmptyStr(rec.agentId) ?? opts.agentId ?? "agent";
     const uuid = nonEmptyStr(rec.uuid);
     if (uuid !== undefined) {
       if (seen.has(uuid)) return;
@@ -461,7 +491,7 @@ export function createParser(opts: ParserOptions = {}): Parser {
     meta.cwd ??= nonEmptyStr(rec.cwd) ?? null;
 
     if (type === "system") {
-      if (rec.subtype === "compact_boundary") out.push({ type: "boundary", kind: "compact" });
+      if (rec.subtype === "compact_boundary" && !sidechain) out.push({ type: "boundary", kind: "compact" });
       return;
     }
     const message = rec.message;

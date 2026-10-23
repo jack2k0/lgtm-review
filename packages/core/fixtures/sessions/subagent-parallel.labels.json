@@ -1,0 +1,11 @@
+{
+  "fixture": "subagent-parallel",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "last completed check (agent A) passed after the last edit of both agents"
+    }
+  ]
+}

@@ -1,8 +1,11 @@
 // Test-only helpers. Never import from src/index.ts (it must stay free of node: imports).
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { analyzeSession, type AnalyzeOptions } from "../analyze.js";
+import type { SessionAnalysis } from "../schema.js";
+import { parseSubagent, type SubagentTranscript } from "../subagents.js";
 
 export const sessionsDir = join(dirname(fileURLToPath(import.meta.url)), "../../fixtures/sessions");
 
@@ -43,4 +46,29 @@ export function readFixtureLines(name: string): string[] {
 
 export function readLabels(name: string): Labels {
   return Labels.parse(JSON.parse(readFileSync(join(sessionsDir, `${name}.labels.json`), "utf8")));
+}
+
+const SubagentMeta = z.object({ description: z.string().optional(), toolUseId: z.string() });
+
+/**
+ * Subagent transcripts of a fixture (`<name>/subagents/agent-<id>.jsonl` + `.meta.json`, the layout of a real
+ * session dir) by the tool-use id of the parent's `Agent` call. `{}` when the fixture has none.
+ */
+export function readFixtureSubagents(name: string, opts: { detail?: boolean } = {}): Map<string, SubagentTranscript> {
+  const dir = join(sessionsDir, name, "subagents");
+  const out = new Map<string, SubagentTranscript>();
+  if (!existsSync(dir)) return out;
+  const files = readdirSync(dir).filter((f) => f.endsWith(".jsonl")).sort();
+  for (const f of files) {
+    const agentId = f.slice("agent-".length, -".jsonl".length);
+    const meta = SubagentMeta.parse(JSON.parse(readFileSync(join(dir, f.replace(/\.jsonl$/, ".meta.json")), "utf8")));
+    const lines = readFileSync(join(dir, f), "utf8").split("\n").filter((l) => l !== "");
+    out.set(meta.toolUseId, parseSubagent(lines, { agentId, description: meta.description ?? "", detail: opts.detail === true }));
+  }
+  return out;
+}
+
+/** `analyzeSession` over a fixture with its subagent transcripts supplied. */
+export function analyzeFixture(name: string, opts: AnalyzeOptions = {}): SessionAnalysis {
+  return analyzeSession(readFixtureLines(name), { ...opts, subagents: readFixtureSubagents(name, { detail: opts.detail === true }) });
 }

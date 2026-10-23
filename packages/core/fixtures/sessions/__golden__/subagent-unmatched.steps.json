@@ -1,0 +1,33 @@
+[
+  {
+    "index": 0,
+    "text": "Look at add.",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:00.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Read 1 file",
+        "startedAt": "2026-01-01T00:00:01.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:01.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  }
+]

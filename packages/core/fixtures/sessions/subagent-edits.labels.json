@@ -1,0 +1,16 @@
+{
+  "fixture": "subagent-edits",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "note": "subagent edits mul.js after the parent's passing check"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "second prompt: read only, nothing leaks from the subagent"
+    }
+  ]
+}

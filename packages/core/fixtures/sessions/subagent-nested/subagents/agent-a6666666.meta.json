@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Verify the rewrite",
+  "toolUseId": "x_agY",
+  "spawnDepth": 2,
+  "model": "synthetic"
+}

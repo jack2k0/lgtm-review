@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Background multiply helper",
+  "toolUseId": "p_ag1",
+  "spawnDepth": 1,
+  "model": "synthetic"
+}

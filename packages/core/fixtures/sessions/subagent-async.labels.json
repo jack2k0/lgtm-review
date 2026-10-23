@@ -1,0 +1,16 @@
+{
+  "fixture": "subagent-async",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "note": "the async agent edited mul.js after the parent's check (late edit clamps to the prompt end)"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "second prompt: nothing"
+    }
+  ]
+}

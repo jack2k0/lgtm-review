@@ -57,6 +57,10 @@ export interface ActionRec {
   quotes: string[];
   check: CheckRec | null;
   edits: EditNote[];
+  /** Made by a subagent (merged from its transcript). */
+  via?: "subagent";
+  /** An `Agent` call whose transcript was merged (its activity is part of the prompt). */
+  analysed?: boolean;
 }
 
 export function oneLine(s: string, max: number): string {
@@ -201,6 +205,8 @@ function mixTitle(acts: ActionRec[], cwd: string | null, fix: boolean): string {
 interface Acc {
   phase: Phase;
   isCheck: boolean;
+  /** The step consists of subagent actions. */
+  sub: boolean;
   acts: ActionRec[];
 }
 
@@ -215,13 +221,13 @@ export function buildSteps(actions: readonly ActionRec[], cwd: string | null): {
           truncated = true;
           break;
         }
-        open = { phase: "read", isCheck: false, acts: [] };
+        open = { phase: "read", isCheck: false, sub: a.via === "subagent", acts: [] };
         groups.push(open);
       }
       open.acts.push(a);
       continue;
     }
-    if (open !== null && a.phase !== "check" && !open.isCheck && open.phase === a.phase) {
+    if (open !== null && a.phase !== "check" && !open.isCheck && open.phase === a.phase && open.sub === (a.via === "subagent")) {
       open.acts.push(a);
       continue;
     }
@@ -229,7 +235,7 @@ export function buildSteps(actions: readonly ActionRec[], cwd: string | null): {
       truncated = true;
       break;
     }
-    open = { phase: a.phase, isCheck: a.phase === "check", acts: [a] };
+    open = { phase: a.phase, isCheck: a.phase === "check", sub: a.via === "subagent", acts: [a] };
     groups.push(open);
   }
 
@@ -243,7 +249,8 @@ export function buildSteps(actions: readonly ActionRec[], cwd: string | null): {
         ? { command: oneLine(checkRec.command, SUMMARY_MAX), exitCode: checkRec.exitCode, passed: checkRec.passed, excerpt: checkRec.excerpt }
         : undefined;
     let title = checkRec !== null ? checkTitle(checkRec) : mixTitle(g.acts, cwd, g.phase === "fix");
-    if (g.acts.some((a) => a.tool === "Agent")) title += " (partial: subagent activity not analysed)";
+    if (g.acts.some((a) => a.tool === "Agent" && a.analysed !== true)) title += " (partial: subagent activity not analysed)";
+    if (g.acts.every((a) => a.via === "subagent")) title = `Subagent: ${title}`;
     const files: string[] = [];
     for (const a of g.acts) for (const e of a.edits) if (!files.includes(e.path)) files.push(e.path);
     const step: Step = {
@@ -253,7 +260,11 @@ export function buildSteps(actions: readonly ActionRec[], cwd: string | null): {
       startedAt: iso(first.useTs),
       durationMs: unionMs(intervals),
       quotes: first.quotes.slice(),
-      actions: g.acts.map((a): Action => ({ tool: a.tool, summary: summaryOf(a, cwd), ok: a.ok, ts: iso(a.useTs) })),
+      actions: g.acts.map((a): Action => {
+        const act: Action = { tool: a.tool, summary: summaryOf(a, cwd), ok: a.ok, ts: iso(a.useTs) };
+        if (a.via !== undefined) act.via = a.via;
+        return act;
+      }),
       files,
     };
     if (check) step.check = check;

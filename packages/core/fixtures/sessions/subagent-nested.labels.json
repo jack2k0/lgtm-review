@@ -1,0 +1,11 @@
+{
+  "fixture": "subagent-nested",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "the nested agent's passing check follows the first agent's edit"
+    }
+  ]
+}

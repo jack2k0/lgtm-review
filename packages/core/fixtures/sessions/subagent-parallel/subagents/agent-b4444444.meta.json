@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Implement mul helper",
+  "toolUseId": "p_agB",
+  "spawnDepth": 1,
+  "model": "synthetic"
+}

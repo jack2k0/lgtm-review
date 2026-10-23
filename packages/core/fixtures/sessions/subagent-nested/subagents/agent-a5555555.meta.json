@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Rewrite add helper",
+  "toolUseId": "p_agX",
+  "spawnDepth": 1,
+  "model": "synthetic"
+}

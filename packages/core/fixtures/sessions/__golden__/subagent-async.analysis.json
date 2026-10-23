@@ -1,0 +1,69 @@
+{
+  "sessionId": "subagent-async",
+  "title": "Add helpers; let an agent finish the multiply in the backgro",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Add helpers; let an agent finish the multiply in the background.",
+      "status": "unchecked",
+      "reason": "2 edits after last check (by subagent Background multiply helper)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/mul.js",
+          "kind": "M",
+          "added": 2,
+          "removed": 2,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 3000,
+        "writeMs": 30000,
+        "checkMs": 3000,
+        "fixMs": 0
+      },
+      "activeMs": 36000,
+      "headline": "Mostly writing (83%), 1 check",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/mul.js",
+          "reason": "edited after the last completed check"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000011",
+      "text": "Anything else?",
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    }
+  ],
+  "warnings": []
+}

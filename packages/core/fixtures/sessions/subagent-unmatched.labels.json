@@ -1,0 +1,11 @@
+{
+  "fixture": "subagent-unmatched",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "no-changes",
+      "note": "the unmatched transcript is attributed to no prompt (warning only)"
+    }
+  ]
+}

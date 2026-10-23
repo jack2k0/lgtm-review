@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { analyzeSession, createAnalyzer } from "./analyze.js";
 import { FileDiff, PromptDetail, SessionAnalysis } from "./schema.js";
-import { listFixtures, listLabelFiles, readFixtureLines, readLabels, sessionsDir } from "./testing/fixtures.js";
+import { analyzeFixture, listFixtures, listLabelFiles, readFixtureLines, readFixtureSubagents, readLabels, sessionsDir } from "./testing/fixtures.js";
 
 const fixtures = listFixtures();
 
@@ -24,9 +24,8 @@ describe("fixture corpus", () => {
 
 describe("golden: analysis", () => {
   test.each(fixtures)("%s", async (name) => {
-    const lines = readFixtureLines(name);
-    const first = analyzeSession(lines, { sessionId: name, file: `${name}.jsonl` });
-    const second = analyzeSession(lines, { sessionId: name, file: `${name}.jsonl` });
+    const first = analyzeFixture(name, { sessionId: name, file: `${name}.jsonl` });
+    const second = analyzeFixture(name, { sessionId: name, file: `${name}.jsonl` });
     expect(JSON.stringify(second)).toBe(JSON.stringify(first));
     expect(SessionAnalysis.safeParse(first).success).toBe(true);
     await expect(JSON.stringify(first, null, 2) + "\n").toMatchFileSnapshot(
@@ -40,7 +39,7 @@ describe("golden: analysis", () => {
 });
 
 function detailOf(name: string) {
-  const a = createAnalyzer({ detail: true, sessionId: name, file: `${name}.jsonl` });
+  const a = createAnalyzer({ detail: true, sessionId: name, file: `${name}.jsonl`, subagents: readFixtureSubagents(name, { detail: true }) });
   for (const l of readFixtureLines(name)) a.push(l);
   const analysis = a.finish();
   return { a, analysis, details: a.details() };
@@ -48,7 +47,7 @@ function detailOf(name: string) {
 
 describe("golden: steps and diffs (detail mode)", () => {
   test.each(fixtures)("detail mode does not change the analysis: %s", (name) => {
-    const plain = analyzeSession(readFixtureLines(name), { sessionId: name, file: `${name}.jsonl` });
+    const plain = analyzeFixture(name, { sessionId: name, file: `${name}.jsonl` });
     expect(JSON.stringify(detailOf(name).analysis)).toBe(JSON.stringify(plain));
   });
 
@@ -79,7 +78,7 @@ describe("golden: steps and diffs (detail mode)", () => {
 describe("hints and recommendation against labels", () => {
   const cwd = "/home/user/project/";
   test.each(fixtures)("%s", (name) => {
-    const analysis = analyzeSession(readFixtureLines(name));
+    const analysis = analyzeFixture(name);
     for (const l of readLabels(name).prompts) {
       const p = analysis.prompts[l.index];
       if (l.expectedRecommendation !== undefined) expect(p?.recommendation, `${name}#${l.index} recommendation`).toBe(l.expectedRecommendation);
@@ -102,7 +101,7 @@ describe("hints and recommendation against labels", () => {
   test("hints are sorted by severity, rule, path and unique per (rule, path)", () => {
     const rank = { high: 0, warn: 1, info: 2 } as const;
     for (const name of fixtures) {
-      for (const p of analyzeSession(readFixtureLines(name)).prompts) {
+      for (const p of analyzeFixture(name).prompts) {
         const keys = p.hints.map((h) => `${h.rule}\u0000${h.path}`);
         expect(new Set(keys).size).toBe(keys.length);
         const sorted = [...p.hints].sort((a, b) => rank[a.severity] - rank[b.severity] || (a.rule < b.rule ? -1 : a.rule > b.rule ? 1 : 0) || ((a.path ?? "") < (b.path ?? "") ? -1 : 1));
@@ -113,7 +112,7 @@ describe("hints and recommendation against labels", () => {
 
   test("hint reasons never carry command output or file content", () => {
     for (const name of fixtures) {
-      for (const p of analyzeSession(readFixtureLines(name)).prompts) {
+      for (const p of analyzeFixture(name).prompts) {
         for (const h of p.hints) expect(h.reason.length).toBeLessThan(120);
       }
     }
@@ -126,7 +125,7 @@ describe("status accuracy against labels", () => {
     let matched = 0;
     const misses: string[] = [];
     for (const name of fixtures) {
-      const analysis = analyzeSession(readFixtureLines(name));
+      const analysis = analyzeFixture(name);
       const labels = readLabels(name);
       if (analysis.prompts.length !== labels.prompts.length) {
         misses.push(`${name}: ${analysis.prompts.length} prompts, ${labels.prompts.length} labels`);

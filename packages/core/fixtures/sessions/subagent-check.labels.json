@@ -1,0 +1,11 @@
+{
+  "fixture": "subagent-check",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "the passing check was run by the subagent after the parent's edit"
+    }
+  ]
+}

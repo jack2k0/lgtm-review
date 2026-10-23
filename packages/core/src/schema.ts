@@ -132,6 +132,8 @@ export const Action = z.object({
   ok: z.boolean(),
   /** ISO timestamp of the call, or null when the log has none. */
   ts: z.string().nullable(),
+  /** Set when the call was made by a subagent of the prompt (merged from its transcript). */
+  via: z.literal("subagent").optional(),
 });
 export type Action = z.infer<typeof Action>;
 

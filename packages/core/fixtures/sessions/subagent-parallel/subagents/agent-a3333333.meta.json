@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Implement sub helper",
+  "toolUseId": "p_agA",
+  "spawnDepth": 1,
+  "model": "synthetic"
+}

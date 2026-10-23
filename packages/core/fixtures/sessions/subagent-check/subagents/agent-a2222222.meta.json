@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Run the test suite",
+  "toolUseId": "p_ag1",
+  "spawnDepth": 1,
+  "model": "synthetic"
+}

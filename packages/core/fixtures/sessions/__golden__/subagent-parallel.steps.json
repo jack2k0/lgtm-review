@@ -1,0 +1,198 @@
+[
+  {
+    "index": 0,
+    "text": "Implement sub and mul in parallel.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit (by subagent Implement sub helper)",
+    "headline": "Mostly checking (33%), 2 checks",
+    "startedAt": "2026-01-01T00:00:00.000Z",
+    "activeMs": 15000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1), delegate to 2 subagents",
+        "startedAt": "2026-01-01T00:00:01.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:01.000Z"
+          },
+          {
+            "tool": "Agent",
+            "summary": "Agent: Implement sub helper",
+            "ok": true,
+            "ts": "2026-01-01T00:00:03.000Z"
+          },
+          {
+            "tool": "Agent",
+            "summary": "Agent: Implement mul helper",
+            "ok": true,
+            "ts": "2026-01-01T00:00:03.500Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "write",
+        "title": "Subagent: Edit src/sub.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:05.000Z",
+        "durationMs": 1000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/sub.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:05.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/sub.js"
+        ]
+      },
+      {
+        "n": 3,
+        "phase": "read",
+        "title": "Subagent: Read 1 file",
+        "startedAt": "2026-01-01T00:00:05.000Z",
+        "durationMs": 3000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/mul.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:05.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": []
+      },
+      {
+        "n": 4,
+        "phase": "check",
+        "title": "Subagent: Run pnpm test -> failed (exit 1)",
+        "startedAt": "2026-01-01T00:00:07.000Z",
+        "durationMs": 3000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": false,
+            "ts": "2026-01-01T00:00:07.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 1,
+          "passed": false,
+          "excerpt": "1 failed"
+        }
+      },
+      {
+        "n": 5,
+        "phase": "read",
+        "title": "Subagent: Read 1 file",
+        "startedAt": "2026-01-01T00:00:09.000Z",
+        "durationMs": 3000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:09.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": []
+      },
+      {
+        "n": 6,
+        "phase": "fix",
+        "title": "Subagent: Fix: read 1 file, edit src/sub.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:10.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/sub.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:10.000Z",
+            "via": "subagent"
+          },
+          {
+            "tool": "Edit",
+            "summary": "src/sub.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:12.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/sub.js"
+        ]
+      },
+      {
+        "n": 7,
+        "phase": "write",
+        "title": "Subagent: Edit src/mul.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:12.000Z",
+        "durationMs": 3000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/mul.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:12.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/mul.js"
+        ]
+      },
+      {
+        "n": 8,
+        "phase": "check",
+        "title": "Subagent: Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:15.000Z",
+        "durationMs": 5000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:15.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  }
+]

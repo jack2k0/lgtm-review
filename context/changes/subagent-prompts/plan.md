@@ -66,7 +66,7 @@ Three phases: (1) sidechain-aware parser and merge machinery in core with synthe
 
 ### Phase 1: Core parser and merge
 
-- [ ] 1.1 `pnpm check` green, fixtures 100%, node-free grep empty
+- [x] 1.1 `pnpm check` green, fixtures 100%, node-free grep empty
 
 ### Phase 2: Node IO and consumers
 
