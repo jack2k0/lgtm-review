@@ -231,6 +231,8 @@ export const MapNode = z.object({
   status: Status.nullable(),
   /** The changed file no longer exists on disk: no edges, click target disabled. */
   deleted: z.boolean(),
+  /** Changed nodes: index of the last non-inherited prompt that changed the file (session map) or the requested prompt; null for neighbours. */
+  promptIndex: z.number().int().nonnegative().nullable().optional(),
   x: z.number(),
   y: z.number(),
   width: z.number().nonnegative(),
@@ -279,5 +281,7 @@ export const ImportMapResponse = z.object({
   edges: z.array(MapEdge),
   width: z.number().nonnegative(),
   height: z.number().nonnegative(),
+  /** Human-readable notes, e.g. "Neighbour scan unavailable (git ls-files failed): showing outgoing imports only." */
+  notes: z.array(z.string()).optional(),
 });
 export type ImportMapResponse = z.infer<typeof ImportMapResponse>;
