@@ -1,7 +1,7 @@
 ---
 change_id: html-export
 title: Self-contained HTML export of a session with secret redaction
-status: planned
+status: implemented
 created: 2026-10-23
 updated: 2026-10-23
 archived_at: null

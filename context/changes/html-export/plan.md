@@ -76,7 +76,7 @@ Three phases: (1) core redaction module with corpus tests; (2) renderer + CLI fl
 ### Phase 3: Docs and smoke
 
 - [x] 3.1 `pnpm check` green incl. smoke
-- [ ] 3.2 Real-session export reviewed locally
+- [x] 3.2 Real-session export reviewed locally
 
 ## Plan-review amendments (accepted by orchestrator, 2026-10-23)
 
