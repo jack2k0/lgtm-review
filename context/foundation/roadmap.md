@@ -156,6 +156,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Prerequisites:** S-11
 - **Status:** done (real-log audit: overall 95.3%, subagent prompts 19/22)
 
+### S-13: Fork/resume duplicates marked and excluded from counts (v0.2)
+
+- **Outcome:** Prompts a session inherited from an earlier session (resume/fork copies history with the same prompt `uuid`) are marked "inherited from <session>", shown collapsed in the UI, and excluded from the session's status counts and from `--summary`/export totals, so the same unchecked prompt is not counted twice.
+- **Change ID:** fork-dedupe
+- **PRD refs:** FR-001, FR-002 (accuracy of status counts); audit 2026-10-23: 15 of 109 rows (13.8%) were fork duplicates
+- **Prerequisites:** S-03
+- **Status:** in progress (planned 2026-10-23, orchestrator decision; implemented via Agy)
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
