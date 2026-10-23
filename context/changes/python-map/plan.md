@@ -101,9 +101,9 @@ D8. Web: empty state text -> "No supported source files changed (TS/JS, Python)"
 - [x] 1.3 Python/Django hint paths with tests
 
 ### Phase 2: CLI + web
-- [ ] 2.1 Language dispatch, Python roots, layer roots, skip dirs in `map.ts`
-- [ ] 2.2 Django fixture API test
-- [ ] 2.3 Web empty-state text
+- [x] 2.1 Language dispatch, Python roots, layer roots, skip dirs in `map.ts`
+- [x] 2.2 Django fixture API test
+- [x] 2.3 Web empty-state text
 
 ### Phase 3: Docs
 - [ ] 3.1 README, roadmap, PRD

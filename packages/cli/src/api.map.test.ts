@@ -12,6 +12,7 @@ let repo: string;
 let srv: RunningServer;
 let small: RunningServer;
 let noGit: RunningServer;
+let djangoSrv: RunningServer;
 
 interface Res {
   status: number;
@@ -116,11 +117,32 @@ beforeAll(async () => {
   write(plain, "z.ts", 'import "./x";\n');
   writeFileSync(join(projectDir(root, plain), "map-session.jsonl"), session(plain, [{ text: "go", files: ["x.ts"] }]));
   noGit = await startServer({ dir: plain, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web") });
+
+  const djRepo = join(tmp, "django-repo");
+  mkdirSync(djRepo);
+  write(djRepo, "backend/manage.py", "#!/usr/bin/env python\n");
+  write(djRepo, "backend/shop/__init__.py", "");
+  write(djRepo, "backend/shop/models.py", "class X:\n    pass\n");
+  write(djRepo, "backend/shop/views.py", "from .models import X\nfrom core.utils import y\ndef my_view():\n    pass\n");
+  write(djRepo, "backend/shop/urls.py", "from . import views\n");
+  write(djRepo, "backend/core/__init__.py", "");
+  write(djRepo, "backend/core/utils.py", "def y():\n    pass\n");
+  write(djRepo, "frontend/app.ts", 'import "./other";\n');
+  write(djRepo, "frontend/other.ts", "export const x = 1;\n");
+  execFileSync("git", ["init", "-q"], { cwd: djRepo });
+  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"], { cwd: djRepo });
+  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"], { cwd: djRepo });
+  writeFileSync(
+    join(projectDir(root, djRepo), "django-session.jsonl"),
+    session(djRepo, [{ text: "update views and app", files: ["backend/shop/views.py", "frontend/app.ts"] }]),
+  );
+  djangoSrv = await startServer({ dir: djRepo, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web") });
 });
 afterAll(async () => {
   await srv.close();
   await small.close();
   await noGit.close();
+  await djangoSrv.close();
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -216,5 +238,54 @@ describe("GET /api/sessions/:id/map", () => {
     expect(c.status).toBe(200);
     expect(c.headers.etag).not.toBe(tag);
     expect(c.json.edges.length).toBe(a.json.edges.length);
+  });
+
+  test("Django fixture: app layers, Python imports, and mixed TS in same response", async () => {
+    const r = await get(djangoSrv, "/api/sessions/django-session/map");
+    expect(r.status).toBe(200);
+    const map = ImportMapResponse.parse(r.json);
+
+    // Changed nodes
+    expect(ids(r, "changed")).toEqual(["backend/shop/views.py", "frontend/app.ts"]);
+
+    // Neighbours:
+    // outgoing from views.py: backend/shop/models.py, backend/core/utils.py
+    // incoming to views.py: backend/shop/urls.py
+    // outgoing from app.ts: frontend/other.ts
+    expect(ids(r, "neighbour")).toEqual([
+      "backend/core/utils.py",
+      "backend/shop/models.py",
+      "backend/shop/urls.py",
+      "frontend/other.ts",
+    ]);
+
+    // Edges
+    expect(edgeKeys(r)).toEqual([
+      "backend/shop/urls.py>backend/shop/views.py:import",
+      "backend/shop/views.py>backend/core/utils.py:import",
+      "backend/shop/views.py>backend/shop/models.py:import",
+      "frontend/app.ts>frontend/other.ts:import",
+    ]);
+
+    // Edge kinds: all Python edges are kind "import"
+    const pyEdges = map.edges.filter((e) => e.from.endsWith(".py"));
+    expect(pyEdges.length).toBe(3);
+    for (const e of pyEdges) {
+      expect(e.kind).toBe("import");
+    }
+
+    // Layers: backend/shop, backend/core, and frontend
+    const layerNames = map.layers.map((l) => l.name);
+    expect(layerNames).toContain("backend/shop");
+    expect(layerNames).toContain("backend/core");
+    expect(layerNames).toContain("frontend");
+
+    const nodeByPath = (path: string) => map.nodes.find((n) => n.path === path)!;
+    expect(nodeByPath("backend/shop/views.py").layer).toBe("backend/shop");
+    expect(nodeByPath("backend/shop/models.py").layer).toBe("backend/shop");
+    expect(nodeByPath("backend/shop/urls.py").layer).toBe("backend/shop");
+    expect(nodeByPath("backend/core/utils.py").layer).toBe("backend/core");
+    expect(nodeByPath("frontend/app.ts").layer).toBe("frontend");
+    expect(nodeByPath("frontend/other.ts").layer).toBe("frontend");
   });
 });

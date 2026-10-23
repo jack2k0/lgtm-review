@@ -3,11 +3,14 @@ import { createHash } from "node:crypto";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, sep } from "node:path";
 import {
+  createPythonResolver,
   createResolver,
   edgeKindFor,
   extractImports,
+  extractPythonImports,
   layoutImportMap,
   loadTsconfigAliases,
+  mapLanguageOf,
   MAP_NODE_MAX,
   normalizePath,
   selectMapNodes,
@@ -28,13 +31,23 @@ export interface MapCaps {
 
 export const MAP_CAPS: MapCaps = { maxFiles: 5000, maxFileBytes: 512 * 1024, maxNodes: MAP_NODE_MAX };
 
-const SOURCE_RE = /\.(?:m|c)?[jt]sx?$/;
-const DECL_RE = /\.d\.(?:m|c)?ts$/;
-const SKIP_DIRS = new Set(["node_modules", "dist", "build", "coverage"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  "coverage",
+  "__pycache__",
+  ".venv",
+  "venv",
+  ".tox",
+  "site-packages",
+  ".mypy_cache",
+  ".pytest_cache",
+]);
 
-/** True for TS/JS files the map considers (plan M1 filters). */
+/** True for TS/JS and Python files the map considers (plan M1/D3 filters). */
 export function isMapSource(path: string): boolean {
-  if (!SOURCE_RE.test(path) || DECL_RE.test(path)) return false;
+  if (mapLanguageOf(path) === null) return false;
   return !path.split("/").some((seg) => SKIP_DIRS.has(seg));
 }
 
@@ -136,19 +149,38 @@ export async function planImportMap(
     return out;
   };
 
-  // Candidate scan (incoming edges).
+  // Candidate scan (incoming edges) and Python roots (D4, A5).
   let candidates: string[] = [];
+  let manageDirs: string[] = [];
+  let hasSrc = false;
   const listed = await listFiles(dir);
   if (listed === null) {
     notes.push("Neighbour scan unavailable (git ls-files failed): showing outgoing imports only.");
   } else {
-    const filtered = [...new Set(listed.map((p) => p.replaceAll("\\", "/")).filter(isMapSource))].sort();
+    const rawFiles = listed.map((p) => p.replaceAll("\\", "/"));
+    for (const p of rawFiles) {
+      if (p.endsWith("/manage.py") && !p.split("/").some((seg) => SKIP_DIRS.has(seg))) {
+        const d = p.slice(0, p.lastIndexOf("/"));
+        if (d !== "") manageDirs.push(d);
+      }
+      if (p.startsWith("src/") && p.endsWith(".py") && !p.split("/").some((seg) => SKIP_DIRS.has(seg))) {
+        hasSrc = true;
+      }
+    }
+    manageDirs = [...new Set(manageDirs)].sort();
+
+    const filtered = [...new Set(rawFiles.filter(isMapSource))].sort();
     if (filtered.length > caps.maxFiles) {
       truncated = true;
       notes.push(`Neighbour scan limited to the first ${caps.maxFiles} of ${filtered.length} source files.`);
     }
     candidates = filtered.slice(0, caps.maxFiles);
   }
+
+  const pyRoots = listed === null
+    ? [""]
+    : [...new Set([...manageDirs, ...(hasSrc ? ["src"] : []), ""])].slice(0, 20);
+  const layerRoots = manageDirs;
 
   const changedPaths = [...changed.keys()].sort();
   const toRead = [...new Set([...changedPaths, ...candidates])].sort();
@@ -199,16 +231,27 @@ export async function planImportMap(
           return text === null ? undefined : text;
         },
       };
-      const resolver = createResolver({ host, aliases: loadTsconfigAliases("", host) });
+      const tsResolver = createResolver({ host, aliases: loadTsconfigAliases("", host) });
+      const pyResolver = createPythonResolver({ host, roots: pyRoots });
 
       const edges: MapEdgeInput[] = [];
       const importsOf = (rel: string): { to: string; kind: "import" | "type" }[] => {
+        const lang = mapLanguageOf(rel);
+        if (lang === null) return [];
         const text = readText(rel);
         if (text === null) return [];
         const out: { to: string; kind: "import" | "type" }[] = [];
-        for (const imp of extractImports(text)) {
-          const to = resolver.resolve(imp.specifier, rel);
-          if (to !== null && to !== rel) out.push({ to, kind: edgeKindFor(imp.syntax) });
+        if (lang === "ts") {
+          for (const imp of extractImports(text)) {
+            const to = tsResolver.resolve(imp.specifier, rel);
+            if (to !== null && to !== rel) out.push({ to, kind: edgeKindFor(imp.syntax) });
+          }
+        } else if (lang === "py") {
+          for (const imp of extractPythonImports(text)) {
+            for (const to of pyResolver.resolve(imp, rel)) {
+              if (to !== rel) out.push({ to, kind: "import" });
+            }
+          }
         }
         return out;
       };
@@ -239,7 +282,7 @@ export async function planImportMap(
         ...sel.changed.map((path) => ({ path, changed: true, status: changed.get(path)!.status, deleted: deleted.has(path) })),
         ...sel.neighbours.map((path) => ({ path, changed: false })),
       ];
-      const layout = layoutImportMap(nodes, edges);
+      const layout = layoutImportMap(nodes, edges, { layerRoots });
       if (sel.hiddenNeighbours > 0) buildNotes.push(`${sel.hiddenNeighbours} neighbour file${sel.hiddenNeighbours === 1 ? "" : "s"} hidden by the ${caps.maxNodes}-node cap.`);
 
       return {
