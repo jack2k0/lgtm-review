@@ -137,7 +137,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** html-export
 - **PRD refs:** FR-008 (nice-to-have, promoted by orchestrator in PRD v2 for the sharing use case), Guardrail "no data leaves the machine" (the file is written only on explicit command)
 - **Prerequisites:** S-03, S-05
-- **Status:** in progress (planned 2026-10-23, orchestrator decision)
+- **Status:** done
 
 ## Backlog Handoff
 
