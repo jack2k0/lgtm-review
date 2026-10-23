@@ -161,8 +161,8 @@ Detail analysis on demand only; caps on retained text; LRU cache of 3 sessions.
 
 #### Automated
 
-- [ ] 1.1 `pnpm check` green; existing goldens unchanged
-- [ ] 1.2 node-free grep empty
+- [x] 1.1 `pnpm check` green; existing goldens unchanged
+- [x] 1.2 node-free grep empty
 
 #### Manual
 

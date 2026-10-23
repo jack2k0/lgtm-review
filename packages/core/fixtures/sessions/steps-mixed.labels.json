@@ -1,0 +1,16 @@
+{
+  "fixture": "steps-mixed",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "read batch, edits, failing check, fix, passing check, Agent call"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "single read-only git status"
+    }
+  ]
+}

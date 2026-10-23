@@ -1,0 +1,16 @@
+{
+  "fixture": "steps-edge",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "no-changes",
+      "note": "blocked, background and unfinished checks: none completed"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "only unclassified and read tools"
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { createPatch, extractPatch, type RawPatch } from "./diff.js";
 import type { Warning } from "./schema.js";
 
 /**
@@ -11,12 +12,19 @@ const RESULT_TEXT_MAX = 500;
 const COMMAND_MAX = 4000;
 const PATH_MAX = 1000;
 const MAX_WARNINGS = 1000;
+/** Detail mode: longest retained agent text block and tool-call hint. */
+export const QUOTE_MAX = 400;
+export const HINT_MAX = 200;
+/** Detail mode: lines retained from the bash edits of one tool result (all files together). */
+const BASH_EDIT_LINES_MAX = 10_000;
 
 export interface ToolInput {
   command?: string;
   filePath?: string;
   /** Number of lines of `content` (Write only). */
   contentLines?: number;
+  /** Detail mode only: pattern, url, query, description or directory of the call (<= 200 chars). */
+  hint?: string;
 }
 
 export interface BashEdit {
@@ -25,6 +33,8 @@ export interface BashEdit {
   added: number;
   removed: number;
   maybeIncomplete: boolean;
+  /** Detail mode only: the recorded hunks (capped); absent when the log has none. */
+  patch?: RawPatch;
 }
 
 export type PromptEvent = { type: "prompt"; uuid: string; text: string; ts: string | null; line: number };
@@ -41,6 +51,10 @@ export type ToolResultEvent = {
   resultType?: "create" | "update";
   structuredPatch?: { added: number; removed: number };
   createLines?: number;
+  /** Detail mode only: capped hunks of `structuredPatch` (Edit/MultiEdit/Write update). */
+  patch?: RawPatch;
+  /** Detail mode only: synthetic all-`+` hunk of the content of a created file. */
+  createPatch?: RawPatch;
   bashEditDiff?: BashEdit[];
   /** The command was started in the background; the exit code is unknown. */
   background: boolean;
@@ -49,13 +63,22 @@ export type ToolResultEvent = {
   line: number;
 };
 export type BoundaryEvent = { type: "boundary"; kind: "compact" | "interrupt" };
-export type Event = PromptEvent | ToolUseEvent | ToolResultEvent | BoundaryEvent;
+/** Detail mode only: an agent text block (first 400 characters). */
+export type TextEvent = { type: "text"; text: string };
+export type Event = PromptEvent | ToolUseEvent | ToolResultEvent | BoundaryEvent | TextEvent;
 
 export interface ParserMeta {
   sessionId: string | null;
   branch: string | null;
   startedAt: string | null;
   title: string | null;
+  cwd: string | null;
+}
+
+export interface ParserOptions {
+  file?: string;
+  /** Opt-in retention of hunks, agent text and call hints for the steps and diff views. */
+  detail?: boolean;
 }
 
 export interface Parser {
@@ -154,7 +177,15 @@ function blocksText(content: unknown, max: number, sep: string): string {
   return truncate(out, max);
 }
 
-function sanitizeInput(name: string, input: unknown): ToolInput {
+function hintOf(input: Record<string, unknown>): string | undefined {
+  for (const k of ["pattern", "url", "query", "description", "path"]) {
+    const v = input[k];
+    if (typeof v === "string" && v !== "") return truncate(v.replace(/\s+/g, " ").trim(), HINT_MAX);
+  }
+  return undefined;
+}
+
+function sanitizeInput(name: string, input: unknown, detail: boolean): ToolInput {
   const out: ToolInput = {};
   if (!isObj(input)) return out;
   if (name === "Bash") {
@@ -164,12 +195,17 @@ function sanitizeInput(name: string, input: unknown): ToolInput {
   const p = str(input.file_path) ?? str(input.notebook_path);
   if (p !== undefined) out.filePath = truncate(p, PATH_MAX);
   if (name === "Write" && typeof input.content === "string") out.contentLines = countLines(input.content);
+  if (detail) {
+    const h = hintOf(input);
+    if (h !== undefined) out.hint = h;
+  }
   return out;
 }
 
-function parseBashEdits(diff: unknown): BashEdit[] | undefined {
+function parseBashEdits(diff: unknown, detail: boolean): BashEdit[] | undefined {
   if (!isObj(diff) || !Array.isArray(diff.files)) return undefined;
   const out: BashEdit[] = [];
+  let linesLeft = BASH_EDIT_LINES_MAX;
   for (const f of diff.files) {
     if (!isObj(f)) continue;
     const path = str(f.filePath);
@@ -185,18 +221,37 @@ function parseBashEdits(diff: unknown): BashEdit[] | undefined {
     // Unified-diff convention: "+0,0" side means the file no longer exists, "-0,0" side that it is new.
     const deleted = hunks.length > 0 && hunks.every((h) => h.newStart === 0 && h.newLines === 0);
     const created = hunks.length > 0 && hunks.every((h) => h.oldStart === 0 && h.oldLines === 0);
-    out.push({
+    const edit: BashEdit = {
       path: truncate(path, PATH_MAX),
       kind: deleted ? "D" : created ? "A" : "M",
       added,
       removed,
       maybeIncomplete: hunks.length === 0,
-    });
+    };
+    if (detail && hunks.length > 0) {
+      const patch = extractPatch(hunks, Math.min(linesLeft, 2000));
+      if (patch) {
+        for (const h of patch.hunks) linesLeft -= h.lines.length;
+        edit.patch = patch;
+      }
+    }
+    out.push(edit);
   }
   return out;
 }
 
-export function createParser(opts: { file?: string } = {}): Parser {
+/** `Exit code N` of a failed Bash call: the structured `toolUseResult` string first, the result text as fallback. */
+function exitCodeOf(structured: string | undefined, text: string): number | undefined {
+  const re = /^\s*(?:Error:\s*)?Exit code (\d+)/;
+  const m = (structured !== undefined ? re.exec(structured) : null) ?? re.exec(text);
+  if (!m || m[1] === undefined) return undefined;
+  const n = Number(m[1]);
+  // A failed call (`is_error`) cannot have succeeded: an "Exit code 0" there is noise, not an outcome.
+  return n === 0 ? undefined : n;
+}
+
+export function createParser(opts: ParserOptions = {}): Parser {
+  const detail = opts.detail === true;
   const warnings: Warning[] = [];
   let omitted = 0;
   let lineNo = 0;
@@ -204,7 +259,7 @@ export function createParser(opts: { file?: string } = {}): Parser {
   let finished: Warning[] | null = null;
   const seen = new Set<string>();
   const unknown = new Map<string, { first: number; count: number }>();
-  const meta: ParserMeta = { sessionId: null, branch: null, startedAt: null, title: null };
+  const meta: ParserMeta = { sessionId: null, branch: null, startedAt: null, title: null, cwd: null };
 
   function warn(line: number, reason: string): void {
     if (warnings.length >= MAX_WARNINGS) {
@@ -237,8 +292,8 @@ export function createParser(opts: { file?: string } = {}): Parser {
         const text = blocksText(b.content, RESULT_TEXT_MAX, "\n");
         const ev: ToolResultEvent = { type: "tool_result", toolUseId: id, isError, text, background: false, ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo };
         if (isError) {
-          const m = /^\s*(?:Error:\s*)?Exit code (\d+)/.exec(text);
-          if (m && m[1] !== undefined) ev.exitCode = Number(m[1]);
+          const code = exitCodeOf(results.length === 1 && typeof rec.toolUseResult === "string" ? rec.toolUseResult : undefined, text);
+          if (code !== undefined) ev.exitCode = code;
         }
         if (tur) {
           if (tur.type === "create" || tur.type === "update") ev.resultType = tur.type;
@@ -252,9 +307,16 @@ export function createParser(opts: { file?: string } = {}): Parser {
               removed += c.removed;
             }
             ev.structuredPatch = { added, removed };
+            if (detail) {
+              const patch = extractPatch(tur.structuredPatch);
+              if (patch) ev.patch = patch;
+            }
           }
-          if (tur.type === "create" && typeof tur.content === "string") ev.createLines = countLines(tur.content);
-          const be = parseBashEdits(tur.bashEditDiff);
+          if (tur.type === "create" && typeof tur.content === "string") {
+            ev.createLines = countLines(tur.content);
+            if (detail) ev.createPatch = createPatch(tur.content);
+          }
+          const be = parseBashEdits(tur.bashEditDiff, detail);
           if (be !== undefined) ev.bashEditDiff = be;
           if (tur.backgroundTaskId !== undefined && tur.backgroundTaskId !== null) ev.background = true;
         }
@@ -290,6 +352,11 @@ export function createParser(opts: { file?: string } = {}): Parser {
   function handleAssistant(rec: Record<string, unknown>, message: Record<string, unknown>, out: Event[]): void {
     if (!Array.isArray(message.content)) return;
     for (const b of message.content) {
+      if (detail && isObj(b) && b.type === "text" && typeof b.text === "string") {
+        const t = b.text.trim();
+        if (t !== "") out.push({ type: "text", text: truncate(t, QUOTE_MAX) });
+        continue;
+      }
       if (!isObj(b) || b.type !== "tool_use") continue;
       const id = nonEmptyStr(b.id);
       if (id === undefined) {
@@ -297,7 +364,7 @@ export function createParser(opts: { file?: string } = {}): Parser {
         continue;
       }
       const name = str(b.name) ?? "";
-      out.push({ type: "tool_use", id, name, input: sanitizeInput(name, b.input), ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo });
+      out.push({ type: "tool_use", id, name, input: sanitizeInput(name, b.input, detail), ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo });
     }
   }
 
@@ -311,6 +378,7 @@ export function createParser(opts: { file?: string } = {}): Parser {
     meta.sessionId ??= nonEmptyStr(rec.sessionId) ?? null;
     meta.branch ??= nonEmptyStr(rec.gitBranch) ?? null;
     meta.startedAt ??= nonEmptyStr(rec.timestamp) ?? null;
+    meta.cwd ??= nonEmptyStr(rec.cwd) ?? null;
 
     if (type === "system") {
       if (rec.subtype === "compact_boundary") out.push({ type: "boundary", kind: "compact" });
@@ -403,7 +471,7 @@ export function createParser(opts: { file?: string } = {}): Parser {
 }
 
 /** Convenience wrapper for tests and small inputs. */
-export function parseLines(lines: Iterable<string>, opts: { file?: string } = {}): {
+export function parseLines(lines: Iterable<string>, opts: ParserOptions = {}): {
   events: Event[];
   warnings: Warning[];
   meta: ParserMeta;

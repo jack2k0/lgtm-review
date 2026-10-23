@@ -16,6 +16,14 @@ export {
   Analysis,
   SessionSummary,
   SessionsResponse,
+  Phase,
+  Action,
+  StepCheck,
+  Step,
+  PromptDetail,
+  DiffLine,
+  Hunk,
+  FileDiff,
 } from "./schema.js";
 export { makeHeadline } from "./timing.js";
 export { classifyCommand } from "./check-patterns.js";

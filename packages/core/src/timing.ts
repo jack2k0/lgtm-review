@@ -46,6 +46,17 @@ export function baseClass(name: string, bash: { isCheck: boolean; edited: boolea
   return null;
 }
 
+/**
+ * The single phase classifier shared by the time split and the steps view: base class of the tool
+ * call, with the Fix rule applied (Read/Write started while the last completed check failed).
+ * `null` for tools outside the model.
+ */
+export function actionPhase(name: string, bash: { isCheck: boolean; edited: boolean }, failing: boolean): Phase | null {
+  const base = baseClass(name, bash);
+  if (base === null) return null;
+  return failing && (base === "read" || base === "write") ? "fix" : base;
+}
+
 /** Milliseconds since epoch for an ISO timestamp, or null when absent or unparsable. */
 export function parseTs(s: string | null | undefined): number | null {
   if (typeof s !== "string" || s === "") return null;
@@ -54,6 +65,23 @@ export function parseTs(s: string | null | undefined): number | null {
 }
 
 export type Interval = readonly [start: number, end: number];
+
+/**
+ * Intervals one finished action contributes to its phase (think + exec, with the exclusion rules
+ * of the model in the file header). Shared by the time split and the per-step durations.
+ */
+export function actionIntervals(prevTs: number | null, useTs: number | null, resTs: number | null): Interval[] {
+  const out: Interval[] = [];
+  const add = (start: number | null, end: number | null, max: number): void => {
+    if (start === null || end === null) return;
+    const d = end - start;
+    if (d <= 0 || d > max) return;
+    out.push([start, end]);
+  };
+  add(prevTs, useTs, THINK_GAP_MAX_MS);
+  add(useTs, resTs, EXEC_MAX_MS);
+  return out;
+}
 
 /** Total length of the union of the intervals. */
 export function unionMs(intervals: readonly Interval[]): number {
@@ -105,17 +133,9 @@ export interface TimingTracker {
 export function createTimingTracker(): TimingTracker {
   const byPhase: Record<Phase, Interval[]> = { read: [], write: [], check: [], fix: [] };
 
-  function push(phase: Phase, start: number | null, end: number | null, max: number): void {
-    if (start === null || end === null) return;
-    const d = end - start;
-    if (d <= 0 || d > max) return;
-    byPhase[phase].push([start, end]);
-  }
-
   return {
     add(phase, prevTs, useTs, resTs): void {
-      push(phase, prevTs, useTs, THINK_GAP_MAX_MS);
-      push(phase, useTs, resTs, EXEC_MAX_MS);
+      for (const iv of actionIntervals(prevTs, useTs, resTs)) byPhase[phase].push(iv);
     },
     result(checkCount: number): Timing {
       const timeSplit: TimeSplit = {

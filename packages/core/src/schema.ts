@@ -87,3 +87,84 @@ export const SessionsResponse = z.object({
   sessions: z.array(SessionSummary),
 });
 export type SessionsResponse = z.infer<typeof SessionsResponse>;
+
+/** Phase of a step or action; same values as the keys of `TimeSplit` (without the `Ms` suffix). */
+export const Phase = z.enum(["read", "write", "check", "fix"]);
+export type Phase = z.infer<typeof Phase>;
+
+/** One raw tool call of a step. `summary` is a file path, a command (<= 200 chars), a pattern or a tool name; never file content. */
+export const Action = z.object({
+  tool: z.string(),
+  summary: z.string(),
+  /** False when the call failed or has no result. */
+  ok: z.boolean(),
+  /** ISO timestamp of the call, or null when the log has none. */
+  ts: z.string().nullable(),
+});
+export type Action = z.infer<typeof Action>;
+
+/** Outcome of a check command. All null when the command has no usable result (still running, background, did not run). */
+export const StepCheck = z.object({
+  command: z.string(),
+  exitCode: z.number().int().nonnegative().nullable(),
+  passed: z.boolean().nullable(),
+  /** First non-empty output lines of a failing check (<= 200 chars); empty otherwise. */
+  excerpt: z.string(),
+});
+export type StepCheck = z.infer<typeof StepCheck>;
+
+export const Step = z.object({
+  /** 1-based position within the prompt. */
+  n: z.number().int().positive(),
+  phase: Phase,
+  /** Mechanical title, e.g. "Read 3 files", "Fix: read 2 files, edit src/a.ts (+2 -1)", "Run pnpm test -> passed". */
+  title: z.string(),
+  startedAt: z.string().nullable(),
+  /** Union of the step's action intervals (same model as the time split). */
+  durationMs: z.number().int().nonnegative(),
+  check: StepCheck.optional(),
+  /** Agent text blocks (each <= 400 chars, at most 3) written right before the step's first action. */
+  quotes: z.array(z.string()),
+  actions: z.array(Action),
+  /** Paths (as in `PromptAnalysis.files`) edited in this step; each can be opened with `diffFor`. */
+  files: z.array(z.string()),
+});
+export type Step = z.infer<typeof Step>;
+
+/** Everything the Steps view needs for one prompt (body of `GET /api/sessions/:id/prompts/:index`). */
+export const PromptDetail = z.object({
+  index: z.number().int().nonnegative(),
+  /** First 200 characters of the prompt. */
+  text: z.string(),
+  status: Status,
+  reason: z.string(),
+  headline: z.string(),
+  startedAt: z.string().nullable(),
+  activeMs: z.number().int().nonnegative(),
+  /** True when steps or actions were dropped because of the retention caps. */
+  truncated: z.boolean(),
+  steps: z.array(Step),
+});
+export type PromptDetail = z.infer<typeof PromptDetail>;
+
+export const DiffLine = z.object({ t: z.enum(["+", "-", " "]), s: z.string() });
+export type DiffLine = z.infer<typeof DiffLine>;
+
+export const Hunk = z.object({
+  /** `@@ -a,b +c,d @@` */
+  header: z.string(),
+  lines: z.array(DiffLine),
+});
+export type Hunk = z.infer<typeof Hunk>;
+
+/** What the agent's edits did to one file, from the log only (not the final git state). */
+export const FileDiff = z.object({
+  path: z.string(),
+  kind: z.enum(["M", "A", "D"]),
+  /** Lines (2000 per diff) or characters (2000 per line) were cut. */
+  truncated: z.boolean(),
+  /** Shell edits, removals and moves may be missing. */
+  maybeIncomplete: z.boolean(),
+  hunks: z.array(Hunk),
+});
+export type FileDiff = z.infer<typeof FileDiff>;

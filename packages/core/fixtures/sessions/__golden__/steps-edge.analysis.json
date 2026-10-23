@@ -1,0 +1,43 @@
+{
+  "sessionId": "steps-edge",
+  "title": "Lint then build.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Lint then build.",
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 0,
+        "checkMs": 4000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly checking (100%), 2 checks"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000007",
+      "text": "Explore only.",
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 4000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly reading (100%), 0 checks"
+    }
+  ],
+  "warnings": []
+}

@@ -1,0 +1,188 @@
+[
+  {
+    "index": 0,
+    "text": "Make add() multiply and keep the tests green.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit; subagent activity not analysed",
+    "headline": "Mostly checking (33%), 2 checks",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 21400,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Read 2 files, search 1 time",
+        "startedAt": "2026-01-01T00:00:03.000Z",
+        "durationMs": 5400,
+        "quotes": [
+          "I will start by reading the relevant files."
+        ],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:03.000Z"
+          },
+          {
+            "tool": "Read",
+            "summary": "src/add.test.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:03.200Z"
+          },
+          {
+            "tool": "Grep",
+            "summary": "add\\(",
+            "ok": true,
+            "ts": "2026-01-01T00:00:03.400Z"
+          }
+        ],
+        "files": []
+      },
+      {
+        "n": 2,
+        "phase": "write",
+        "title": "Edit src/add.js (+2 -2)",
+        "startedAt": "2026-01-01T00:00:08.400Z",
+        "durationMs": 5000,
+        "quotes": [
+          "Now the edit."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.400Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:10.400Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 3,
+        "phase": "check",
+        "title": "Run pnpm test -> failed (exit 1)",
+        "startedAt": "2026-01-01T00:00:12.400Z",
+        "durationMs": 4000,
+        "quotes": [
+          "Running the tests."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": false,
+            "ts": "2026-01-01T00:00:12.400Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 1,
+          "passed": false,
+          "excerpt": "FAIL src/add.test.js\nexpected 6, got 5"
+        }
+      },
+      {
+        "n": 4,
+        "phase": "fix",
+        "title": "Fix: read 1 file, edit src/add.test.js (+1 -1), use TodoWrite",
+        "startedAt": "2026-01-01T00:00:16.400Z",
+        "durationMs": 4000,
+        "quotes": [
+          "The test expects something else, checking it."
+        ],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.test.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:16.400Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "src/add.test.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:18.400Z"
+          },
+          {
+            "tool": "TodoWrite",
+            "summary": "TodoWrite",
+            "ok": true,
+            "ts": "2026-01-01T00:00:20.400Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.test.js"
+        ]
+      },
+      {
+        "n": 5,
+        "phase": "check",
+        "title": "Run pnpm test -> passed (partial: subagent activity not analysed)",
+        "startedAt": "2026-01-01T00:00:22.400Z",
+        "durationMs": 3000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:22.400Z"
+          },
+          {
+            "tool": "Agent",
+            "summary": "Agent: Review the change",
+            "ok": true,
+            "ts": "2026-01-01T00:00:25.400Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Show me git status.",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:39.400Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Run 1 command",
+        "startedAt": "2026-01-01T00:00:40.400Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git status",
+            "ok": true,
+            "ts": "2026-01-01T00:00:40.400Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  }
+]

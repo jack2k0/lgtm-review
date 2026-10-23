@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { analyzeSession } from "./analyze.js";
-import { SessionAnalysis } from "./schema.js";
+import { analyzeSession, createAnalyzer } from "./analyze.js";
+import { PromptDetail, SessionAnalysis } from "./schema.js";
 import { listFixtures, listLabelFiles, readFixtureLines, readLabels, sessionsDir } from "./testing/fixtures.js";
 
 const fixtures = listFixtures();
@@ -36,6 +36,28 @@ describe("golden: analysis", () => {
 
   test("never throws on malformed lines", () => {
     expect(() => analyzeSession(["{ nope", "", "null", "42", '"str"', "[]", '{"type":"user"}', '{"type":"user","message":5}'])).not.toThrow();
+  });
+});
+
+function detailOf(name: string) {
+  const a = createAnalyzer({ detail: true, sessionId: name, file: `${name}.jsonl` });
+  for (const l of readFixtureLines(name)) a.push(l);
+  const analysis = a.finish();
+  return { a, analysis, details: a.details() };
+}
+
+describe("golden: steps and diffs (detail mode)", () => {
+  test.each(fixtures)("detail mode does not change the analysis: %s", (name) => {
+    const plain = analyzeSession(readFixtureLines(name), { sessionId: name, file: `${name}.jsonl` });
+    expect(JSON.stringify(detailOf(name).analysis)).toBe(JSON.stringify(plain));
+  });
+
+  test.each(fixtures)("steps: %s", async (name) => {
+    const { details } = detailOf(name);
+    const again = detailOf(name).details;
+    expect(JSON.stringify(again)).toBe(JSON.stringify(details));
+    for (const d of details) expect(PromptDetail.safeParse(d).success).toBe(true);
+    await expect(JSON.stringify(details, null, 2) + "\n").toMatchFileSnapshot(join(sessionsDir, "__golden__", `${name}.steps.json`));
   });
 });
 

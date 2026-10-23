@@ -1,0 +1,124 @@
+[
+  {
+    "index": 0,
+    "text": "Lint then build.",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "Mostly checking (100%), 2 checks",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "check",
+        "title": "Run pnpm lint -> did not run",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm lint",
+            "ok": false,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm lint",
+          "exitCode": null,
+          "passed": null,
+          "excerpt": "<tool_use_error>Blocked: not allowed</tool_use_error>"
+        }
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm build -> no result",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm build",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm build",
+          "exitCode": null,
+          "passed": null,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "check",
+        "title": "Run pnpm typecheck -> no result",
+        "startedAt": "2026-01-01T00:00:06.000Z",
+        "durationMs": 0,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm typecheck",
+            "ok": false,
+            "ts": "2026-01-01T00:00:06.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm typecheck",
+          "exitCode": null,
+          "passed": null,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Explore only.",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:11.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Use TodoWrite, search 1 time, do 1 web lookup",
+        "startedAt": "2026-01-01T00:00:12.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "TodoWrite",
+            "summary": "TodoWrite",
+            "ok": true,
+            "ts": "2026-01-01T00:00:12.000Z"
+          },
+          {
+            "tool": "Glob",
+            "summary": "**/*.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          },
+          {
+            "tool": "WebFetch",
+            "summary": "https://example.com/docs",
+            "ok": true,
+            "ts": "2026-01-01T00:00:16.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  }
+]

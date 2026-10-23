@@ -1,0 +1,376 @@
+[
+  {
+    "index": 0,
+    "text": "Add a gap-tolerant helper.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly checking (56%), 1 check",
+    "startedAt": "2026-01-01T10:00:00.000Z",
+    "activeMs": 18000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Read 1 file",
+        "startedAt": "2026-01-01T10:00:02.000Z",
+        "durationMs": 5000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:00:02.000Z"
+          }
+        ],
+        "files": []
+      },
+      {
+        "n": 2,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T10:00:06.000Z",
+        "durationMs": 3000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:00:06.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 3,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T10:06:48.000Z",
+        "durationMs": 10000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T10:06:48.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Make the tests pass.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly checking (50%), 2 checks",
+    "startedAt": "2026-01-01T10:16:40.000Z",
+    "activeMs": 14000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T10:16:41.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:16:41.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> failed (exit 1)",
+        "startedAt": "2026-01-01T10:16:42.000Z",
+        "durationMs": 3000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": false,
+            "ts": "2026-01-01T10:16:42.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 1,
+          "passed": false,
+          "excerpt": "Tests: 1 failed, 2 passed"
+        }
+      },
+      {
+        "n": 3,
+        "phase": "fix",
+        "title": "Fix: read 1 file, edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T10:16:46.000Z",
+        "durationMs": 5000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:16:46.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:16:47.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 4,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T10:16:50.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T10:16:50.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Compare the two helpers.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly reading (67%), 0 checks",
+    "startedAt": "2026-01-01T10:33:20.000Z",
+    "activeMs": 9000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Read 2 files",
+        "startedAt": "2026-01-01T10:33:21.000Z",
+        "durationMs": 6000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:33:21.000Z"
+          },
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:33:21.000Z"
+          }
+        ],
+        "files": []
+      },
+      {
+        "n": 2,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T10:33:27.000Z",
+        "durationMs": 3000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:33:27.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Tidy the exports.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly reading (80%), 0 checks",
+    "startedAt": "2026-01-01T10:50:00.000Z",
+    "activeMs": 9000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Read 1 file",
+        "startedAt": "2026-01-01T10:50:02.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:50:02.000Z"
+          }
+        ],
+        "files": []
+      },
+      {
+        "n": 2,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T10:50:06.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:50:06.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 3,
+        "phase": "read",
+        "title": "Read 1 file",
+        "startedAt": "2026-01-01T10:50:08.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T10:50:08.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "text": "Update the docs.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly reading (50%), 1 check",
+    "startedAt": "2026-01-01T11:06:40.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Read 1 file",
+        "startedAt": "2026-01-01T11:06:40.000Z",
+        "durationMs": 3000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T11:06:40.000Z"
+          }
+        ],
+        "files": []
+      },
+      {
+        "n": 2,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T11:06:44.000Z",
+        "durationMs": 1000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T11:06:44.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 3,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T11:06:44.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T11:06:44.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 5,
+    "text": "What does add do?",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "No timing data",
+    "startedAt": "2026-01-01T11:23:20.000Z",
+    "activeMs": 0,
+    "truncated": false,
+    "steps": []
+  }
+]
