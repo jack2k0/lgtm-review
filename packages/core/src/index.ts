@@ -28,6 +28,11 @@ export {
   DiffLine,
   Hunk,
   FileDiff,
+  MapNode,
+  MapPoint,
+  MapEdge,
+  MapLayer,
+  ImportMapResponse,
 } from "./schema.js";
 export { makeHeadline } from "./timing.js";
 export { computeHints, recommend, isTestPath, sensitiveMatch, isManifestPath, isConfigPath, publicSurfaceKind } from "./hints.js";
@@ -43,3 +48,28 @@ export type { Event, ToolUseEvent, ToolResultEvent, TextEvent, PromptEvent, Boun
 export { redact, isEnvFilePath } from "./redact.js";
 export type { RedactOptions, RedactResult } from "./redact.js";
 export { markInherited } from "./inherit.js";
+export {
+  extractImports,
+  edgeKindFor,
+  cleanSpecifier,
+  normalizePath,
+  stripJsonComments,
+  loadTsconfigAliases,
+  createResolver,
+  IMPORT_EXTENSIONS,
+} from "./map-extract.js";
+export type { ImportSyntax, ExtractedImport, MapHost, TsconfigAlias, Resolver, ResolverOptions } from "./map-extract.js";
+export {
+  layerOf,
+  selectMapNodes,
+  layoutImportMap,
+  MAP_NODE_MAX,
+  MAP_COLUMNS,
+  MAP_NODE_WIDTH,
+  MAP_NODE_HEIGHT,
+  MAP_GAP_X,
+  MAP_GAP_Y,
+  MAP_LAYER_GAP,
+  MAP_PAD,
+} from "./map-layout.js";
+export type { MapNodeInput, MapEdgeInput, MapLayout, NeighbourRank, SelectedMapNodes } from "./map-layout.js";
