@@ -3,7 +3,7 @@ import type { PromptAnalysis, SessionAnalysis } from "@lgtm/core";
 import { HintList, ReviewCell, RuleMarkers } from "./Hints";
 import { StatusTag } from "./StatusDot";
 import { TimeBar, TimeLegend } from "./TimeBar";
-import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, plural, routeHref, retainKeys, rulesByPath, shortPath, toggleKey, visiblePrompts } from "./viewmodel";
+import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, plural, routeHref, retainKeys, rulesByPath, shortPath, toggleKey, visiblePrompts, splitInherited } from "./viewmodel";
 
 /** Changed files of a prompt; each path links to its diff (the link carries the exact path from the list). */
 export function FileList({ sessionId, p }: { sessionId: string; p: PromptAnalysis }) {
@@ -71,20 +71,20 @@ export function PromptTable({ session }: { session: SessionAnalysis }) {
   // Keyed by prompt index (append-only in a session file), so rows stay expanded across live refreshes.
   const [openState, setOpenIdx] = useState<ReadonlySet<number>>(new Set());
   const openIdx = retainKeys(openState, session.prompts.map((p) => p.index));
-  const { shown, hidden } = visiblePrompts(session.prompts, limit);
+  const { own, inherited, from } = splitInherited(session.prompts);
+  const { shown, hidden } = visiblePrompts(own, limit);
 
   const toggle = (i: number) => setOpenIdx((prev) => toggleKey(prev, i));
 
-  const nonInheritedCount = session.prompts.filter((p) => !p.inheritedFrom).length;
-  const inheritedCount = session.prompts.length - nonInheritedCount;
+  const nonInheritedCount = own.length;
+  const inheritedCount = inherited.length;
 
   return (
     <>
       <div className="session-head">
         <h2>{session.title || session.sessionId}</h2>
         <p className="muted">
-          {session.branch ? <span className="mono">{session.branch}</span> : null}
-          {nonInheritedCount} {plural(nonInheritedCount, "prompt")}{inheritedCount > 0 ? ` +${inheritedCount} inherited` : ""}
+          {session.branch ? <span className="mono">{session.branch}</span> : null} {plural(nonInheritedCount, "prompt")}{inheritedCount > 0 ? ` +${inheritedCount} inherited` : ""}
         </p>
       </div>
       {session.warnings.length > 0 ? (
