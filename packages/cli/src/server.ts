@@ -18,6 +18,8 @@ export interface ServerOptions {
   port?: number;
   /** Per-run token; random 32 bytes (hex) when omitted. */
   token?: string;
+  /** Test hook: overrides the import-map caps (see `MapCaps`). */
+  mapCaps?: Partial<import("./map.js").MapCaps>;
 }
 
 export interface RunningServer {

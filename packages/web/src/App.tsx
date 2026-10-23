@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FileDiff, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
-import { errorMessage, fetchFileDiff, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
+import type { FileDiff, ImportMapResponse, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
+import { errorMessage, fetchFileDiff, fetchImportMap, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
 import { DiffView } from "./DiffView";
 import { LiveContext, LiveIndicator, useLive, useLiveStatus, type Load } from "./Live";
 import { readPaused, writePaused } from "./live";
+import { MapView } from "./MapView";
 import { PromptTable } from "./PromptTable";
 import { SessionList } from "./SessionList";
 import { StepsView } from "./StepsView";
@@ -26,7 +27,10 @@ function SessionView({ token, id }: { token: string | null; id: string }) {
   const res = useLive<SessionAnalysis>((e, s) => fetchSession(token, id, e, s), `s:${id}`);
   return (
     <>
-      <p><a href={routeHref({ kind: "list" })}>&larr; All sessions</a></p>
+      <p>
+        <a href={routeHref({ kind: "list" })}>&larr; All sessions</a>{" · "}
+        <a href={routeHref({ kind: "map", id, index: null })}>Map</a>
+      </p>
       <Status res={res}>{(d) => <PromptTable key={d.sessionId} session={d} />}</Status>
     </>
   );
@@ -59,6 +63,11 @@ function DiffRoute({ token, id, index, path }: { token: string | null; id: strin
   );
 }
 
+function MapRoute({ token, id, index }: { token: string | null; id: string; index: number | null }) {
+  const res = useLive<ImportMapResponse>((e, s) => fetchImportMap(token, id, index, e, s), `m:${id}:${index ?? "all"}`);
+  return <Status res={res}>{(d) => <MapView sessionId={id} map={d} />}</Status>;
+}
+
 function Routed({ token, route }: { token: string | null; route: Route }) {
   switch (route.kind) {
     case "session":
@@ -67,6 +76,8 @@ function Routed({ token, route }: { token: string | null; route: Route }) {
       return <StepsRoute token={token} id={route.id} index={route.index} />;
     case "diff":
       return <DiffRoute token={token} id={route.id} index={route.index} path={route.path} />;
+    case "map":
+      return <MapRoute token={token} id={route.id} index={route.index} />;
     case "list":
       return <ListView token={token} />;
   }

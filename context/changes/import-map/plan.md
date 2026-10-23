@@ -61,13 +61,13 @@ Provide a 2D layered architectural map for a session (and per prompt) displaying
 ## Progress
 
 ### Phase 1: Core
-- [ ] 1.1 Pure extractor, resolver, 2D layout engine, schemas and unit tests
+- [x] 1.1 Pure extractor, resolver, 2D layout engine, schemas and unit tests
 
 ### Phase 2: CLI / API
-- [ ] 2.1 Working tree traversal, `/api/sessions/:id/map` route, ETag caching and tests
+- [x] 2.1 Working tree traversal, `/api/sessions/:id/map` route, ETag caching and tests
 
 ### Phase 3: Web UI
-- [ ] 3.1 MapView SVG component, route handling, click-to-diff navigation and tests
+- [x] 3.1 MapView SVG component, route handling, click-to-diff navigation and tests
 
 ## Proposed PRD addition
 

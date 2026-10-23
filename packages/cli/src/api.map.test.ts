@@ -1,0 +1,220 @@
+import { execFileSync } from "node:child_process";
+import { request } from "node:http";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { ImportMapResponse } from "@lgtm/core";
+import { startServer, type RunningServer } from "./server.js";
+
+let tmp: string;
+let repo: string;
+let srv: RunningServer;
+let small: RunningServer;
+let noGit: RunningServer;
+
+interface Res {
+  status: number;
+  headers: Record<string, string | string[] | undefined>;
+  json: any;
+}
+
+function get(s: RunningServer, path: string, extra: Record<string, string> = {}): Promise<Res> {
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string> = { Host: `127.0.0.1:${s.port}`, "X-Lgtm-Token": s.token, ...extra };
+    request({ host: "127.0.0.1", port: s.port, path, headers }, (res) => {
+      let b = "";
+      res.on("data", (c) => (b += c));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers, json: b ? JSON.parse(b) : null }));
+    })
+      .on("error", reject)
+      .end();
+  });
+}
+
+function write(root: string, rel: string, text: string): void {
+  const f = join(root, rel);
+  mkdirSync(dirname(f), { recursive: true });
+  writeFileSync(f, text);
+}
+
+let n = 0;
+const rec = (type: string, cwd: string, extra: Record<string, unknown>): string => {
+  n++;
+  return JSON.stringify({
+    type,
+    uuid: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    sessionId: "map-session",
+    timestamp: `2026-01-01T00:00:${String(n % 60).padStart(2, "0")}.000Z`,
+    cwd,
+    gitBranch: "main",
+    ...extra,
+  });
+};
+
+function session(cwd: string, prompts: { text: string; files: string[] }[]): string {
+  const lines: string[] = [];
+  let t = 0;
+  for (const p of prompts) {
+    lines.push(rec("user", cwd, { message: { role: "user", content: p.text } }));
+    for (const f of p.files) {
+      const id = `toolu_${++t}`;
+      lines.push(rec("assistant", cwd, { message: { role: "assistant", content: [{ type: "tool_use", id, name: "Edit", input: { file_path: join(cwd, f), old_string: "a", new_string: "b" } }] } }));
+      lines.push(
+        rec("user", cwd, {
+          message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "File updated." }] },
+          toolUseResult: { type: "update", structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-a", "+b"] }] },
+        }),
+      );
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function projectDir(root: string, cwd: string): string {
+  const d = join(root, "projects", cwd.replace(/[/.]/g, "-"));
+  mkdirSync(d, { recursive: true });
+  return d;
+}
+
+const git = (...args: string[]): void => void execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo, stdio: "ignore" });
+
+beforeAll(async () => {
+  tmp = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-map-test-")));
+  repo = join(tmp, "repo");
+  mkdirSync(repo);
+  write(repo, "tsconfig.json", '{ // comment\n "compilerOptions": { "paths": { "@lib/*": ["lib/*"], "@app/util": ["src/util.ts"] } } }');
+  write(repo, "src/a.ts", 'import { b } from "./b.js";\nimport type { T } from "@lib/t";\nimport u from "@app/util";\nexport const a = [b, u];\n');
+  write(repo, "src/b.ts", 'import "./c";\nexport const b = 1;\n');
+  write(repo, "src/c.ts", "export const c = 1;\n");
+  write(repo, "src/util.ts", "export default 1;\n");
+  write(repo, "src/user.ts", 'import { a } from "./a";\nexport const user = a;\n');
+  write(repo, "src/other.ts", 'import { b } from "./b";\nexport const o = b;\n');
+  write(repo, "lib/t.ts", "export type T = 1;\n");
+  write(repo, "src/gone.ts", "export const gone = 1;\n");
+  write(repo, "notes.md", "# not source\n");
+  // A symlink inside the repo that escapes it; its target imports a changed file.
+  write(tmp, "outside/evil.ts", 'import "../repo/src/a";\n');
+  symlinkSync(join(tmp, "outside/evil.ts"), join(repo, "src/evil.ts"));
+  execFileSync("git", ["init", "-q"], { cwd: repo });
+  git("add", "-A");
+  git("commit", "-q", "-m", "init");
+  rmSync(join(repo, "src/gone.ts"));
+
+  const root = join(tmp, "p");
+  const body = session(repo, [
+    { text: "first", files: ["src/a.ts", "src/gone.ts", "notes.md"] },
+    { text: "second", files: ["src/b.ts", "src/a.ts"] },
+  ]);
+  writeFileSync(join(projectDir(root, repo), "map-session.jsonl"), body);
+  srv = await startServer({ dir: repo, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web") });
+  small = await startServer({ dir: repo, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web"), mapCaps: { maxFiles: 2, maxNodes: 4 } });
+
+  const plain = join(tmp, "plain");
+  write(plain, "x.ts", 'import "./y";\n');
+  write(plain, "y.ts", "export {};\n");
+  write(plain, "z.ts", 'import "./x";\n');
+  writeFileSync(join(projectDir(root, plain), "map-session.jsonl"), session(plain, [{ text: "go", files: ["x.ts"] }]));
+  noGit = await startServer({ dir: plain, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web") });
+});
+afterAll(async () => {
+  await srv.close();
+  await small.close();
+  await noGit.close();
+  rmSync(tmp, { recursive: true, force: true });
+});
+
+const ids = (r: Res, kind: string): string[] => (r.json.nodes as any[]).filter((x) => x.kind === kind).map((x) => x.id).sort();
+const edgeKeys = (r: Res): string[] => (r.json.edges as any[]).map((e) => `${e.from}>${e.to}:${e.kind}`).sort();
+
+describe("GET /api/sessions/:id/map", () => {
+  test("session map: changed nodes, neighbours in both directions, deleted node, promptIndex", async () => {
+    const r = await get(srv, "/api/sessions/map-session/map");
+    expect(r.status).toBe(200);
+    expect(r.headers["cache-control"]).toBe("no-cache, private");
+    const map = ImportMapResponse.parse(r.json);
+    expect(map.snapshot).toBe("working-tree");
+    expect(map.prompt).toBeNull();
+    expect(ids(r, "changed")).toEqual(["src/a.ts", "src/b.ts", "src/gone.ts"]);
+    // outgoing: b->c, a->util, a->lib/t; incoming: user->a, other->b
+    expect(ids(r, "neighbour")).toEqual(["lib/t.ts", "src/c.ts", "src/other.ts", "src/user.ts", "src/util.ts"]);
+    expect(edgeKeys(r)).toEqual([
+      "src/a.ts>lib/t.ts:type",
+      "src/a.ts>src/b.ts:import",
+      "src/a.ts>src/util.ts:import",
+      "src/b.ts>src/c.ts:import",
+      "src/other.ts>src/b.ts:import",
+      "src/user.ts>src/a.ts:import",
+    ]);
+    const node = (id: string) => map.nodes.find((x) => x.id === id)!;
+    expect(node("src/gone.ts").deleted).toBe(true);
+    expect(map.edges.some((e) => e.from === "src/gone.ts" || e.to === "src/gone.ts")).toBe(false);
+    expect(node("src/a.ts").promptIndex).toBe(1);
+    expect(node("src/a.ts").deleted).toBe(false);
+    expect(node("src/gone.ts").promptIndex).toBe(0);
+    expect(node("src/user.ts").promptIndex).toBeNull();
+    expect(node("src/user.ts").status).toBeNull();
+    expect(node("src/a.ts").status).not.toBeNull();
+    expect(map.nodes.some((x) => x.id === "notes.md")).toBe(false);
+  });
+
+  test("per-prompt map uses only that prompt", async () => {
+    const r = await get(srv, "/api/sessions/map-session/map?prompt=0");
+    expect(r.status).toBe(200);
+    expect(r.json.prompt).toBe(0);
+    expect(ids(r, "changed")).toEqual(["src/a.ts", "src/gone.ts"]);
+    expect((r.json.nodes as any[]).find((x) => x.id === "src/a.ts").promptIndex).toBe(0);
+    const r1 = await get(srv, "/api/sessions/map-session/map?prompt=1");
+    expect(ids(r1, "changed")).toEqual(["src/a.ts", "src/b.ts"]);
+  });
+
+  test("a symlink escaping --dir is never read", async () => {
+    const r = await get(srv, "/api/sessions/map-session/map");
+    expect(r.json.nodes.some((x: any) => x.id === "src/evil.ts")).toBe(false);
+    expect(edgeKeys(r).some((e) => e.includes("evil"))).toBe(false);
+  });
+
+  test("404 for unknown session, 404/400 for bad prompt", async () => {
+    expect((await get(srv, "/api/sessions/nope/map")).status).toBe(404);
+    expect((await get(srv, "/api/sessions/map-session/map?prompt=9")).status).toBe(404);
+    expect((await get(srv, "/api/sessions/map-session/map?prompt=x")).status).toBe(400);
+    expect((await get(srv, "/api/sessions/map-session/map?prompt=-1")).status).toBe(400);
+    expect((await get(srv, "/api/sessions/map-session/map?prompt=0&prompt=1")).status).toBe(400);
+  });
+
+  test("caps: file cap and node cap report notes and truncated", async () => {
+    const r = await get(small, "/api/sessions/map-session/map");
+    expect(r.status).toBe(200);
+    const map = ImportMapResponse.parse(r.json);
+    expect(map.truncated).toBe(true);
+    expect(map.nodes.length).toBeLessThanOrEqual(4);
+    expect(map.hiddenNeighbours).toBeGreaterThan(0);
+    expect(map.notes?.some((s) => s.includes("limited to the first 2"))).toBe(true);
+    expect(map.notes?.some((s) => s.includes("hidden"))).toBe(true);
+    expect(map.nodes.filter((x) => x.kind === "changed")).toHaveLength(3);
+  });
+
+  test("without git: outgoing only and a note", async () => {
+    const r = await get(noGit, "/api/sessions/map-session/map");
+    expect(r.status).toBe(200);
+    expect(ids(r, "neighbour")).toEqual(["y.ts"]);
+    expect(r.json.notes[0]).toMatch(/git ls-files failed/);
+  });
+
+  test("200 -> 304, and editing a neighbour flips the ETag", async () => {
+    const a = await get(srv, "/api/sessions/map-session/map");
+    const tag = a.headers.etag as string;
+    expect(tag).toMatch(/^"[0-9a-f]{16}"$/);
+    const b = await get(srv, "/api/sessions/map-session/map", { "If-None-Match": tag });
+    expect(b.status).toBe(304);
+    expect((await get(srv, "/api/sessions/map-session/map?prompt=0", { "If-None-Match": tag })).status).toBe(200);
+
+    const f = join(repo, "src/user.ts");
+    writeFileSync(f, 'import { a } from "./a";\nimport "./c";\nexport const user = a;\n');
+    utimesSync(f, 1_800_000_000, 1_800_000_000);
+    const c = await get(srv, "/api/sessions/map-session/map", { "If-None-Match": tag });
+    expect(c.status).toBe(200);
+    expect(c.headers.etag).not.toBe(tag);
+    expect(c.json.edges.length).toBe(a.json.edges.length);
+  });
+});

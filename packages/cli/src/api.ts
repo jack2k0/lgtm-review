@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { analyzeFile, analyzeFileDetail, discoverSessions, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile } from "@lgtm/core/node";
 import { markInherited } from "@lgtm/core";
 import type { Analyzer, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
+import { planImportMap } from "./map.js";
 import { sortSessions } from "./format.js";
 import { etagFor, ifNoneMatch, sendJson, sendNotModified, type ApiHandler } from "./http.js";
 import type { ServerOptions } from "./server.js";
@@ -260,9 +261,54 @@ export function createApi(opts: ServerOptions): ApiHandler {
     return true;
   }
 
+  // Import maps: body cached under the fingerprint that doubles as the ETag source (plan M6).
+  const mapCache = new Map<string, { key: string; body: unknown }>();
+  const MAP_CACHE_MAX = 32;
+
+  /** `?prompt=N` of the map route: absent -> null, malformed or repeated -> "bad". */
+  function promptQuery(rawUrl: string): number | null | "bad" {
+    const q = rawUrl.split("#", 1)[0]!.split("?").slice(1).join("?");
+    let found: string | undefined;
+    for (const part of q.split("&")) {
+      if (part === "") continue;
+      const eq = part.indexOf("=");
+      if ((eq < 0 ? part : part.slice(0, eq)) !== "prompt") continue;
+      if (found !== undefined || eq < 0) return "bad";
+      found = part.slice(eq + 1);
+    }
+    if (found === undefined) return null;
+    return INDEX_RE.test(found) ? Number(found) : "bad";
+  }
+
+  async function mapRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, files: SessionFile[], stamp: string): Promise<boolean> {
+    const prompt = promptQuery(req.url ?? "");
+    if (prompt === "bad") {
+      sendJson(req, res, 400, { error: "bad request" });
+      return true;
+    }
+    if (!file || (await versionOf(file)) === null) return false;
+    const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
+    if (!analysis) return false;
+    if (prompt !== null && !analysis.prompts[prompt]) return false;
+    const plan = await planImportMap(opts.dir, analysis, prompt, opts.mapCaps);
+    const key = `${stamp}\0${prompt ?? "s"}\0${plan.fingerprint}`;
+    const etag = etagFor(`map\0${file.id}\0${key}`);
+    if (notModifiedEarly(req, res, etag)) return true;
+    const slot = `${file.id}\0${prompt ?? "s"}`;
+    let hit = mapCache.get(slot);
+    if (!hit || hit.key !== key) {
+      hit = { key, body: plan.build() };
+      mapCache.delete(slot);
+      mapCache.set(slot, hit);
+      while (mapCache.size > MAP_CACHE_MAX) mapCache.delete(mapCache.keys().next().value!);
+    }
+    reply(req, res, etag, hit.body);
+    return true;
+  }
+
   return async (req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> => {
     const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
-    const match = /^\/api\/sessions(?:\/([^/]+)(?:\/prompts\/([^/]+)(\/diff)?)?)?$/.exec(path);
+    const match = /^\/api\/sessions(?:\/([^/]+)(?:\/prompts\/([^/]+)(\/diff)?|(\/map))?)?$/.exec(path);
     if (!match) return false;
     try {
       const files = await discover();
@@ -282,6 +328,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
       }
       // The id is only ever compared against the discovered list; it never becomes a path.
       const file = files.find((f) => f.id === id);
+      if (match[4] !== undefined) return await mapRoute(req, res, file, files, stamp);
       if (match[2] !== undefined) return await promptRoute(req, res, file, file ? stamp : null, match[2], match[3] !== undefined);
       if (!file || (await versionOf(file)) === null) return false;
       const etag = etagFor(`session\0${file.id}\0${stamp}`);

@@ -215,3 +215,73 @@ export const FileDiff = z.object({
   hunks: z.array(Hunk),
 });
 export type FileDiff = z.infer<typeof FileDiff>;
+
+/** A node of the 2D import map: a changed file or a direct (1-hop) in-repo import neighbour. */
+export const MapNode = z.object({
+  /** Node identity: repo-relative path with forward slashes. */
+  id: z.string(),
+  path: z.string(),
+  /** Short display label (the file name); the full path stays in `path` for the SVG `<title>`. */
+  label: z.string(),
+  /** Layer band name (top-level folder, `packages/<x>`, `apps/<x>` or the file name for a root file). */
+  layer: z.string(),
+  /** `changed` files were edited in the prompt/session; `neighbour` files are unchanged and linked by an edge. */
+  kind: z.enum(["changed", "neighbour"]),
+  /** Verification status of the last prompt that changed the file; null for neighbours. */
+  status: Status.nullable(),
+  /** The changed file no longer exists on disk: no edges, click target disabled. */
+  deleted: z.boolean(),
+  /** Changed nodes: index of the last non-inherited prompt that changed the file (session map) or the requested prompt; null for neighbours. */
+  promptIndex: z.number().int().nonnegative().nullable().optional(),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().nonnegative(),
+  height: z.number().nonnegative(),
+});
+export type MapNode = z.infer<typeof MapNode>;
+
+/** One point of an edge path. */
+export const MapPoint = z.object({ x: z.number(), y: z.number() });
+export type MapPoint = z.infer<typeof MapPoint>;
+
+/** A directed 1-hop import edge. `type` edges are type-only imports (drawn dashed). */
+export const MapEdge = z.object({
+  from: z.string(),
+  to: z.string(),
+  kind: z.enum(["import", "type"]),
+  /** Straight/elbow path from the source node border to the target node border. */
+  points: z.array(MapPoint),
+});
+export type MapEdge = z.infer<typeof MapEdge>;
+
+/** One horizontal layer band of the map. */
+export const MapLayer = z.object({
+  name: z.string(),
+  /** Top edge of the band in map coordinates. */
+  y: z.number(),
+  height: z.number().nonnegative(),
+  /** Number of nodes placed in the band. */
+  nodeCount: z.number().int().nonnegative(),
+});
+export type MapLayer = z.infer<typeof MapLayer>;
+
+/** Body of `GET /api/sessions/:id/map` (and `?prompt=N`). */
+export const ImportMapResponse = z.object({
+  sessionId: z.string(),
+  /** Prompt index when the map is per-prompt; null for the session map. */
+  prompt: z.number().int().nonnegative().nullable(),
+  /** The map always describes the current working tree, never the tree at prompt time. */
+  snapshot: z.literal("working-tree"),
+  /** A cap dropped nodes or the neighbour scan hit its file/size cap. */
+  truncated: z.boolean(),
+  /** Number of ranked 1-hop neighbours dropped by the node cap. */
+  hiddenNeighbours: z.number().int().nonnegative(),
+  layers: z.array(MapLayer),
+  nodes: z.array(MapNode),
+  edges: z.array(MapEdge),
+  width: z.number().nonnegative(),
+  height: z.number().nonnegative(),
+  /** Human-readable notes, e.g. "Neighbour scan unavailable (git ls-files failed): showing outgoing imports only." */
+  notes: z.array(z.string()).optional(),
+});
+export type ImportMapResponse = z.infer<typeof ImportMapResponse>;
