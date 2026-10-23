@@ -206,3 +206,15 @@ Detail analysis on demand only; caps on retained text; LRU cache of 3 sessions.
 #### Manual
 
 - [ ] 5.3 Real-session walk-through prompt -> steps -> diff
+
+## Plan-review amendments (accepted by orchestrator, 2026-10-23)
+
+- C1: one shared phase classifier (extract from `timing.ts` into a function used by both `timing.ts` and `steps.ts`); step titles for merged runs list the mix (e.g. "Fix: read 2 files, edit src/a.ts (+2 -1)"); test that per-step phases agree with the time-split classification on all fixtures.
+- C2: detail cache is bounded by an estimated byte size (50 MB total, evict LRU), and diffs are materialised lazily per `(promptIndex, path)` request from compact retained patch data; steps are retained slim.
+- C3: `path` query: decode in try/catch -> 400 on bad encoding; normalise `\` to `/` before matching; same for `index` parsing (integer only, else 400/404).
+- C4: `PromptDetail` also carries `text` (200 chars), `status`, `reason`, `headline`, `startedAt`, `activeMs`, `truncated: boolean`; the Steps view needs no other request and deep links work after F5. StepsView shows a banner when `truncated`.
+- C5: check exit code comes from structured data first (`toolUseResult` string prefix `Error: Exit code N` / `is_error`), the text regex only as fallback; add a test where output text contains "Exit code 0" while `is_error` is true.
+- C6: (see C4) truncated flag in schema.
+- C7: Phase 5 split: 5a = `DiffView` + tests + styles; 5b = extended smoke, docs, final walk-through. Checkboxes 5.1/5.2 are ticked after 5b.
+- C8: Phase 3 adds a memory regression test: heapUsed delta < 150 MB after detail analysis of the 20 MB synthetic session plus 3 diff requests.
+- C9: `FileDiff.kind` reuses `"M" | "A" | "D"` from `FileChange`; emptied file => `M` with an all-`-` hunk; shell removals => `D` with `maybeIncomplete: true` and `hunks: []` when no content is known.
