@@ -168,6 +168,16 @@ describe("token on /api/*", () => {
       expect(JSON.parse(r.body)).toEqual({ error: "not found" });
     }
   });
+  test("detail routes sit behind token, Host and Origin like the rest", async () => {
+    for (const p of ["/api/sessions/s/prompts/0", "/api/sessions/s/prompts/0/diff?path=%2Fa", "/api/sessions/s/prompts/-1"]) {
+      expect((await get(p, host())).status, p).toBe(403);
+      expect((await get(p, { ...host(), "X-Lgtm-Token": "nope" })).status, p).toBe(403);
+      expect((await get(p, { Host: "evil.example:80", ...auth() })).status, p).toBe(403);
+      expect((await get(p, { ...host(), ...auth(), Origin: "http://evil.example" })).status, p).toBe(403);
+      expect((await get(p, { ...host(), ...auth(), Origin: "null" })).status, p).toBe(403);
+      expect((await get(p, { ...host(), ...auth() }, "POST")).status, p).toBe(405);
+    }
+  });
   test("static assets need no token", async () => {
     expect((await get("/assets/app.js", host())).status).toBe(200);
   });

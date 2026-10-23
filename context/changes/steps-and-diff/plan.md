@@ -183,8 +183,8 @@ Detail analysis on demand only; caps on retained text; LRU cache of 3 sessions.
 
 #### Automated
 
-- [ ] 3.1 `pnpm check` green incl. negative tests on new routes
-- [ ] 3.2 Detail perf test 20 MB under limit
+- [x] 3.1 `pnpm check` green incl. negative tests on new routes
+- [x] 3.2 Detail perf test 20 MB under limit
 
 ### Phase 4: Web Steps view
 
