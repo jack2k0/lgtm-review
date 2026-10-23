@@ -45,6 +45,9 @@ const SKIP_DIRS = new Set([
   ".pytest_cache",
 ]);
 
+/** Files that make their directory an import root of a nested Python project. */
+const PROJECT_FILES = new Set(["pyproject.toml", "setup.py", "setup.cfg"]);
+
 /** True for TS/JS and Python files the map considers (plan M1/D3 filters). */
 export function isMapSource(path: string): boolean {
   if (mapLanguageOf(path) === null) return false;
@@ -152,12 +155,15 @@ export async function planImportMap(
   // Candidate scan (incoming edges) and Python roots (D4, A5).
   let candidates: string[] = [];
   let manageDirs: string[] = [];
+  let pyRoots: string[] = [""];
   let hasSrc = false;
   const listed = await listFiles(dir);
   if (listed === null) {
     notes.push("Neighbour scan unavailable (git ls-files failed): showing outgoing imports only.");
   } else {
     const rawFiles = listed.map((p) => p.replaceAll("\\", "/"));
+    let projectDirs: string[] = [];
+    const srcLayoutDirs = new Set<string>();
     for (const p of rawFiles) {
       if (p.endsWith("/manage.py") && !p.split("/").some((seg) => SKIP_DIRS.has(seg))) {
         const d = p.slice(0, p.lastIndexOf("/"));
@@ -166,8 +172,27 @@ export async function planImportMap(
       if (p.startsWith("src/") && p.endsWith(".py") && !p.split("/").some((seg) => SKIP_DIRS.has(seg))) {
         hasSrc = true;
       }
+      if (p.endsWith("pyproject.toml") || p.endsWith("setup.py") || p.endsWith("setup.cfg")) {
+        const slash = p.lastIndexOf("/");
+        if (slash > 0 && PROJECT_FILES.has(p.slice(slash + 1)) && !p.split("/").some((seg) => SKIP_DIRS.has(seg))) {
+          projectDirs.push(p.slice(0, slash));
+        }
+      }
+      if (p.endsWith(".py")) {
+        // Remember every `<dir>` that has a `<dir>/src/**/*.py` file (a src layout inside a nested project).
+        for (let i = p.indexOf("/src/"); i > 0; i = p.indexOf("/src/", i + 1)) srcLayoutDirs.add(p.slice(0, i));
+      }
     }
     manageDirs = [...new Set(manageDirs)].sort();
+    projectDirs = [...new Set(projectDirs)].sort();
+
+    // Nested projects (vendor/letsfg with its own pyproject.toml) are import roots too: `<dir>/src` first when
+    // the project uses a src layout, then `<dir>` itself.
+    const projectRoots: string[] = [];
+    for (const d of projectDirs) {
+      if (srcLayoutDirs.has(d)) projectRoots.push(`${d}/src`);
+      projectRoots.push(d);
+    }
 
     const filtered = [...new Set(rawFiles.filter(isMapSource))].sort();
     if (filtered.length > caps.maxFiles) {
@@ -175,11 +200,11 @@ export async function planImportMap(
       notes.push(`Neighbour scan limited to the first ${caps.maxFiles} of ${filtered.length} source files.`);
     }
     candidates = filtered.slice(0, caps.maxFiles);
+
+    const orderedRoots = [...new Set([...manageDirs, ...projectRoots, ...(hasSrc ? ["src"] : []), ""])];
+    pyRoots = orderedRoots.length <= 20 ? orderedRoots : [...orderedRoots.slice(0, 19), ""];
   }
 
-  const pyRoots = listed === null
-    ? [""]
-    : [...new Set([...manageDirs, ...(hasSrc ? ["src"] : []), ""])].slice(0, 20);
   const layerRoots = manageDirs;
 
   const changedPaths = [...changed.keys()].sort();

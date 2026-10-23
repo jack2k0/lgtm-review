@@ -13,6 +13,7 @@ let srv: RunningServer;
 let small: RunningServer;
 let noGit: RunningServer;
 let djangoSrv: RunningServer;
+let pyRootsSrv: RunningServer;
 
 interface Res {
   status: number;
@@ -137,12 +138,31 @@ beforeAll(async () => {
     session(djRepo, [{ text: "update views and app", files: ["backend/shop/views.py", "frontend/app.ts"] }]),
   );
   djangoSrv = await startServer({ dir: djRepo, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web") });
+
+  const pyRootsRepo = join(tmp, "py-roots-repo");
+  mkdirSync(pyRootsRepo);
+  write(pyRootsRepo, "vendor/libx/pyproject.toml", '[project]\nname = "libx"\n');
+  write(pyRootsRepo, "vendor/libx/libx/__init__.py", "");
+  write(pyRootsRepo, "vendor/libx/libx/core.py", "def f():\n    return 1\n");
+  write(pyRootsRepo, "vendor/liby/pyproject.toml", '[project]\nname = "liby"\n');
+  write(pyRootsRepo, "vendor/liby/src/liby/__init__.py", "");
+  write(pyRootsRepo, "vendor/liby/src/liby/util.py", "def g():\n    return 2\n");
+  write(pyRootsRepo, "app/main.py", "from libx.core import f\nimport liby.util\n");
+  execFileSync("git", ["init", "-q"], { cwd: pyRootsRepo });
+  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"], { cwd: pyRootsRepo });
+  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"], { cwd: pyRootsRepo });
+  writeFileSync(
+    join(projectDir(root, pyRootsRepo), "py-roots-session.jsonl"),
+    session(pyRootsRepo, [{ text: "edit main", files: ["app/main.py"] }]),
+  );
+  pyRootsSrv = await startServer({ dir: pyRootsRepo, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web") });
 });
 afterAll(async () => {
   await srv.close();
   await small.close();
   await noGit.close();
   await djangoSrv.close();
+  await pyRootsSrv.close();
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -287,5 +307,18 @@ describe("GET /api/sessions/:id/map", () => {
     expect(nodeByPath("backend/core/utils.py").layer).toBe("backend/core");
     expect(nodeByPath("frontend/app.ts").layer).toBe("frontend");
     expect(nodeByPath("frontend/other.ts").layer).toBe("frontend");
+  });
+
+  test("nested Python projects: their pyproject dirs and src layouts are import roots", async () => {
+    const r = await get(pyRootsSrv, "/api/sessions/py-roots-session/map");
+    expect(r.status).toBe(200);
+    ImportMapResponse.parse(r.json);
+
+    expect(ids(r, "changed")).toEqual(["app/main.py"]);
+    expect(ids(r, "neighbour")).toEqual(["vendor/libx/libx/core.py", "vendor/liby/src/liby/util.py"]);
+    expect(edgeKeys(r)).toEqual([
+      "app/main.py>vendor/libx/libx/core.py:import",
+      "app/main.py>vendor/liby/src/liby/util.py:import",
+    ]);
   });
 });
