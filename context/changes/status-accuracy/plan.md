@@ -63,3 +63,10 @@ Two phases: (1) parse/classifier changes (items 1-3), (2) edit heuristics and gi
 
 - [ ] 2.1 `pnpm check` green
 - [ ] 2.2 Real-log audit re-run: status >= 95%, reason >= 88%
+
+## Plan-review amendments (accepted by orchestrator, 2026-10-23)
+
+- G1 (findings 1, 5, 6): targets are measured on prompts WITHOUT subagent activity (status >= 95%, reason >= 88%); the overall figures (all prompts) are reported alongside, with the expected gap attributed to S-12 (subagents) and S-13 (dedupe). The audit re-run therefore reports two populations: non-subagent and all.
+- G3 (finding 3): masked-exit inspection: if both a failure signal and a negative-guard phrase appear in the inspected tail, the failure signal wins unless the negative phrase is a final summary line (`0 failed`, `0 failures`, `All tests passed`, `Ran N tests ... OK`, `no errors`) AND no other failure signal appears; add tests for both orders.
+- G8 (finding 8): git-op events never transition the status; explicit tests: passing check, then `git merge` (with `bashEditDiff`) => status stays `checked`, files listed with `maybeIncomplete`, reason unchanged ("... passed after last edit"), never "0 edits".
+- Rejected: finding 2 (real-log cross-validation is the Phase 2 audit re-run itself), finding 4 (intent-uncertain tagging adds noise; `maybeIncomplete` and the reason suffix suffice), finding 7 (the script prints aggregates; comparability across users is not a goal of this slice).
