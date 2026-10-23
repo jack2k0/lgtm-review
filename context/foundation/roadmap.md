@@ -129,7 +129,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** live-refresh
 - **PRD refs:** FR-011 (PRD v2)
 - **Prerequisites:** S-03
-- **Status:** in progress (planned 2026-10-23, orchestrator decision)
+- **Status:** done
 
 ## Backlog Handoff
 
