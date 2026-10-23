@@ -1,7 +1,7 @@
 # ORCHESTRATION state
 
 ## Faza łańcucha
-Etap A zakończony. F-01, S-01, S-02 (north star) zmergowane na main i zarchiwizowane 2026-10-23. Następnie: S-03 steps-and-diff (zamyka MVP).
+Etap A zakończony. MVP KOMPLETNE: F-01, S-01, S-02, S-03 zmergowane lokalnie na main i zarchiwizowane (2026-10-23). Nic nie wypchnięte. Czeka na właściciela: push/remote, nazwa/trademark, kredyt autora pomysłu, publikacja npm; slice'y post-MVP (S-04..S-10) są zaparkowane do czasu rozszerzenia PRD.
 
 ## Decyzje właściciela (2026-10-23)
 - Nazwa projektu/pakietu npm: `lgtm-review` (wolne na npm 2026-10-23; GitHub/znak towarowy do sprawdzenia przed publikacją). Hasło robocze: "Earn your LGTM."
