@@ -1,7 +1,7 @@
 ---
 change_id: live-refresh
 title: Live refresh of the browser view while a session is running
-status: planned
+status: implemented
 created: 2026-10-23
 updated: 2026-10-23
 archived_at: null
