@@ -48,6 +48,11 @@ export interface NeighbourRank {
   edges: number;
 }
 
+export interface LayoutImportMapOptions {
+  /** Source root directories where subpackages/apps form separate layers (e.g. Django roots). */
+  layerRoots?: readonly string[];
+}
+
 export interface SelectedMapNodes {
   changed: string[];
   neighbours: string[];
@@ -65,8 +70,25 @@ function basename(path: string): string {
 }
 
 /** Layer name: `packages/<x>` / `apps/<x>` for those trees, else the first path segment. */
-export function layerOf(path: string): string {
-  const parts = path.replace(/\\/g, "/").split("/").filter((p) => p !== "");
+export function layerOf(path: string, opts?: LayoutImportMapOptions): string {
+  const clean = path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  if (opts?.layerRoots && opts.layerRoots.length > 0) {
+    const roots = opts.layerRoots
+      .map((r) => r.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""))
+      .filter((r) => r !== "" && r !== ".");
+    roots.sort((a, b) => b.length - a.length);
+    for (const root of roots) {
+      if (clean === root || clean.startsWith(root + "/")) {
+        const remainder = clean === root ? "" : clean.slice(root.length + 1);
+        const parts = remainder.split("/").filter((p) => p !== "");
+        if (parts.length > 1) {
+          return `${root}/${parts[0]}`;
+        }
+        return root;
+      }
+    }
+  }
+  const parts = clean.split("/").filter((p) => p !== "");
   const first = parts[0] ?? "";
   if ((first === "packages" || first === "apps") && parts.length > 1 && parts[1] !== undefined) return `${first}/${parts[1]}`;
   return first;
@@ -111,7 +133,7 @@ interface Placed {
   status: Status | null;
 }
 
-function mergeDuplicate(path: string, inputs: readonly MapNodeInput[]): Placed {
+function mergeDuplicate(path: string, inputs: readonly MapNodeInput[], opts?: LayoutImportMapOptions): Placed {
   const changed = inputs.some((n) => n.changed);
   const deleted = inputs.every((n) => n.deleted === true);
   const statuses = inputs
@@ -120,7 +142,7 @@ function mergeDuplicate(path: string, inputs: readonly MapNodeInput[]): Placed {
     .sort(cmp);
   return {
     input: { path, changed, ...(statuses.length > 0 ? { status: statuses[0] } : {}) },
-    layer: layerOf(path),
+    layer: layerOf(path, opts),
     changed,
     deleted,
     status: changed ? (statuses[0] ?? null) : null,
@@ -128,7 +150,11 @@ function mergeDuplicate(path: string, inputs: readonly MapNodeInput[]): Placed {
 }
 
 /** Computes node positions, layer bands and elbow edge paths. Pure and input-order independent. */
-export function layoutImportMap(nodes: readonly MapNodeInput[], edges: readonly MapEdgeInput[]): MapLayout {
+export function layoutImportMap(
+  nodes: readonly MapNodeInput[],
+  edges: readonly MapEdgeInput[],
+  opts?: LayoutImportMapOptions,
+): MapLayout {
   const byPath = new Map<string, MapNodeInput[]>();
   for (const n of nodes) {
     if (n.path === "") continue;
@@ -137,7 +163,7 @@ export function layoutImportMap(nodes: readonly MapNodeInput[], edges: readonly 
     else list.push(n);
   }
   const placed = [...byPath.entries()]
-    .map(([path, list]) => mergeDuplicate(path, list))
+    .map(([path, list]) => mergeDuplicate(path, list, opts))
     .sort((a, b) => cmp(a.layer, b.layer) || cmp(a.input.path, b.input.path));
 
   const layerMap = new Map<string, Placed[]>();

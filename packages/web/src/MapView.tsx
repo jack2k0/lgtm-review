@@ -72,7 +72,7 @@ export function MapView({ sessionId, map }: { sessionId: string; map: ImportMapR
         </li>
       </ul>
       {map.nodes.length === 0 ? (
-        <p className="empty">No TS/JS files changed</p>
+        <p className="empty">No supported source files changed (TS/JS, Python)</p>
       ) : (
         <div className="map-scroll">
           <svg

@@ -111,7 +111,7 @@ describe("MapView markup", () => {
 
   test("the empty state replaces the SVG", () => {
     const html = render({ nodes: [], edges: [], layers: [], width: 0, height: 0 });
-    expect(html).toContain("No TS/JS files changed");
+    expect(html).toContain("No supported source files changed (TS/JS, Python)");
     expect(html).not.toContain("<svg");
   });
 

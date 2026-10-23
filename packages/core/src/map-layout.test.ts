@@ -23,6 +23,25 @@ describe("layerOf", () => {
     expect(layerOf("index.ts")).toBe("index.ts");
     expect(layerOf("packages")).toBe("packages");
   });
+
+  test("layerRoots groups by subpackages/apps under specified roots (D5)", () => {
+    const opts = { layerRoots: ["backend"] };
+    expect(layerOf("backend/orders/models.py", opts)).toBe("backend/orders");
+    expect(layerOf("backend/orders/views/crud.py", opts)).toBe("backend/orders");
+    expect(layerOf("backend/manage.py", opts)).toBe("backend");
+    expect(layerOf("backend/core/utils.py", opts)).toBe("backend/core");
+    // Non-root paths fall back to default logic
+    expect(layerOf("packages/core/src/a.ts", opts)).toBe("packages/core");
+    expect(layerOf("frontend/index.ts", opts)).toBe("frontend");
+  });
+
+  test("layerRoots longest root wins", () => {
+    const opts = { layerRoots: ["services/backend", "services"] };
+    expect(layerOf("services/backend/orders/models.py", opts)).toBe("services/backend/orders");
+    expect(layerOf("services/backend/manage.py", opts)).toBe("services/backend");
+    expect(layerOf("services/other/file.py", opts)).toBe("services/other");
+    expect(layerOf("services/root.py", opts)).toBe("services");
+  });
 });
 
 describe("selectMapNodes", () => {
@@ -169,5 +188,28 @@ describe("layoutImportMap", () => {
     expect(layoutImportMap([a, c], [])).toEqual(layoutImportMap([c, a], []));
     expect(layoutImportMap([a, b], []).nodes[0]!.status).toBe("checked");
     expect(layoutImportMap([b, a], []).nodes[0]!.status).toBe("checked");
+  });
+
+  test("layoutImportMap respects layerRoots and remains deterministic", () => {
+    const pyNodes: MapNodeInput[] = [
+      { path: "backend/orders/models.py", changed: true, status: "checked" },
+      { path: "backend/orders/views.py", changed: true, status: "checked" },
+      { path: "backend/core/utils.py", changed: false },
+      { path: "backend/manage.py", changed: false },
+    ];
+    const pyEdges: MapEdgeInput[] = [
+      { from: "backend/orders/views.py", to: "backend/orders/models.py", kind: "import" },
+      { from: "backend/orders/views.py", to: "backend/core/utils.py", kind: "import" },
+    ];
+    const opts = { layerRoots: ["backend"] };
+    const layout = layoutImportMap(pyNodes, pyEdges, opts);
+    expect(layout.layers.map((l) => l.name)).toEqual(["backend/orders", "backend", "backend/core"]);
+    expect(layout.nodes.find((n) => n.path === "backend/orders/models.py")?.layer).toBe("backend/orders");
+    expect(layout.nodes.find((n) => n.path === "backend/manage.py")?.layer).toBe("backend");
+    expect(layout.nodes.find((n) => n.path === "backend/core/utils.py")?.layer).toBe("backend/core");
+
+    // Deterministic under shuffle
+    const shuffled = [...pyNodes].reverse();
+    expect(layoutImportMap(shuffled, pyEdges, opts)).toEqual(layout);
   });
 });
