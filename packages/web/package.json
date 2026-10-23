@@ -7,8 +7,20 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "echo no tests"
+    "test": "vitest run"
   },
-  "dependencies": { "@lgtm/core": "workspace:*", "react": "^19.0.0", "react-dom": "^19.0.0" },
-  "devDependencies": { "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0", "@vitejs/plugin-react": "^4.4.0", "typescript": "^5.8.0", "vite": "^6.3.0" }
+  "dependencies": {
+    "@lgtm/core": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0",
+    "vitest": "^4.1.12"
+  }
 }

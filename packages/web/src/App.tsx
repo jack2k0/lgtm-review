@@ -1,0 +1,62 @@
+import { useEffect, useState } from "react";
+import type { SessionAnalysis, SessionsResponse } from "@lgtm/core";
+import { errorMessage, fetchSession, fetchSessions } from "./api";
+import { PromptTable } from "./PromptTable";
+import { SessionList } from "./SessionList";
+import { parseRoute, routeHref, type Route } from "./viewmodel";
+
+type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ok"; data: T };
+
+function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key: string): Load<T> {
+  const [res, setRes] = useState<{ key: string; value: Load<T> }>({ key, value: { state: "loading" } });
+  useEffect(() => {
+    const ac = new AbortController();
+    load(ac.signal).then(
+      (data) => setRes({ key, value: { state: "ok", data } }),
+      (e: unknown) => {
+        if (!ac.signal.aborted) setRes({ key, value: { state: "error", message: errorMessage(e) } });
+      },
+    );
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return res.key === key ? res.value : { state: "loading" };
+}
+
+function Status<T>({ res, children }: { res: Load<T>; children: (data: T) => React.ReactNode }) {
+  if (res.state === "loading") return <p className="muted" role="status">Loading…</p>;
+  if (res.state === "error") return <p className="error" role="alert">{res.message}</p>;
+  return <>{children(res.data)}</>;
+}
+
+function ListView({ token }: { token: string | null }) {
+  const res = useLoad<SessionsResponse>((s) => fetchSessions(token, s), "list");
+  return <Status res={res}>{(d) => <SessionList data={d} />}</Status>;
+}
+
+function SessionView({ token, id }: { token: string | null; id: string }) {
+  const res = useLoad<SessionAnalysis>((s) => fetchSession(token, id, s), `s:${id}`);
+  return (
+    <>
+      <p><a href={routeHref({ kind: "list" })}>&larr; All sessions</a></p>
+      <Status res={res}>{(d) => <PromptTable key={d.sessionId} session={d} />}</Status>
+    </>
+  );
+}
+
+export function App({ token }: { token: string | null }) {
+  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
+  useEffect(() => {
+    const on = () => setRoute(parseRoute(window.location.hash));
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  return (
+    <>
+      <header className="top">
+        <h1><a href={routeHref({ kind: "list" })}>lgtm-review</a></h1>
+      </header>
+      <main>{route.kind === "session" ? <SessionView token={token} id={route.id} /> : <ListView token={token} />}</main>
+    </>
+  );
+}

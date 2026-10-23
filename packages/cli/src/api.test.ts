@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { SessionAnalysis } from "@lgtm/core";
+import { SessionAnalysis, SessionsResponse } from "@lgtm/core";
 import { summarize } from "./api.js";
 import { startServer, type RunningServer } from "./server.js";
 
@@ -57,6 +57,7 @@ describe("GET /api/sessions", () => {
     expect(r.status).toBe(200);
     expect(r.headers["cache-control"]).toBe("no-store");
     expect(r.headers["content-type"]).toBe("application/json; charset=utf-8");
+    expect(SessionsResponse.parse(r.json).dir).toBe(PROJECT);
     expect(r.json.dir).toBe(PROJECT);
     expect(r.json.sessions.map((s: { id: string }) => s.id).sort()).toEqual([...ids].sort());
     for (const s of r.json.sessions) {

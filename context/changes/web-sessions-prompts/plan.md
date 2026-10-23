@@ -186,8 +186,8 @@ Streaming analysis from S-01 (20 MB in ~0.3 s); API caches by mtime; the list en
 
 #### Automated
 
-- [ ] 3.1 `pnpm check` green
-- [ ] 3.2 No innerHTML / dangerouslySetInnerHTML in web sources
+- [x] 3.1 `pnpm check` green
+- [x] 3.2 No innerHTML / dangerouslySetInnerHTML in web sources
 
 #### Manual
 

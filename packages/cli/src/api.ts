@@ -1,20 +1,10 @@
 import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { analyzeFile, discoverSessions, loadRepoScripts, projectDirFor, type SessionFile } from "@lgtm/core/node";
-import type { SessionAnalysis, Status } from "@lgtm/core";
+import type { SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
 import { sortSessions } from "./format.js";
 import { sendJson, type ApiHandler } from "./http.js";
 import type { ServerOptions } from "./server.js";
-
-export interface SessionSummary {
-  id: string;
-  title: string;
-  branch: string;
-  startedAt: string | null;
-  promptCount: number;
-  statusCounts: Record<Status, number>;
-  warningCount: number;
-}
 
 export function summarize(s: SessionAnalysis): SessionSummary {
   const statusCounts: Record<Status, number> = { checked: 0, unchecked: 0, failing: 0, "no-changes": 0 };

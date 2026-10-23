@@ -1,5 +1,11 @@
 import { createRoot } from "react-dom/client";
-import { Story } from "@lgtm/core";
+import { App } from "./App";
+import { resolveToken, sessionStore } from "./token";
+import "./styles.css";
 
-const s = Story.parse({ id: "1", title: "Hello lgtm-review" });
-createRoot(document.getElementById("root")!).render(<h1>{s.title}</h1>);
+const { token, stripHash } = resolveToken(window.location.hash, sessionStore());
+if (stripHash) {
+  // Remove the token from the address bar and history entry; it now lives in sessionStorage / memory only.
+  history.replaceState(null, "", window.location.pathname + window.location.search);
+}
+createRoot(document.getElementById("root")!).render(<App token={token} />);

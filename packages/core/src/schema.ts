@@ -63,3 +63,27 @@ export const Analysis = z.object({
   sessions: z.array(SessionAnalysis),
 });
 export type Analysis = z.infer<typeof Analysis>;
+
+/** One row of the session list (`GET /api/sessions`); no prompts. */
+export const SessionSummary = z.object({
+  id: z.string(),
+  title: z.string(),
+  branch: z.string(),
+  startedAt: z.string().nullable(),
+  promptCount: z.number().int().nonnegative(),
+  statusCounts: z.object({
+    checked: z.number().int().nonnegative(),
+    unchecked: z.number().int().nonnegative(),
+    failing: z.number().int().nonnegative(),
+    "no-changes": z.number().int().nonnegative(),
+  }),
+  warningCount: z.number().int().nonnegative(),
+});
+export type SessionSummary = z.infer<typeof SessionSummary>;
+
+/** Body of `GET /api/sessions`. */
+export const SessionsResponse = z.object({
+  dir: z.string(),
+  sessions: z.array(SessionSummary),
+});
+export type SessionsResponse = z.infer<typeof SessionsResponse>;

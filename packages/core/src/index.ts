@@ -14,6 +14,8 @@ export {
   PromptAnalysis,
   SessionAnalysis,
   Analysis,
+  SessionSummary,
+  SessionsResponse,
 } from "./schema.js";
 export { makeHeadline } from "./timing.js";
 export { classifyCommand } from "./check-patterns.js";
