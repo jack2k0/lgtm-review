@@ -1,6 +1,6 @@
 // Pack packages/cli, verify tarball contents, run it via npx in isolation.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,6 +97,28 @@ try {
   const conflict = spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review", "--summary", "--json"], { cwd: runDir, encoding: "utf8" });
   if (conflict.status !== 1 || !/cannot be combined/.test(conflict.stderr)) fail(`--summary --json: expected exit 1, got ${conflict.status}`);
   console.log("smoke ok: --summary");
+
+  // --export: self-contained HTML, no script, injected secret redacted, no overwrite without --force.
+  const expProjects = join(runDir, "exp-projects");
+  const expDir = join(expProjects, runDir.replace(/[/.]/g, "-"));
+  mkdirSync(expDir, { recursive: true });
+  const secret = ["gh", "p_", "Zx9Qm4Tt7Lk2Vb8Nc3Rd6Wf1Hs5Jy0AaBbCc".slice(0, 36)].join("");
+  const fixtureText = readFileSync(join(fixturesDir, "diffs-mixed.jsonl"), "utf8");
+  const injected = fixtureText.replace("Refactor the greeter", `Refactor the greeter (token ${secret})`);
+  if (injected === fixtureText) fail("export smoke: could not inject the secret into the fixture copy");
+  writeFileSync(join(expDir, "diffs-mixed.jsonl"), injected);
+  const outFile = join(runDir, "export-out.html");
+  const runExport = (extra) => spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review", "--export", "diffs-mixed", "--projects-dir", expProjects, "--dir", runDir, "--out", outFile, ...extra], { cwd: runDir, encoding: "utf8" });
+  const exp = runExport([]);
+  if (exp.status !== 0) fail(`--export exited ${exp.status}: ${(exp.stderr || "").trim()}`);
+  const exported = readFileSync(outFile, "utf8");
+  if (!/<meta http-equiv="Content-Security-Policy"/.test(exported)) fail("export lacks the CSP meta");
+  if (!/checked|unchecked|failing|no changes/i.test(exported)) fail("export lacks status words");
+  if (/<script/i.test(exported)) fail("export contains <script");
+  if (exported.includes(secret)) fail("export contains the injected secret");
+  const again = runExport([]);
+  if (again.status !== 1) fail(`--export over an existing file without --force: expected exit 1, got ${again.status}`);
+  console.log("smoke ok: --export");
 
   // Server mode: URL printed, /api needs the token.
   const projects = join(runDir, "projects");

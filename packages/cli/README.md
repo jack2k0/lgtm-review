@@ -5,7 +5,7 @@ CLI. Run `npx lgtm-review`.
 ## Usage
 
 ```
-npx lgtm-review [--dir <path>] [--projects-dir <path>] [--list | --json | --summary [--session <id-prefix>] [--no-titles]] [--no-open] [--port <n>]
+npx lgtm-review [--dir <path>] [--projects-dir <path>] [--list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>]
 ```
 
 Without flags the command starts a local web UI for the Claude Code sessions of the current repository, prints its URL and opens it in your browser. Press Ctrl+C to stop.
@@ -74,3 +74,35 @@ Prints markdown for a PR description: title, branch, date, a table of prompts (s
 The summary contains no command output (a failing check shows only `<command> failed`), no file contents and no full prompt text. Titles are the first line of the prompt cut to 80 characters, with token-like text (API keys, `Bearer ...`, `password=...`, long hex or base64-like strings) replaced by `[redacted]`; this is best effort.
 
 Privacy: prompt titles and file paths can still reveal internal names, so read the text before you paste it into a public PR, or use `--no-titles` to print "Prompt N" instead of titles. Markdown-special characters (`|`, backticks, `*`, `_`, brackets, `<`, `>`) in titles and paths are escaped and newlines are collapsed.
+
+## Export
+
+```
+npx lgtm-review --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]
+```
+
+Writes one session as a single self-contained HTML file (default `lgtm-review-<first 8 chars of the id>.html` in the current directory) and prints its path and the number of redactions. `<id-prefix>` must match exactly one session. An existing output file is not overwritten unless you pass `--force`. `--no-diffs` leaves the file diffs out, `--no-titles` prints "Prompt N" instead of prompt titles. `--export` cannot be combined with `--list`, `--json`, `--summary` or `--session`.
+
+The file contains the prompt table with statuses and review hints, the steps of every prompt and (unless `--no-diffs`) the file diffs. It has no JavaScript and makes no external requests (a Content-Security-Policy meta tag forbids them), so it can be opened offline and attached to a PR or a chat.
+
+**Warning: redaction is best-effort. Read the file before you share it.** The export replaces secrets and personal data with placeholders, but no automatic filter finds everything. You are responsible for what you publish.
+
+What is redacted:
+
+- PEM blocks (private keys, certificates) and vendor token formats (for example GitHub, AWS, Slack, JWT).
+- `Authorization` / `Cookie` style headers, credentials in URLs, and cookies.
+- `key=value` / `key: value` assignments with secret-like names (`password`, `token`, `secret`, `api_key`, ...), `--password <value>` style flags, and every value in `.env*` files.
+- High-entropy strings with a secret-like context or a known prefix.
+- E-mail addresses, the repository directory (shown as `<repo>`), the home directory (`~`) and your OS user name (`<user>`).
+
+Known gaps (these can stay in the file):
+
+- A secret shorter than 6 characters without quotes.
+- A high-entropy string shorter than 40 characters with neither a context word nor a known prefix.
+- Passwords made only of capital letters and `_`.
+- Windows paths inside JSON strings (escaped backslashes).
+- The user name match is case-sensitive.
+- A directory that has the same name as the user (for example `/home/dashboard` when the user is `dashboard`) is rewritten to `~`, which can hide real paths.
+- Prompt text, file contents in diffs, company and project names, and anything a person would call confidential but that does not look like a secret.
+
+Limits: diffs are included up to 5 MB of text in total (later diffs are left out and the file says so), each step lists at most 200 actions, and a session log larger than 10 MB prints a warning because the export can be large and slow.

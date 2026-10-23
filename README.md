@@ -19,6 +19,7 @@ Not in the MVP: syntax highlighting, split diffs, final git state reconciliation
 npx lgtm-review            # starts the local UI for the sessions of the current repo
 npx lgtm-review --list     # terminal output instead of the UI
 npx lgtm-review --summary  # markdown summary of a session for a PR description
+npx lgtm-review --export <id-prefix>  # self-contained HTML file of a session (redaction is best-effort: review it before sharing)
 ```
 
 From a checkout (Node >= 22, pnpm):
