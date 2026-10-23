@@ -52,12 +52,12 @@ function HintItem({ h, pathLabel }: { h: Hint; pathLabel?: (p: string) => string
 }
 
 /** Full list of hints (severity, rule, path, reason), highest severity first. */
-export function HintList({ hints }: { hints: readonly Hint[] }) {
+export function HintList({ hints, pathLabel }: { hints: readonly Hint[]; pathLabel?: (p: string) => string }) {
   if (hints.length === 0) return <p className="muted">No review hints.</p>;
   return (
     <ul className="hints" aria-label={`Review hints (${hints.length})`}>
       {sortHints(hints).map((h, i) => (
-        <HintItem key={i} h={h} />
+        <HintItem key={i} h={h} {...(pathLabel ? { pathLabel } : {})} />
       ))}
     </ul>
   );

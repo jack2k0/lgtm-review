@@ -77,7 +77,7 @@ describe("prompt table row", () => {
     expect(html).toContain('aria-label="Review hints (2)"');
     expect(html).toContain('aria-expanded="true"');
     expect(html.indexOf(">High<")).toBeLessThan(html.indexOf(">Warn<"));
-    expect(html).toContain("/repo/x.ts");
+    expect(html).toContain(">x.ts<"); // display path is shortened, like the file list
     expect(html).toContain("edited after the last check");
     // file list marks the flagged file with the rule name
     expect(html).toContain('class="marker hint-marker mono">test-skipped</span>');

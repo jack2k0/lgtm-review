@@ -57,7 +57,7 @@ export function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: Pr
           <td />
           <td colSpan={6}>
             <p className="full-reason"><strong>Reason:</strong> {p.reason}</p>
-            <HintList hints={p.hints} />
+            <HintList hints={p.hints} pathLabel={(x) => shortPath(x, [...p.files.map((f) => f.path), ...p.hints.flatMap((h) => (h.path === null ? [] : [h.path]))])} />
             <FileList sessionId={sessionId} p={p} />
           </td>
         </tr>
