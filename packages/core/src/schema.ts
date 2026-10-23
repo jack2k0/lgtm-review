@@ -229,8 +229,6 @@ export const MapNode = z.object({
   kind: z.enum(["changed", "neighbour"]),
   /** Verification status of the last prompt that changed the file; null for neighbours. */
   status: Status.nullable(),
-  /** Prompt whose diff the changed node links to; null for neighbours and optional for older servers. */
-  promptIndex: z.number().int().nonnegative().nullable().optional(),
   /** The changed file no longer exists on disk: no edges, click target disabled. */
   deleted: z.boolean(),
   /** Changed nodes: index of the last non-inherited prompt that changed the file (session map) or the requested prompt; null for neighbours. */
@@ -278,8 +276,6 @@ export const ImportMapResponse = z.object({
   truncated: z.boolean(),
   /** Number of ranked 1-hop neighbours dropped by the node cap. */
   hiddenNeighbours: z.number().int().nonnegative(),
-  /** One-line explanations of skipped scan work (missing git, caps hit, external files). */
-  notes: z.array(z.string()).optional(),
   layers: z.array(MapLayer),
   nodes: z.array(MapNode),
   edges: z.array(MapEdge),
