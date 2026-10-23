@@ -1,6 +1,6 @@
 ---
 project: "lgtm-review"
-version: 1
+version: 2
 status: draft
 created: 2026-10-23
 context_type: greenfield
@@ -127,6 +127,16 @@ Single user; no auth; data lives on-device only. The web UI is reachable only fr
 - Does not edit code and does not control the agent.
 - No hosting, accounts, sync or telemetry; local-first only.
 - No partial-coverage detection ("partially checked") in MVP.
+
+## v0.2 Extension (orchestrator decision on owner delegation, 2026-10-23)
+
+MVP (US-01, US-02, FR-001..FR-007) is delivered. v0.2 adds review guidance, still local-only and deterministic (no LLM):
+
+- FR-009: Developer can see, per prompt, deterministic review hints (rules from `docs/PROPOSAL.md` §9.7: `test-modified-during-fix`, `assertions-removed`, `test-skipped`, `sensitive-path`, `unchecked-edit`, `dependency-change`, `public-surface`, `config-change`, `large-change`) with severity, the file and a reason, and a recommendation Skim / Read flagged / Read all. Priority: should-have.
+  > Socrates: Counter-argument considered: "Heuristics will cry wolf and be ignored." Resolution: kept; rules are explicit, each hint states its rule and evidence, severity high only for rules that indicate weakened verification; the recommendation is advice, never a verdict.
+- FR-010: Developer can print a markdown summary of a session (prompts, statuses, hints, files) for a PR description with one command. Priority: should-have.
+  > Socrates: Counter-argument considered: "Summary could leak prompt text into PRs." Resolution: kept; summary contains status, reason, hints and file paths and the 80-char prompt title only; no command output, no file content; documented in README.
+- Still non-goals: isometric import map, "Play the change", HTML export with redaction, LLM layer, Python, other agents.
 
 ## Open Questions
 

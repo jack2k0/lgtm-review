@@ -115,6 +115,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Risk:** depends on the S-02 browser shell; closes the MVP. Keep the diff minimal (unified, no split view, no custom highlighter) so the 7-week budget holds.
 - **Status:** proposed
 
+### S-05: Review hints and markdown summary (v0.2)
+
+- **Outcome:** Developer sees per-prompt deterministic review hints with a Skim / Read flagged / Read all recommendation in the prompt table and a "Where to look" block in Steps, and can run `lgtm-review --summary` to get a markdown summary for a PR description.
+- **Change ID:** review-hints
+- **PRD refs:** FR-009, FR-010 (PRD v2 extension)
+- **Prerequisites:** S-03
+- **Status:** in progress (planned 2026-10-23, orchestrator decision)
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
@@ -138,7 +146,6 @@ Foundations below assume these are present and do NOT re-scaffold them.
 Reserved IDs follow `docs/PROPOSAL.md` §17 so existing references (S-08, S-09) stay valid. None of these are planned until the PRD declares them.
 
 - **S-04: Isometric import map** — Why parked: PRD §Non-Goals (after MVP, v0.2).
-- **S-05: Review hints** — Why parked: PRD §Non-Goals (after MVP, v0.2).
 - **S-06: HTML export with secret redaction + local archive (FR-008, nice-to-have)** — Why parked: PRD §Non-Goals; no sharing story in MVP.
 - **S-07: "Play the change"** — Why parked: PRD §Non-Goals (after MVP, v0.2).
 - **S-08: LLM layer (titles and captions; default model decided in its plan)** — Why parked: PRD §Non-Goals; MVP titles come from templates and prompt text.
