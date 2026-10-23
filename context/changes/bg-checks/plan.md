@@ -73,3 +73,15 @@ One core phase + a small consumer phase.
 ### Phase 3: Audit (orchestrator, local Claude only)
 
 - [ ] 3.1 real-log aggregate audit (counts only): background checks resolved vs. still incomplete
+
+## Plan-review amendments (OpenCode/Big Pickle review, accepted by orchestrator 2026-10-23)
+
+All 15 findings of `reviews/plan-review.md` are accepted; they override the sections above where they conflict.
+
+- A1 (F1, F4, F10): on a background tool_result register `bgChecks` keyed by `backgroundTaskId` AND by tool_use id -> `{ check: CheckRec, action: ActionRec }`. A notification resolves only an entry whose check is `background && !completed && !stopped`; it updates both the analyzer `CheckRec` and the step's `act.check` (exitCode, passed, excerpt). Dedupe per resolved check; first terminal status wins.
+- A2 (F2, F3, F8): ordering model. Add `CheckRec.coveredSeq` = `useSeq` (seq of the tool_use) for every check (foreground too; for foreground it must give identical results to today — verify all goldens unchanged). "Did the result cover the last edit" (`judge` coverage test and edit-count branch) and `lastCheckSeq` used by hints both use `coveredSeq`. `resultSeq` stays only for `incompleteAfter` logic. The winning verdict among completed checks = the one with the greatest `coveredSeq` (ties: greater resultSeq). If this changes any existing golden, stop and report instead of updating goldens.
+- A3 (F5, F6): schema `StepCheck.background?: boolean` and `StepCheck.stopped?: boolean`; `CheckRec.exit` becomes `number | null`; a failed notification without exit code => failing with reason "background check failed"; `checkTitle` gets branches "failed" (no exit) and "stopped"; web `checkOutcome` (viewmodel.ts) handles both.
+- A4 (F7): killed/stopped/unknown status => `stopped = true`, `completed = false`; `incompleteAfter` skips stopped checks; if a prompt's only checks after the last edit are stopped, reason "check stopped" with status `unchecked`.
+- A5 (F9, F11, F12, F13): parser extracts notification blocks from user text right after the tool_result branch and before the origin/meta/sidechain early returns (sidechain notifications: emit with the record's agent context like other sidechain events, or skip — document the choice in a code comment); event type `{ kind: "task-notification", taskId?, toolUseId?, status, exitCode: number|null, ts, line }` (no seq); separate matcher `/exit code:?\s*(\d+)/i`, status lowercased; update `parse.test.ts:16-25` expectation.
+- A6 (F14): timing unchanged (launch result only); pinned by a test.
+- A7 (F15): add `testing/records.ts` notification builder and the listed test cases (notification+tool_result in one record, notification before result -> ignored, out-of-order completion of two bg checks, conflicting blocks, missing ids, unknown status, killed-only check, edit during run -> unchecked "1 edit after last check", foreground pass after bg start + later bg failure -> foreground verdict wins).
