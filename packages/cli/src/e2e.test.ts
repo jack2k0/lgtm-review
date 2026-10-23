@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -341,7 +341,7 @@ describe("built CLI, --export", () => {
   });
 
   test("default file name is lgtm-review-<first 8 characters>.html in the current directory", () => {
-    const cwd = mkdtempSync(join(work, "cwd-"));
+    const cwd = realpathSync(mkdtempSync(join(work, "cwd-")));
     const r = runIn(cwd, ["--export", "hints-test", ...base()]);
     expect(r.status).toBe(0);
     expect(existsSync(join(cwd, "lgtm-review-hints-te.html"))).toBe(true);
