@@ -1,0 +1,36 @@
+{
+  "sessionId": "bg-check-foreground-wins",
+  "title": "Fix the add function so it adds.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Fix the add function so it adds.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 2,
+          "removed": 2,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 4000,
+        "fixMs": 0
+      },
+      "activeMs": 8000,
+      "headline": "Mostly writing (50%), 2 checks",
+      "hints": [],
+      "recommendation": "skim"
+    }
+  ],
+  "warnings": []
+}

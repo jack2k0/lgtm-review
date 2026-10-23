@@ -150,6 +150,10 @@ export const StepCheck = z.object({
   passed: z.boolean().nullable(),
   /** First non-empty output lines of a failing check (<= 200 chars); empty otherwise. */
   excerpt: z.string(),
+  /** The check ran in the background and its outcome comes from a task notification. */
+  background: z.boolean().optional(),
+  /** The background check was stopped or killed before it finished: no verdict. */
+  stopped: z.boolean().optional(),
 });
 export type StepCheck = z.infer<typeof StepCheck>;
 

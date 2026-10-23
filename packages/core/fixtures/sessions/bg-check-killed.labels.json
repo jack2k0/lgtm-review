@@ -1,0 +1,16 @@
+{
+  "fixture": "bg-check-killed",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "note": "the only check after the edit was stopped: no verdict (check stopped)"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "read-only prompt"
+    }
+  ]
+}

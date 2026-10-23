@@ -64,6 +64,20 @@ describe("StepsView markup", () => {
     expect(open).not.toContain("<img");
     expect(open).not.toContain("<script");
   });
+  test("a background check gets a text marker, a foreground one does not", () => {
+    const d = detail();
+    const check = { command: "npm test", exitCode: 0, passed: true, excerpt: "" };
+    const bg = renderToStaticMarkup(<StepCard step={{ ...d.steps[0]!, check: { ...check, background: true } }} open={false} onToggle={() => {}} />);
+    expect(bg).toContain("passed</span> (background)");
+    const fg = renderToStaticMarkup(<StepCard step={{ ...d.steps[0]!, check }} open={false} onToggle={() => {}} />);
+    expect(fg).not.toContain("(background)");
+  });
+  test("a stopped background check renders as stopped", () => {
+    const d = detail();
+    const html = renderToStaticMarkup(<StepCard step={{ ...d.steps[0]!, check: { command: "npm test", exitCode: null, passed: null, excerpt: "", background: true, stopped: true } }} open={false} onToggle={() => {}} />);
+    expect(html).toContain("stopped</span> (background)");
+    expect(html).not.toContain("did not run");
+  });
   test("empty steps show an empty state", () => {
     expect(renderToStaticMarkup(<StepsView sessionId="s" detail={detail({ steps: [] })} />)).toContain("No steps were recorded");
   });

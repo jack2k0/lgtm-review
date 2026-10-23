@@ -1,0 +1,16 @@
+{
+  "fixture": "bg-check-unmatched",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "note": "the notification names unknown ids: the background check stays unresolved"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "read-only prompt"
+    }
+  ]
+}

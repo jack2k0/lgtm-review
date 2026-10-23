@@ -1,0 +1,16 @@
+{
+  "fixture": "bg-check-pass",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "background test started after the edit; its completion notification arrives during the next prompt"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "read-only prompt; the late notification must not affect it"
+    }
+  ]
+}

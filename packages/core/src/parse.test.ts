@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { createParser, parseLines } from "./parse.js";
-import { bash, edit, prompt, rec, resetIds, toolResult, toolUse } from "./testing/records.js";
+import { bash, bgBash, edit, notificationBlock, prompt, rec, resetIds, taskNotification, toolResult, toolUse } from "./testing/records.js";
 
 beforeEach(resetIds);
 const NO_STATS = { assertAdded: 0, assertRemoved: 0, skipAdded: 0, skipRemoved: 0 };
@@ -22,6 +22,11 @@ describe("prompt detection", () => {
       prompt("<system-reminder>x</system-reminder>"),
     ];
     expect(parseLines(lines).events).toEqual([]);
+  });
+
+  test("a task notification is not a prompt but yields a task-notification event", () => {
+    const { events } = parseLines([taskNotification({ taskId: "t1", toolUseId: "u1", status: "completed", summary: 'Background command "pnpm test" completed (exit code 0)' })]);
+    expect(events).toMatchObject([{ type: "task-notification", taskId: "t1", toolUseId: "u1", status: "completed", exitCode: 0 }]);
   });
 
   test("meta, compact summaries, sidechain, non-human origin and scheduled prompts are not prompts", () => {
@@ -263,5 +268,79 @@ describe("result tail", () => {
     const long = parseLines([toolResult("t1", [{ type: "text", text }])]).events[0] as { text: string; tail?: string };
     expect(long.text).toHaveLength(500);
     expect(long.tail).toBe(text.slice(-4096));
+  });
+});
+
+describe("task notifications", () => {
+  const notes = (lines: string[]) => parseLines(lines).events.filter((e) => e.type === "task-notification");
+
+  test("background tool_result carries backgroundTaskId", () => {
+    const { events } = parseLines(bgBash("b1", "task9", "pnpm test"));
+    expect(events[1]).toMatchObject({ type: "tool_result", background: true, backgroundTaskId: "task9" });
+    expect(parseLines([toolResult("b2", "ok", { toolUseResult: { backgroundTaskId: 42 } })]).events[0]).toMatchObject({ background: true, backgroundTaskId: "42" });
+    expect(parseLines([toolResult("b3", "ok")]).events[0]).not.toHaveProperty("backgroundTaskId");
+  });
+
+  test("tags in any order, extra tags ignored, status lowercased", () => {
+    const text = "<task-notification><summary>done (Exit Code: 3)</summary><weird>x</weird><status>FAILED</status><tool-use-id> toolu_1 </tool-use-id><task-id>t1</task-id></task-notification>";
+    expect(notes([prompt(text, { origin: { kind: "task-notification" } })])).toMatchObject([{ taskId: "t1", toolUseId: "toolu_1", status: "failed", exitCode: 3 }]);
+  });
+
+  test("missing tool-use-id, missing summary and missing status", () => {
+    const ev = notes([taskNotification({ taskId: "t1" })]);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ taskId: "t1", status: "", exitCode: null });
+    expect(ev[0]).not.toHaveProperty("toolUseId");
+  });
+
+  test("no exit code in the summary", () => {
+    expect(notes([taskNotification({ taskId: "t1", status: "completed", summary: "Background command finished" })])[0]).toMatchObject({ exitCode: null });
+  });
+
+  test("several blocks in one record, in order", () => {
+    const text = [notificationBlock({ taskId: "a", status: "completed" }), "noise", notificationBlock({ taskId: "b", status: "failed", summary: "exit code 2" })].join("\n");
+    expect(notes([prompt(text, { origin: { kind: "task-notification" } })]).map((e) => (e as { taskId?: string }).taskId)).toEqual(["a", "b"]);
+  });
+
+  test("text blocks of a content list are scanned", () => {
+    const content = [{ type: "text", text: notificationBlock({ taskId: "a", status: "completed" }) }];
+    expect(notes([prompt(content, { origin: { kind: "task-notification" } })])).toHaveLength(1);
+  });
+
+  test("malformed blocks are ignored without throwing", () => {
+    expect(notes([prompt("<task-notification><task-id>t1</task-id>", { origin: { kind: "task-notification" } })])).toEqual([]);
+    expect(notes([prompt("<task-notification></task-notification>", { origin: { kind: "task-notification" } })])).toEqual([]);
+    expect(notes([prompt("<task-notification><task-id></task-id><status>completed</status></task-notification>")])).toEqual([]);
+    expect(() => parseLines([prompt("<task-notification>".repeat(50)), prompt([{ type: "text" }, null, 5] as unknown as string)])).not.toThrow();
+  });
+
+  test("emitted for meta, non-human and scheduled records; none of them is a prompt", () => {
+    const f = { taskId: "t1", status: "completed" };
+    const lines = [taskNotification(f, { isMeta: true }), taskNotification(f, { origin: { kind: "peer" } }), taskNotification(f, { scheduledTaskId: "x" })];
+    const { events } = parseLines(lines);
+    expect(events.map((e) => e.type)).toEqual(["task-notification", "task-notification", "task-notification"]);
+  });
+
+  test("notification and tool_result in one record: result first, then the notification", () => {
+    const line = rec("user", {
+      message: {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "b1", content: "ok" },
+          { type: "text", text: notificationBlock({ taskId: "t1", status: "completed" }) },
+        ],
+      },
+    });
+    expect(parseLines([line]).events.map((e) => e.type)).toEqual(["tool_result", "task-notification"]);
+  });
+
+  test("in a subagent transcript notifications are emitted too (matching is by id)", () => {
+    const { events } = parseLines([taskNotification({ taskId: "t1", status: "completed" }, { isSidechain: true })], { sidechain: true });
+    expect(events.map((e) => e.type)).toEqual(["task-notification"]);
+    expect(parseLines([taskNotification({ taskId: "t1", status: "completed" }, { isSidechain: true })]).events).toEqual([]);
+  });
+
+  test("a human prompt that merely mentions the tag mid-text is still a prompt", () => {
+    expect(kinds([prompt("what is a <task-notification> block?")])).toEqual(["prompt"]);
   });
 });

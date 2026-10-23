@@ -1,0 +1,16 @@
+{
+  "fixture": "bg-check-fail",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "failing",
+      "note": "background test failed with exit code 1 per its notification"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "read-only prompt"
+    }
+  ]
+}

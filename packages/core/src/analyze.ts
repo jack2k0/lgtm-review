@@ -2,7 +2,7 @@ import { classifyCommand, findMaskedFailure, type RepoScripts } from "./check-pa
 import { classifyShellMutation, resolveTarget } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, recommend, type EditEvidence, type EditStats } from "./hints.js";
-import { createParser, type Event, type ToolInput, type ToolResultEvent } from "./parse.js";
+import { createParser, type Event, type TaskNotificationEvent, type ToolInput, type ToolResultEvent } from "./parse.js";
 import { ACTIONS_MAX, buildSteps, failureExcerpt, kindOf, oneLine, QUOTES_PER_STEP, type ActionRec } from "./steps.js";
 import { actionPhase, createTimingTracker, parseTs, type TimingTracker } from "./timing.js";
 import { createSubagentCollector, emptyFlags, mergeSubagents, textWeight, type MergeContext, type MergeFlags, type SubagentTranscript } from "./subagents.js";
@@ -81,11 +81,23 @@ interface EditRec {
 
 interface CheckRec {
   useSeq: number;
+  /** Position at which the result (the notification, for a background check) arrived; 0 while open. */
   resultSeq: number;
+  /**
+   * Position up to which the check's outcome covers the edits: an edit with a greater `seq` is not covered.
+   * Foreground checks: the result position. Background checks: the position of the launch (`useSeq`), so an edit
+   * made while the check was running stays uncovered.
+   */
+  coveredSeq: number;
   completed: boolean;
   /** The command did not run (tool error without an exit code): not a check outcome at all. */
   ignored: boolean;
-  exit: number;
+  /** `null`: a background check reported as failed without an exit code. */
+  exit: number | null;
+  /** The command was started in the background (the result only confirmed the launch). */
+  background: boolean;
+  /** A notification said the background check was stopped or killed: it neither passed nor failed. */
+  stopped: boolean;
   label: string;
   unreliable: boolean;
   /** A command after the check may have reverted the edits (`; git checkout file`). */
@@ -156,10 +168,10 @@ function editTouch(use: PendingUse, res: ToolResultEvent, inFix: boolean): FileT
   return { path, kind: "M", added: 0, removed: 0, maybeIncomplete: true, inFix, stats };
 }
 
-/** Sequence number at which the last completed (non-ignored) check finished; null when none did. */
+/** Coverage position of the last completed (non-ignored) check; null when none completed. */
 function lastCheckSeq(p: PromptState): number | null {
   let last: number | null = null;
-  for (const c of p.checks) if (!c.ignored && c.completed && (last === null || c.resultSeq > last)) last = c.resultSeq;
+  for (const c of p.checks) if (!c.ignored && c.completed && (last === null || c.coveredSeq > last)) last = c.coveredSeq;
   return last;
 }
 
@@ -215,18 +227,21 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
   const real = p.checks.filter((c) => !c.ignored);
   const completed = real.filter((c) => c.completed);
   const lastCompleted = completed.reduce<CheckRec | null>(
-    (m, c) => (m === null || c.resultSeq > m.resultSeq ? c : m),
+    (m, c) => (m === null || c.coveredSeq > m.coveredSeq || (c.coveredSeq === m.coveredSeq && c.resultSeq > m.resultSeq) ? c : m),
     null,
   );
 
   const incompleteAfter = real.some(
-    (c) => !c.completed && c.useSeq > lastEdit && (lastCompleted === null || c.useSeq > lastCompleted.resultSeq),
+    (c) => !c.completed && !c.stopped && c.useSeq > lastEdit && (lastCompleted === null || c.useSeq > lastCompleted.resultSeq),
   );
   if (incompleteAfter) return { status: "unchecked", reason: "check did not complete" };
 
-  if (lastCompleted !== null && lastCompleted.resultSeq > lastEdit) {
+  if (lastCompleted !== null && lastCompleted.coveredSeq > lastEdit) {
     if (lastCompleted.masked) {
       return { status: "failing", reason: `${lastCompleted.label} output indicates failures (exit code masked)${via(lastCompleted.thread)}` };
+    }
+    if (lastCompleted.exit === null) {
+      return { status: "failing", reason: `${lastCompleted.label}: background check failed${via(lastCompleted.thread)}` };
     }
     if (lastCompleted.exit === 0) {
       const note = lastCompleted.probe ? " (edits may have been reverted)" : lastCompleted.unreliable ? " (exit code not verified)" : "";
@@ -239,8 +254,9 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
     };
   }
 
+  if (real.some((c) => c.stopped && c.useSeq > lastEdit)) return { status: "unchecked", reason: "check stopped" };
   if (lastCompleted === null) return { status: "unchecked", reason: "no checks ran" };
-  const afterEdits = edits.filter((e) => e.seq > lastCompleted.resultSeq);
+  const afterEdits = edits.filter((e) => e.seq > lastCompleted.coveredSeq);
   if (afterEdits.length === 0) return { status: "unchecked", reason: "edit in the same command as the last check" };
   const latest = afterEdits.reduce((m, e) => (e.seq > m.seq ? e : m));
   return { status: "unchecked", reason: `${plural(afterEdits.length, "edit")} after last check${via(latest.thread)}` };
@@ -259,6 +275,11 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
   const parser = createParser({ ...(opts.file !== undefined ? { file: opts.file } : {}), detail: opts.detail === true });
   const prompts: PromptState[] = [];
   const pending = new Map<string, PendingUse>();
+  /**
+   * Background checks whose launch result arrived, by `task:<backgroundTaskId>` and `use:<tool_use id>`. A task
+   * notification (possibly in a later prompt) resolves the entry; the `pending` entry is gone by then.
+   */
+  const bgChecks = new Map<string, { check: CheckRec; action: ActionRec | null }>();
   let cur: PromptState | null = null;
   let seq = 0;
   /** Timestamp of the last event per thread (`""` parent, else agent id); events without one inherit it. */
@@ -304,6 +325,41 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
     else p.failing.delete(thread);
   }
 
+  function onNotification(ev: TaskNotificationEvent): void {
+    let entry = ev.toolUseId !== undefined ? bgChecks.get(`use:${ev.toolUseId}`) : undefined;
+    if (entry === undefined && ev.taskId !== undefined) entry = bgChecks.get(`task:${ev.taskId}`);
+    if (entry === undefined) return;
+    const c = entry.check;
+    // Only an unresolved background check can be resolved, and only once: the first terminal notification wins.
+    if (!c.background || c.completed || c.stopped) return;
+    const finished = ev.status === "completed" || ev.status === "failed" || (ev.status === "" && ev.exitCode !== null);
+    let exit: number | null = null;
+    if (finished) {
+      // An exit code in the summary decides; "failed" never passes, even when the summary says exit code 0.
+      exit = ev.exitCode ?? (ev.status === "completed" ? 0 : null);
+      if (ev.status === "failed" && exit === 0) exit = null;
+    }
+    c.resultSeq = seq;
+    const act = entry.action;
+    if (!finished) {
+      c.stopped = true;
+      if (act?.check) {
+        act.check.background = true;
+        act.check.stopped = true;
+      }
+      return;
+    }
+    c.completed = true;
+    c.exit = exit;
+    if (act?.check) {
+      act.check.background = true;
+      act.check.exitCode = exit;
+      act.check.passed = exit === 0;
+      act.check.excerpt = "";
+      act.ok = exit === 0;
+    }
+  }
+
   function onEvent(ev: Event): void {
     if (ev.type === "text") {
       // Agent text only feeds the quotes: it must not move the sequence or the timing clock.
@@ -314,6 +370,13 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
         q.push(ev.text);
         if (q.length > QUOTES_PER_STEP) q.shift();
       }
+      return;
+    }
+    if (ev.type === "task-notification") {
+      // Not a tool event: it resolves a background check but takes no part in the timing clock (the phase of a
+      // background check is recorded from its launch result only).
+      seq++;
+      onNotification(ev);
       return;
     }
     seq++;
@@ -357,9 +420,12 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             check = {
               useSeq: seq,
               resultSeq: 0,
+              coveredSeq: seq,
               completed: false,
               ignored: false,
               exit: 0,
+              background: false,
+              stopped: false,
               label: cls.label,
               unreliable: cls.unreliable,
               probe: cls.mutationProbe,
@@ -417,6 +483,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               use.check.completed = true;
               use.check.exit = ev.exitCode;
               use.check.resultSeq = seq;
+              use.check.coveredSeq = seq;
               use.check.output = ev.text;
               setFailing(use.prompt, use.thread, ev.exitCode !== 0);
             }
@@ -424,6 +491,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             use.check.completed = true;
             use.check.exit = 0;
             use.check.resultSeq = seq;
+            use.check.coveredSeq = seq;
             const line = use.check.unreliable ? findMaskedFailure(ev.tail ?? ev.text) : null;
             if (line !== null) {
               use.check.masked = true;
@@ -453,6 +521,12 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               notRun: ev.isError && ev.exitCode === undefined,
             };
           }
+        }
+        if (use.check && !ev.isError && ev.background) {
+          use.check.background = true;
+          const entry = { check: use.check, action: act };
+          bgChecks.set(`use:${ev.toolUseId}`, entry);
+          if (ev.backgroundTaskId !== undefined) bgChecks.set(`task:${ev.backgroundTaskId}`, entry);
         }
         if (ev.isError) return;
         let touches: FileTouch[] = [];

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { createAnalyzer } from "./analyze.js";
 import { parseLines } from "./parse.js";
 import type { PromptDetail, Step } from "./schema.js";
-import { at, bash, edit, F, patchResult, prompt, rec, resetIds, toolResult, toolUse } from "./testing/records.js";
+import { at, bash, bgBash, edit, F, patchResult, prompt, rec, resetIds, taskNotification, toolResult, toolUse } from "./testing/records.js";
 import { listFixtures, readFixtureLines } from "./testing/fixtures.js";
 import { analyzeSession } from "./analyze.js";
 
@@ -387,5 +387,54 @@ describe("shared classifier", () => {
     expect(actionPhase("Bash", { isCheck: true, edited: false }, true)).toBe("check");
     expect(actionPhase("Bash", { isCheck: false, edited: true }, false)).toBe("write");
     expect(actionPhase("Agent", { isCheck: false, edited: false }, true)).toBeNull();
+  });
+});
+
+describe("background check steps", () => {
+  const bgSteps = (note?: Parameters<typeof taskNotification>[0], extra: string[] = []): Step[] =>
+    steps([prompt("p"), ...bgBash("b", "t1", "pnpm test"), ...extra, ...(note ? [taskNotification(note)] : [])]);
+
+  test("unresolved: still no result and no flags", () => {
+    const s = bgSteps();
+    expect(s[0]!.check).toEqual({ command: "pnpm test", exitCode: null, passed: null, excerpt: "" });
+    expect(s[0]!.title).toBe("Run pnpm test -> no result");
+  });
+
+  test("completed notification rewrites the step's check", () => {
+    const s = bgSteps({ taskId: "t1", status: "completed", summary: "exit code 0" });
+    expect(s[0]!.check).toEqual({ command: "pnpm test", exitCode: 0, passed: true, excerpt: "", background: true });
+    expect(s[0]!.title).toBe("Run pnpm test -> passed");
+  });
+
+  test("failed with exit code", () => {
+    const s = bgSteps({ taskId: "t1", status: "failed", summary: "failed with exit code 3" });
+    expect(s[0]!.check).toMatchObject({ exitCode: 3, passed: false, background: true });
+    expect(s[0]!.title).toBe("Run pnpm test -> failed (exit 3)");
+  });
+
+  test("failed without exit code", () => {
+    const s = bgSteps({ taskId: "t1", status: "failed" });
+    expect(s[0]!.check).toMatchObject({ exitCode: null, passed: false, background: true });
+    expect(s[0]!.title).toBe("Run pnpm test -> failed");
+  });
+
+  test("killed: stopped", () => {
+    const s = bgSteps({ toolUseId: "b", status: "killed" });
+    expect(s[0]!.check).toMatchObject({ exitCode: null, passed: null, background: true, stopped: true });
+    expect(s[0]!.title).toBe("Run pnpm test -> stopped");
+  });
+
+  test("the notification may arrive in a later prompt", () => {
+    const d = run([prompt("p"), ...bgBash("b", "t1", "pnpm test"), prompt("q"), ...read("r1"), taskNotification({ taskId: "t1", status: "completed", summary: "exit code 0" })]);
+    expect(d[0]!.steps[0]!.title).toBe("Run pnpm test -> passed");
+    expect(d[1]!.steps.every((x) => x.check === undefined)).toBe(true);
+  });
+
+  test("timing is unchanged by the notification (launch only)", () => {
+    const base = [prompt("p", { timestamp: at(0) }), toolUse("b", "Bash", { command: "pnpm test", run_in_background: true }, at(1)), toolResult("b", "started", { toolUseResult: { backgroundTaskId: "t1" }, ts: at(2) })];
+    const a = run(base)[0]!;
+    const b = run([...base, taskNotification({ taskId: "t1", status: "completed", summary: "exit code 0" }, { timestamp: at(600) })])[0]!;
+    expect(b.activeMs).toBe(a.activeMs);
+    expect(b.steps[0]!.durationMs).toBe(a.steps[0]!.durationMs);
   });
 });
