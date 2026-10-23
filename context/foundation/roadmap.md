@@ -139,6 +139,15 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Prerequisites:** S-03, S-05
 - **Status:** done
 
+### S-11: Status accuracy on real logs (v0.2)
+
+- **Outcome:** Status match on the owner's real local sessions rises from 90.8% to >= 95% (audit 2026-10-23, `context/changes/status-accuracy/audit-2026-10-23.md`): verify-style scripts and more check commands are recognized, slash-command turns become prompts, masked exits no longer produce false `checked`, shell edits without `bashEditDiff` are no longer invisible, syntax-only and git-operation noise is ignored.
+- **Change ID:** status-accuracy
+- **PRD refs:** Success Criterion "status matches manual verification in >= 95% of turns"; NFR reproducible statuses
+- **Prerequisites:** S-03
+- **Status:** in progress (planned 2026-10-23, orchestrator decision)
+- Deferred from the audit to later slices: subagent transcripts merged into prompts (S-12), fork/resume dedupe across files (S-13), background-task completion mapping (S-14).
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
