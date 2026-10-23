@@ -170,7 +170,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** bg-checks
 - **PRD refs:** FR-002 (status accuracy); Success Criterion status match >= 95%
 - **Prerequisites:** S-11
-- **Status:** done (2026-10-23; core Sonnet, consumers Haiku, plan-review OpenCode Big Pickle). Real-log audit pending (reading ~/.claude blocked by auto-mode classifier; needs owner permission)
+- **Status:** done (2026-10-23; core Sonnet, consumers Haiku, plan-review OpenCode Big Pickle). Real-log audit done (`context/archive/bg-checks/audit-2026-10-23.md`: 3/130 prompts unchecked -> checked, "check did not complete" 4 -> 1)
 
 ### S-04: Import map (2D, reduced) (v0.2)
 
