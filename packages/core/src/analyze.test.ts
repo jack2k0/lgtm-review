@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { analyzeSession, createAnalyzer } from "./analyze.js";
-import { F, bash, edit, prompt, resetIds, toolResult, toolUse } from "./testing/records.js";
+import { F, bash, bgBash, edit, prompt, resetIds, taskNotification, toolResult, toolUse } from "./testing/records.js";
 
 beforeEach(resetIds);
 
@@ -419,5 +419,150 @@ describe("git operations", () => {
   test("git op edits do not feed the hints", () => {
     const p = one([prompt("q"), ...diffBash("b1", "git merge main", "/home/user/project/src/auth/login.js")]);
     expect(p.hints).toEqual([]);
+  });
+});
+
+describe("background checks resolved by task notifications", () => {
+  const done = (taskId: string, extra: { toolUseId?: string; status?: string; summary?: string } = {}) =>
+    taskNotification({ taskId, status: "completed", summary: 'Background command "pnpm test" completed (exit code 0)', ...extra });
+  const all = (lines: string[]) => analyzeSession(lines).prompts;
+
+  test("without a notification the background check stays open", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test")])).toMatchObject({ status: "unchecked", reason: "check did not complete" });
+  });
+
+  test("completed exit 0, matched by task id, arriving after the next prompt began", () => {
+    const [p0, p1] = all([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), prompt("next"), done("t1")]);
+    expect(p0).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit" });
+    expect(p1!.status).toBe("no-changes");
+  });
+
+  test("matched by tool-use id alone", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("other", { toolUseId: "b1" })]).status).toBe("checked");
+  });
+
+  test("the tool-use id wins over a task id that names another check", () => {
+    const lines = [prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), ...bgBash("b2", "t2", "pnpm lint"), done("t2", { toolUseId: "b1", summary: "exit code 1", status: "failed" })];
+    expect(one(lines)).toMatchObject({ status: "failing", reason: "pnpm test failed (exit 1)" });
+  });
+
+  test("failed with exit code in the summary => failing (exit N)", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { status: "failed", summary: "failed with exit code 1" })])).toMatchObject({
+      status: "failing",
+      reason: "pnpm test failed (exit 1)",
+    });
+  });
+
+  test("failed without an exit code => failing, background check failed", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { status: "failed", summary: "it broke" })])).toMatchObject({
+      status: "failing",
+      reason: "pnpm test: background check failed",
+    });
+  });
+
+  test("status failed never passes, even with exit code 0 in the summary", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { status: "failed", summary: "exit code 0" })]).status).toBe("failing");
+  });
+
+  test("completed without exit code in the summary counts as exit 0; completed with exit 2 fails", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { summary: "finished" })]).status).toBe("checked");
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { summary: "exit code: 2" })]).reason).toBe("pnpm test failed (exit 2)");
+  });
+
+  test("killed, unknown and missing status: stopped => unchecked, check stopped", () => {
+    for (const status of ["killed", "stopped", "weird"]) {
+      expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { status, summary: "was stopped" })])).toMatchObject({ status: "unchecked", reason: "check stopped" });
+    }
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), taskNotification({ taskId: "t1" })]).reason).toBe("check stopped");
+  });
+
+  test("a stopped check does not hide an older passing foreground check that covers the edit", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bgBash("b2", "t1", "pnpm lint"), done("t1", { status: "killed" })]).status).toBe("checked");
+  });
+
+  test("stopped is not 'did not complete' and counts in the headline's checks", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { status: "killed" })]);
+    expect(p.reason).not.toMatch(/did not complete/);
+    expect(p.headline).toMatch(/1 check\b/);
+  });
+
+  test("a notification with unknown ids has no effect", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("nope", { toolUseId: "toolu_nope" })])).toMatchObject({ status: "unchecked", reason: "check did not complete" });
+  });
+
+  test("a notification with neither id is dropped by the parser", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), taskNotification({ status: "completed" })]).reason).toBe("check did not complete");
+  });
+
+  test("a notification before the launch result is ignored", () => {
+    const lines = [prompt("q"), ...edit("e1"), toolUse("b1", "Bash", { command: "pnpm test", run_in_background: true }), done("t1", { toolUseId: "b1" }), toolResult("b1", "started", { toolUseResult: { backgroundTaskId: "t1" } })];
+    expect(one(lines).reason).toBe("check did not complete");
+  });
+
+  test("the first terminal notification wins; a later conflicting one is ignored", () => {
+    const pass = [prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1"), done("t1", { status: "failed", summary: "exit code 1" })];
+    expect(one(pass).status).toBe("checked");
+    const fail = [prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { status: "failed", summary: "exit code 1" }), done("t1")];
+    expect(one(fail).status).toBe("failing");
+    const killedFirst = [prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { status: "killed" }), done("t1")];
+    expect(one(killedFirst).reason).toBe("check stopped");
+  });
+
+  test("two blocks in one record resolve two checks", () => {
+    const rec2 = taskNotification([
+      { taskId: "t2", status: "completed", summary: "exit code 0" },
+      { taskId: "t1", status: "completed", summary: "exit code 0" },
+    ]);
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), ...bgBash("b2", "t2", "pnpm lint"), rec2]).status).toBe("checked");
+  });
+
+  test("out-of-order completion: the check launched last decides, not the one notified last", () => {
+    // lint launched first, test second; test fails first, lint passes later -> latest-launched (test) verdict: failing.
+    const lines = [prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm lint"), ...bgBash("b2", "t2", "pnpm test"), done("t2", { status: "failed", summary: "exit code 1" }), done("t1")];
+    expect(one(lines)).toMatchObject({ status: "failing", reason: "pnpm test failed (exit 1)" });
+  });
+
+  test("an edit made while the background check ran is not covered", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), ...edit("e2"), done("t1")]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
+    expect(p.hints.map((h) => h.rule)).toContain("unchecked-edit");
+  });
+
+  test("an edit before the launch is covered and raises no unchecked-edit hint", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1")]);
+    expect(p.hints.map((h) => h.rule)).not.toContain("unchecked-edit");
+  });
+
+  test("a foreground pass after the background start beats a later background failure", () => {
+    const lines = [prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm lint"), ...edit("e2"), ...bash("b2", "pnpm test"), done("t1", { status: "failed", summary: "exit code 1" })];
+    expect(one(lines)).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit" });
+  });
+
+  test("a notification does not resolve a foreground check", () => {
+    const lines = [prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test", { exit: 1 }), done("x", { toolUseId: "b1" })];
+    expect(one(lines).status).toBe("failing");
+  });
+
+  test("a notification in the middle of an unrelated prompt resolves the earlier prompt's check", () => {
+    const [p0, p1] = all([prompt("a"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), prompt("b"), ...edit("e2", "/home/user/project/src/z.js"), done("t1")]);
+    expect(p0!.status).toBe("checked");
+    expect(p1).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("timing is taken from the launch only (the notification adds nothing)", () => {
+    const base = [prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test")];
+    const without = analyzeSession(base).prompts[0]!;
+    const withNote = analyzeSession([...base, done("t1")]).prompts[0]!;
+    expect(withNote.activeMs).toBe(without.activeMs);
+    expect(withNote.headline).toBe(without.headline);
+  });
+
+  test("a background check in a subagent transcript is resolved by a notification in it", () => {
+    const sub = [prompt("task"), ...edit("s1"), ...bgBash("sb", "st1", "pnpm test"), done("st1")];
+    const main = [prompt("go"), toolUse("ag", "Agent", { description: "d" }), toolResult("ag", "done")];
+    const a = createAnalyzer();
+    for (const l of main) a.push(l);
+    a.addSubagent("ag", sub, { agentId: "a1", description: "d" });
+    expect(a.finish().prompts[0]).toMatchObject({ status: "checked" });
   });
 });

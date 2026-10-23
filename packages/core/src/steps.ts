@@ -39,6 +39,10 @@ export interface CheckRec {
   excerpt: string;
   /** The command was refused or failed without an exit code. */
   notRun: boolean;
+  /** Set only when a task notification resolved the background check. */
+  background?: boolean;
+  /** The background check was stopped or killed (notification); no verdict. */
+  stopped?: boolean;
 }
 
 /** Slim record of one tool call, retained in detail mode. */
@@ -139,7 +143,20 @@ function cap(s: string, max: number): string {
 
 function checkTitle(c: CheckRec): string {
   const what = c.label !== "" ? c.label : oneLine(c.command, CHECK_LABEL_MAX);
-  const outcome = c.passed === true ? "passed" : c.passed === false && c.exitCode === 0 ? "failed (exit code masked)" : c.exitCode !== null ? `failed (exit ${c.exitCode})` : c.notRun ? "did not run" : "no result";
+  const outcome =
+    c.passed === true
+      ? "passed"
+      : c.stopped === true
+        ? "stopped"
+        : c.passed === false && c.exitCode === 0
+          ? "failed (exit code masked)"
+          : c.exitCode !== null
+            ? `failed (exit ${c.exitCode})`
+            : c.passed === false
+              ? "failed"
+              : c.notRun
+                ? "did not run"
+                : "no result";
   return `Run ${what} -> ${outcome}`;
 }
 
@@ -246,7 +263,14 @@ export function buildSteps(actions: readonly ActionRec[], cwd: string | null): {
     const checkRec = g.isCheck ? first.check : null;
     const check: StepCheck | undefined =
       checkRec !== null
-        ? { command: oneLine(checkRec.command, SUMMARY_MAX), exitCode: checkRec.exitCode, passed: checkRec.passed, excerpt: checkRec.excerpt }
+        ? {
+            command: oneLine(checkRec.command, SUMMARY_MAX),
+            exitCode: checkRec.exitCode,
+            passed: checkRec.passed,
+            excerpt: checkRec.excerpt,
+            ...(checkRec.background === true ? { background: true } : {}),
+            ...(checkRec.stopped === true ? { stopped: true } : {}),
+          }
         : undefined;
     let title = checkRec !== null ? checkTitle(checkRec) : mixTitle(g.acts, cwd, g.phase === "fix");
     if (g.acts.some((a) => a.tool === "Agent" && a.analysed !== true)) title += " (partial: subagent activity not analysed)";

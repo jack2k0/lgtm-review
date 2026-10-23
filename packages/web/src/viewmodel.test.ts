@@ -140,6 +140,7 @@ describe("step formatting", () => {
     expect(checkOutcome({ exitCode: 1, passed: false })).toEqual({ text: "exit 1", tone: "fail" });
     expect(checkOutcome({ exitCode: null, passed: false })).toEqual({ text: "failed", tone: "fail" });
     expect(checkOutcome({ exitCode: null, passed: null })).toEqual({ text: "did not run", tone: "none" });
+    expect(checkOutcome({ exitCode: null, passed: null, stopped: true })).toEqual({ text: "stopped", tone: "none" });
   });
   test("labels", () => {
     expect(actionsLabel(1)).toBe("1 action");

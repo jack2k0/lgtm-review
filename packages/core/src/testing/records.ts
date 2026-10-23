@@ -74,4 +74,37 @@ export function bash(id: string, command: string, outcome: { exit?: number; outp
   return out;
 }
 
+/** Background Bash call: the tool_use plus its launch result (`backgroundTaskId`). */
+export function bgBash(id: string, taskId: string, command: string): string[] {
+  return [
+    toolUse(id, "Bash", { command, run_in_background: true }),
+    toolResult(id, `Command running in background with ID: ${taskId}`, { toolUseResult: { stdout: "", stderr: "", interrupted: false, backgroundTaskId: taskId } }),
+  ];
+}
+
+export interface NotificationFields {
+  taskId?: string;
+  toolUseId?: string;
+  status?: string;
+  summary?: string;
+}
+
+/** Text of one `<task-notification>` block (tags in the order Claude Code writes them). */
+export function notificationBlock(f: NotificationFields): string {
+  const parts = ["<task-notification>"];
+  if (f.taskId !== undefined) parts.push(`<task-id>${f.taskId}</task-id>`);
+  if (f.toolUseId !== undefined) parts.push(`<tool-use-id>${f.toolUseId}</tool-use-id>`);
+  parts.push("<output-file>/tmp/tasks/x.output</output-file>");
+  if (f.status !== undefined) parts.push(`<status>${f.status}</status>`);
+  if (f.summary !== undefined) parts.push(`<summary>${f.summary}</summary>`);
+  parts.push("</task-notification>");
+  return parts.join("\n");
+}
+
+/** User record carrying one or more task notifications (string content, non-human origin like the real thing). */
+export function taskNotification(f: NotificationFields | NotificationFields[], extra: Record<string, unknown> = {}): string {
+  const text = (Array.isArray(f) ? f : [f]).map(notificationBlock).join("\n");
+  return rec("user", { message: { role: "user", content: text }, origin: { kind: "task-notification" }, ...extra });
+}
+
 export { rec };

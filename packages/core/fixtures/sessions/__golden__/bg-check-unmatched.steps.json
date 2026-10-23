@@ -1,0 +1,96 @@
+[
+  {
+    "index": 0,
+    "text": "Fix the add function so it adds.",
+    "status": "unchecked",
+    "reason": "check did not complete",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/add.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> no result",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": null,
+          "passed": null,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Anything else?",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:06.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Read 1 file",
+        "startedAt": "2026-01-01T00:00:07.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Read",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:07.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  }
+]

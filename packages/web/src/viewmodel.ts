@@ -189,8 +189,9 @@ export function stepTitle(s: Pick<Step, "n" | "phase" | "title">): string {
 }
 
 /** Outcome of a check: "passed", "exit N" (failed) or "did not run" when there is no usable result. */
-export function checkOutcome(c: Pick<StepCheck, "exitCode" | "passed">): { text: string; tone: "pass" | "fail" | "none" } {
+export function checkOutcome(c: Pick<StepCheck, "exitCode" | "passed" | "stopped">): { text: string; tone: "pass" | "fail" | "none" } {
   if (c.passed === true) return { text: "passed", tone: "pass" };
+  if (c.stopped === true) return { text: "stopped", tone: "none" };
   if (c.exitCode !== null) return { text: `exit ${c.exitCode}`, tone: "fail" };
   if (c.passed === false) return { text: "failed", tone: "fail" };
   return { text: "did not run", tone: "none" };

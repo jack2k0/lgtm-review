@@ -1,0 +1,14 @@
+{
+  "fixture": "bg-check-edit-during",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "note": "an edit made while the background check was running is not covered by its result",
+      "expectedHints": [
+        "unchecked-edit:src/add.js"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "0:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "export const add = (a, b) => a - b;"
+          },
+          {
+            "t": "+",
+            "s": "export const add = (a, b) => a + b;"
+          }
+        ]
+      },
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "export const add = (a, b) => a - b;"
+          },
+          {
+            "t": "+",
+            "s": "export const add = (a, b) => a + b;"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -78,6 +78,8 @@ export type ToolResultEvent = {
   bashEditDiff?: BashEdit[];
   /** The command was started in the background; the exit code is unknown. */
   background: boolean;
+  /** Id of the background task (`toolUseResult.backgroundTaskId`), when the command was started in the background. */
+  backgroundTaskId?: string;
   /** Last ~4 KB of the result text; only set when the result is longer than `text` (which keeps the head). */
   tail?: string;
   /** Raw record timestamp (ISO string) or null when the record has none. */
@@ -86,10 +88,24 @@ export type ToolResultEvent = {
   /** Set for events of a subagent transcript (sidechain parser): the subagent's id. */
   agentId?: string;
 };
+/**
+ * Outcome notification of a background task (`<task-notification>` block in a user record). It is not a prompt.
+ * `status` is lowercased (`""` when absent); `exitCode` is taken from the free-text summary ("... exit code N").
+ * Matching to a check happens in the analyzer (by `toolUseId`, else `taskId`); sequence numbers are assigned there.
+ */
+export type TaskNotificationEvent = {
+  type: "task-notification";
+  taskId?: string;
+  toolUseId?: string;
+  status: string;
+  exitCode: number | null;
+  ts: string | null;
+  line: number;
+};
 export type BoundaryEvent = { type: "boundary"; kind: "compact" | "interrupt" };
 /** Detail mode only: an agent text block (first 400 characters). */
 export type TextEvent = { type: "text"; text: string; agentId?: string };
-export type Event = PromptEvent | ToolUseEvent | ToolResultEvent | BoundaryEvent | TextEvent;
+export type Event = PromptEvent | ToolUseEvent | ToolResultEvent | BoundaryEvent | TextEvent | TaskNotificationEvent;
 
 export interface ParserMeta {
   sessionId: string | null;
@@ -327,6 +343,48 @@ function exitCodeOf(structured: string | undefined, text: string): number | unde
   return n === 0 ? undefined : n;
 }
 
+const NOTIFICATION_SCAN_MAX = 200_000;
+const NOTIFICATIONS_PER_RECORD_MAX = 20;
+const NOTIFICATION_BLOCK_RE = /<task-notification>([\s\S]*?)<\/task-notification>/g;
+const NOTIFICATION_EXIT_RE = /exit code:?\s*(\d+)/i;
+
+function tagValue(block: string, tag: string): string | undefined {
+  const m = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(block);
+  const v = m?.[1]?.trim();
+  return v === undefined || v === "" ? undefined : v;
+}
+
+/** `<task-notification>` blocks of a user message (string content or its text blocks); tags in any order, extras ignored. */
+function notificationsOf(content: unknown, ts: string | null, line: number): TaskNotificationEvent[] {
+  let text = "";
+  if (typeof content === "string") text = content;
+  else if (Array.isArray(content)) {
+    for (const b of content) if (isObj(b) && b.type === "text" && typeof b.text === "string") text += (text === "" ? "" : "\n") + b.text;
+  }
+  if (text.length > NOTIFICATION_SCAN_MAX) text = text.slice(0, NOTIFICATION_SCAN_MAX);
+  if (!text.includes("<task-notification>")) return [];
+  const out: TaskNotificationEvent[] = [];
+  for (const m of text.matchAll(NOTIFICATION_BLOCK_RE)) {
+    if (out.length >= NOTIFICATIONS_PER_RECORD_MAX) break;
+    const block = m[1] ?? "";
+    const taskId = tagValue(block, "task-id");
+    const toolUseId = tagValue(block, "tool-use-id");
+    if (taskId === undefined && toolUseId === undefined) continue;
+    const em = NOTIFICATION_EXIT_RE.exec(tagValue(block, "summary") ?? "");
+    const ev: TaskNotificationEvent = {
+      type: "task-notification",
+      status: (tagValue(block, "status") ?? "").toLowerCase(),
+      exitCode: em?.[1] !== undefined ? Number(em[1]) : null,
+      ts,
+      line,
+    };
+    if (taskId !== undefined) ev.taskId = taskId;
+    if (toolUseId !== undefined) ev.toolUseId = toolUseId;
+    out.push(ev);
+  }
+  return out;
+}
+
 export function createParser(opts: ParserOptions = {}): Parser {
   const detail = opts.detail === true;
   const sidechain = opts.sidechain === true;
@@ -361,6 +419,9 @@ export function createParser(opts: ParserOptions = {}): Parser {
     const content = message.content;
     const blocks = Array.isArray(content) ? content : [];
     const results = blocks.filter((b): b is Record<string, unknown> => isObj(b) && b.type === "tool_result");
+    // Notifications are read before any non-prompt early return below (their records are meta, non-human or
+    // sidechain). In a subagent transcript (`sidechain`) they are emitted too: matching is by id, not by thread.
+    const notes = notificationsOf(content, nonEmptyStr(rec.timestamp) ?? null, lineNo);
 
     if (results.length > 0) {
       const tur = results.length === 1 && isObj(rec.toolUseResult) ? rec.toolUseResult : undefined;
@@ -412,12 +473,19 @@ export function createParser(opts: ParserOptions = {}): Parser {
           }
           const be = parseBashEdits(tur.bashEditDiff, detail);
           if (be !== undefined) ev.bashEditDiff = be;
-          if (tur.backgroundTaskId !== undefined && tur.backgroundTaskId !== null) ev.background = true;
+          if (tur.backgroundTaskId !== undefined && tur.backgroundTaskId !== null) {
+            ev.background = true;
+            const taskId = typeof tur.backgroundTaskId === "number" ? String(tur.backgroundTaskId) : nonEmptyStr(tur.backgroundTaskId);
+            if (taskId !== undefined) ev.backgroundTaskId = taskId;
+          }
         }
         out.push(ev);
       }
+      for (const n of notes) out.push(n);
       return;
     }
+
+    for (const n of notes) out.push(n);
 
     // A subagent transcript has no human prompts: its first user record is the task given by the parent.
     if (sidechain) return;

@@ -1,0 +1,11 @@
+{
+  "fixture": "bg-check-foreground-wins",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "a foreground test passed after the last edit; the older background lint failing later does not override it"
+    }
+  ]
+}
