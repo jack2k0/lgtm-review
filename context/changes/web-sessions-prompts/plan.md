@@ -197,8 +197,8 @@ Streaming analysis from S-01 (20 MB in ~0.3 s); API caches by mtime; the list en
 
 #### Automated
 
-- [ ] 4.1 `pnpm check` green incl. extended smoke
-- [ ] 4.2 Tarball contains dist/web/index.html
+- [x] 4.1 `pnpm check` green incl. extended smoke
+- [x] 4.2 Tarball contains dist/web/index.html
 
 #### Manual
 

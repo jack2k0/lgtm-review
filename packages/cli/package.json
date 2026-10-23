@@ -7,7 +7,7 @@
   "files": ["dist", "README.md", "LICENSE"],
   "engines": { "node": ">=22" },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node ../../scripts/copy-web.mjs",
     "typecheck": "tsc --noEmit",
     "smoke": "node ../../scripts/smoke-pack.mjs",
     "test": "vitest run"

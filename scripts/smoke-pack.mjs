@@ -1,6 +1,6 @@
 // Pack packages/cli, verify tarball contents, run it via npx in isolation.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,11 +48,15 @@ try {
   const entries = execFileSync("tar", ["-tzf", tarball], { encoding: "utf8" })
     .split("\n")
     .filter(Boolean);
-  for (const required of ["package/package.json", "package/dist/cli.js", "package/README.md", "package/LICENSE"]) {
+  for (const required of ["package/package.json", "package/dist/cli.js", "package/README.md", "package/LICENSE", "package/dist/web/index.html"]) {
     if (!entries.includes(required)) fail(`tarball missing ${required}`);
   }
   const bad = entries.filter((e) => e.startsWith("package/src/") || e.includes(".test."));
   if (bad.length) fail(`tarball contains forbidden entries: ${bad.join(", ")}`);
+
+  const size = statSync(tarball).size;
+  if (size >= 2 * 1024 * 1024) fail(`tarball too large: ${size} bytes (limit 2 MB)`);
+  console.log(`smoke ok: tarball ${size} bytes, ${entries.length} entries`);
 
   const pkg = JSON.parse(
     execFileSync("tar", ["-xzOf", tarball, "package/package.json"], { encoding: "utf8" }),
@@ -76,6 +80,19 @@ try {
   const allowed = await fetch(`${url.origin}/api/sessions`, { headers: { "X-Lgtm-Token": token } });
   if (allowed.status !== 200) fail(`/api/sessions with token: expected 200, got ${allowed.status}`);
   console.log("smoke ok: server auth");
+
+  // Bundled UI: index.html and a JS asset with the right Content-Type.
+  const root = await fetch(`${url.origin}/`);
+  if (root.status !== 200) fail(`GET /: expected 200, got ${root.status}`);
+  if (!(root.headers.get("content-type") ?? "").startsWith("text/html")) fail(`GET /: content-type ${root.headers.get("content-type")}`);
+  const html = await root.text();
+  if (!/<html/i.test(html)) fail("GET /: body is not html");
+  const asset = /(?:src|href)="\.?\/?(assets\/[^"]+\.js)"/.exec(html);
+  if (!asset) fail("GET /: no JS asset referenced in index.html");
+  const js = await fetch(`${url.origin}/${asset[1]}`);
+  if (js.status !== 200) fail(`GET /${asset[1]}: expected 200, got ${js.status}`);
+  if (!/javascript/.test(js.headers.get("content-type") ?? "")) fail(`GET /${asset[1]}: content-type ${js.headers.get("content-type")}`);
+  console.log(`smoke ok: UI served (/ and /${asset[1]})`);
 } catch (err) {
   console.error(`smoke FAILED: ${err instanceof Error ? err.message : err}`);
   process.exitCode = 1;
