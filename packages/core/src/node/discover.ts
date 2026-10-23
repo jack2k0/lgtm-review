@@ -8,6 +8,8 @@ export interface SessionFile {
   /** File name without ".jsonl". */
   id: string;
   mtimeMs: number;
+  /** True only when the session was discovered from the local archive. */
+  archived?: true;
 }
 
 export function defaultProjectsDir(): string {
@@ -38,6 +40,58 @@ export async function discoverSessions(dir: string, warnings?: string[]): Promis
     }
   }
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
+ * Discovers all sessions by merging live sessions from `projectDir` with archived sessions
+ * from `archiveDir` (when provided).
+ *
+ * - A session present in the live project dir is read from live (live wins; archive entry dropped).
+ * - A session present only in the archive is returned with `archived: true`.
+ * - If `projectDir` is missing (ENOENT) but `archiveDir` exists, returns the archived sessions without throwing.
+ * - If both directories are missing, throws the ENOENT for `projectDir` (identical to `discoverSessions`).
+ * - Sorted newest first by mtime, then by id.
+ */
+export async function discoverAllSessions(
+  projectDir: string,
+  archiveDir: string | null,
+  warnings?: string[],
+): Promise<SessionFile[]> {
+  let archiveExists = false;
+  let archiveFiles: SessionFile[] = [];
+  if (archiveDir !== null) {
+    try {
+      const st = await stat(archiveDir);
+      if (st.isDirectory()) {
+        archiveExists = true;
+        archiveFiles = await discoverSessions(archiveDir, warnings);
+      }
+    } catch {
+      // Archive directory does not exist or cannot be read
+    }
+  }
+
+  let liveFiles: SessionFile[];
+  try {
+    liveFiles = await discoverSessions(projectDir, warnings);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      if (!archiveExists) {
+        throw err;
+      }
+      liveFiles = [];
+    } else {
+      throw err;
+    }
+  }
+
+  const liveIds = new Set(liveFiles.map((f) => f.id));
+  const archivedOnly = archiveFiles
+    .filter((f) => !liveIds.has(f.id))
+    .map((f) => ({ ...f, archived: true as const }));
+
+  const combined = [...liveFiles, ...archivedOnly];
+  return combined.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 const PKG_SCRIPTS = new Set(["test", "lint", "typecheck", "check", "build"]);

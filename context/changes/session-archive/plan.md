@@ -63,12 +63,12 @@ D7. Security: archive dir path comes only from flag/env/default (never from log 
 ## Progress
 
 ### Phase 1: Core node
-- [ ] 1.1 `archive.ts` copy with tests
-- [ ] 1.2 discovery merge + `archived` marker with tests
+- [x] 1.1 `archive.ts` copy with tests
+- [x] 1.2 discovery merge + `archived` marker with tests
 
 ### Phase 2: CLI + web + docs
-- [ ] 2.1 `--archive` / `--archive-dir` flags, readers use the merge
-- [ ] 2.2 list/API/web marker, README "Archive"
+- [x] 2.1 `--archive` / `--archive-dir` flags, readers use the merge
+- [x] 2.2 list/API/web marker, README "Archive"
 
 ### Phase 3: Docs
 - [ ] 3.1 roadmap, PRD
@@ -81,4 +81,4 @@ D7. Security: archive dir path comes only from flag/env/default (never from log 
 - C4 (F4) `utimes(dest, new Date(src.atimeMs), new Date(src.mtimeMs))` (never raw ms numbers); skip when `dest.size === src.size && dest.mtimeMs >= src.mtimeMs - 1000`.
 - C5 (F5) temp name `${dest}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`, unlinked in `finally` on failure; stale `*.tmp-*` files are ignored by discovery (they do not end in `.jsonl`).
 - C6 (F6) Readers using `discoverAllSessions`: `cli.ts` (list/json/summary/serve), `api.ts`, `export.ts` (`ExportCommand.archiveDir`).
-- C7 (F7) `--archive` excludes `--list --json --summary --export --session --out --force --no-diffs --no-titles --port --no-open`; empty `--archive-dir` -> `lgtm-review: --archive-dir needs a directory path`, exit 2 (same style as other flag errors).
+- C7 (F7) `--archive` excludes `--list --json --summary --export --session --out --force --no-diffs --no-titles --port --no-open`; empty `--archive-dir` -> `lgtm-review: --archive-dir needs a directory path`, exit 1 (same as other flag errors).

@@ -88,6 +88,8 @@ export const SessionAnalysis = z.object({
   startedAt: z.string().nullable(),
   prompts: z.array(PromptAnalysis),
   warnings: z.array(Warning),
+  /** True only when the session was read from the local archive. */
+  archived: z.boolean().optional(),
 });
 export type SessionAnalysis = z.infer<typeof SessionAnalysis>;
 
@@ -116,6 +118,8 @@ export const SessionSummary = z.object({
   inheritedCount: z.number().int().nonnegative().default(0),
   /** Session id that contributed the most inherited prompts (ties broken by ownership order: earliest startedAt, then smallest sessionId). Absent when inheritedCount is 0. */
   forkOf: z.string().optional(),
+  /** True only when the session was read from the local archive. */
+  archived: z.boolean().optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummary>;
 

@@ -2,7 +2,16 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { SessionFile } from "@lgtm/core/node";
-import { discoverSessions, loadRepoScripts, projectDirFor, analyzeFile, defaultProjectsDir } from "@lgtm/core/node";
+import {
+  analyzeFile,
+  archiveDirFor,
+  archiveSessions,
+  defaultArchiveRoot,
+  defaultProjectsDir,
+  discoverAllSessions,
+  loadRepoScripts,
+  projectDirFor,
+} from "@lgtm/core/node";
 import { markInherited } from "@lgtm/core";
 import type { Analysis, SessionAnalysis } from "@lgtm/core";
 import { runExport } from "./export.js";
@@ -15,12 +24,14 @@ const VERSION = "0.0.0";
 
 const HELP = `lgtm-review ${VERSION}
 
-Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>]
+Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>]
 
-Without --list/--json/--summary, starts a local web UI on 127.0.0.1 and prints its URL.
+Without --archive/--list/--json/--summary, starts a local web UI on 127.0.0.1 and prints its URL.
 
   --dir <path>           repository to inspect (default: current directory)
   --projects-dir <path>  Claude Code projects dir (default: ~/.claude/projects)
+  --archive-dir <path>   local archive root (default: $LGTM_REVIEW_ARCHIVE or ~/.lgtm-review/archive)
+  --archive              mirror this repo's Claude Code session logs to the local archive
   --list                 print the sessions in the terminal instead of starting the UI
   --json                 print the analysis as JSON (implies --list)
   --summary              print a markdown review summary of one session (for a PR description)
@@ -36,11 +47,11 @@ Without --list/--json/--summary, starts a local web UI on 127.0.0.1 and prints i
   --help                 print this help
 `;
 
-async function serve(dir: string, projectsDir: string, port: number, noOpen: boolean): Promise<number> {
+async function serve(dir: string, projectsDir: string, archiveDir: string, port: number, noOpen: boolean): Promise<number> {
   const webRoot = join(dirname(fileURLToPath(import.meta.url)), "web");
   let running;
   try {
-    running = await startServer({ dir, projectsDir, webRoot, port });
+    running = await startServer({ dir, projectsDir, archiveDir, webRoot, port });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EADDRINUSE") console.error(`lgtm-review: port ${port} is already in use`);
@@ -95,7 +106,9 @@ async function summary(dir: string, files: SessionFile[], prefix: string | undef
   const sessions: SessionAnalysis[] = [];
   for (const f of files) {
     try {
-      sessions.push(await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` }));
+      const a = await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
+      if (f.archived) a.archived = true;
+      sessions.push(a);
     } catch (err) {
       if (pool.includes(f)) console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
     }
@@ -118,6 +131,8 @@ async function main(): Promise<number> {
       options: {
         dir: { type: "string" },
         "projects-dir": { type: "string" },
+        "archive-dir": { type: "string" },
+        archive: { type: "boolean" },
         json: { type: "boolean" },
         list: { type: "boolean" },
         summary: { type: "boolean" },
@@ -147,6 +162,11 @@ async function main(): Promise<number> {
     return 0;
   }
 
+  if (values["archive-dir"] === "") {
+    console.error("lgtm-review: --archive-dir needs a directory path");
+    return 1;
+  }
+
   let port = 0;
   if (values.port !== undefined) {
     port = /^\d{1,5}$/.test(values.port) ? Number(values.port) : NaN;
@@ -154,6 +174,27 @@ async function main(): Promise<number> {
       console.error(`lgtm-review: invalid --port "${values.port}" (expected 0-65535)`);
       return 1;
     }
+  }
+
+  const archiving = values.archive === true;
+  if (
+    archiving &&
+    (values.list ||
+      values.json ||
+      values.summary ||
+      values.export !== undefined ||
+      values.session !== undefined ||
+      values.out !== undefined ||
+      values.force ||
+      values["no-diffs"] ||
+      values["no-titles"] ||
+      values.port !== undefined ||
+      values["no-open"])
+  ) {
+    console.error(
+      "lgtm-review: --archive cannot be combined with --list, --json, --summary, --export, --session, --out, --force, --no-diffs, --no-titles, --port or --no-open",
+    );
+    return 1;
   }
 
   const exporting = values.export !== undefined;
@@ -187,10 +228,30 @@ async function main(): Promise<number> {
   }
 
   const dir = resolve(values.dir ?? process.cwd());
+  const projectsDir = values["projects-dir"] ?? defaultProjectsDir();
+  const projectDir = projectDirFor(dir, projectsDir);
+  const archiveRoot = values["archive-dir"] ?? defaultArchiveRoot(process.env);
+  const archiveDir = archiveDirFor(projectDir, archiveRoot);
+
+  if (archiving) {
+    let res;
+    try {
+      res = await archiveSessions(projectDir, archiveDir);
+    } catch (err) {
+      console.error(`lgtm-review: cannot read ${projectDir}: ${err instanceof Error ? err.message : err}`);
+      return 1;
+    }
+    const mb = (res.bytes / (1024 * 1024)).toFixed(1);
+    for (const w of res.warnings) console.error(`warning: ${w}`);
+    console.log(`archived ${res.copied} new or updated, ${res.unchanged} unchanged (${mb} MB) -> ${archiveDir}`);
+    return 0;
+  }
+
   if (exporting) {
     return runExport({
       dir,
-      projectsDir: values["projects-dir"] ?? defaultProjectsDir(),
+      projectsDir,
+      archiveDir,
       prefix: values.export!,
       ...(values.out !== undefined ? { out: values.out } : {}),
       force: values.force === true,
@@ -198,13 +259,12 @@ async function main(): Promise<number> {
       titles: values["no-titles"] !== true,
     });
   }
-  if (!values.list && !values.json && !values.summary) return serve(dir, values["projects-dir"] ?? defaultProjectsDir(), port, values["no-open"] === true);
+  if (!values.list && !values.json && !values.summary) return serve(dir, projectsDir, archiveDir, port, values["no-open"] === true);
 
-  const projectDir = projectDirFor(dir, values["projects-dir"] ?? defaultProjectsDir());
   const discoveryWarnings: string[] = [];
   let files: SessionFile[];
   try {
-    files = await discoverSessions(projectDir, discoveryWarnings);
+    files = await discoverAllSessions(projectDir, archiveDir, discoveryWarnings);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT") files = [];
@@ -231,7 +291,9 @@ async function main(): Promise<number> {
   const analysed: SessionAnalysis[] = [];
   for (const f of files) {
     try {
-      analysed.push(await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` }));
+      const a = await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
+      if (f.archived) a.archived = true;
+      analysed.push(a);
     } catch (err) {
       console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
     }

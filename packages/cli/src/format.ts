@@ -61,8 +61,9 @@ export function formatText(sessions: SessionAnalysis[], opts: FormatOptions): st
       .filter(([, n]) => n > 0)
       .map(([st, n]) => `${n} ${st}`)
       .join(", ");
+    const archived = s.archived ? " (archived)" : "";
     out.push(
-      `${paint(opts, "1", s.sessionId.slice(0, 8))}  ${oneLine(s.title, 60)}  [${s.branch}]  ${s.startedAt ?? "unknown start"}`,
+      `${paint(opts, "1", s.sessionId.slice(0, 8))}  ${oneLine(s.title, 60)}  [${s.branch}]  ${s.startedAt ?? "unknown start"}${archived}`,
     );
     out.push(`  ${own.length} prompt(s)${counts ? `: ${counts}` : ""}${inh ? ` (+${inh.count} inherited from ${inh.from.slice(0, 8)})` : ""}`);
     for (const p of s.prompts) {

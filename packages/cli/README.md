@@ -5,11 +5,13 @@ CLI. Run `npx lgtm-review`.
 ## Usage
 
 ```
-npx lgtm-review [--dir <path>] [--projects-dir <path>] [--list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>]
+npx lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>]
 ```
 
 Without flags the command starts a local web UI for the Claude Code sessions of the current repository, prints its URL and opens it in your browser. Press Ctrl+C to stop.
 
+- `--archive` mirrors new or updated session logs of this repository to a private local archive (see Archive below).
+- `--archive-dir <path>` sets the local archive root directory (default: `$LGTM_REVIEW_ARCHIVE` or `~/.lgtm-review/archive`).
 - `--list` prints the sessions and their prompt statuses in the terminal instead of starting the UI (`--json` prints the analysis as JSON).
 - `--summary` prints a markdown review summary of one session (see below); `--session <id-prefix>` picks the session (default: the newest), `--no-titles` leaves prompt titles out.
 - `--no-open` prints the URL without opening a browser.
@@ -143,6 +145,26 @@ Known gaps (these can stay in the file):
 - Prompt text, file contents in diffs, company and project names, and anything a person would call confidential but that does not look like a secret.
 
 Limits: diffs are included up to 5 MB of text in total (later diffs are left out and the file says so), each step lists at most 200 actions, and a session log larger than 10 MB prints a warning because the export can be large and slow.
+
+## Archive
+
+Claude Code automatically deletes session logs older than `cleanupPeriodDays` (default 30 days). A review from last month then disappears. `lgtm-review --archive` mirrors the current repository's session logs and their subagent transcripts into a private local archive:
+
+```
+npx lgtm-review --archive [--dir <path>] [--projects-dir <path>] [--archive-dir <path>]
+```
+
+- **Where it goes:** `--archive-dir <path>`, else env `LGTM_REVIEW_ARCHIVE`, else `~/.lgtm-review/archive`. Sessions for the repository are stored under `<archiveRoot>/<project-dir-name>/`.
+- **Merged across all readers:** every reader (terminal `--list`, `--json`, `--summary`, `--export`, and the web UI) automatically reads from the archive for sessions whose live logs were deleted. Live sessions take precedence over archived copies. Sessions read from the archive are marked `(archived)` in the terminal list, carry `archived: true` in `--json` and the API, and show an "archived" badge in the web UI.
+- **Privacy:** the archive is a private, unredacted copy of raw logs already stored on your machine (`~/.claude`), with the same trust level. It is never uploaded anywhere. The archive is opt-in: only `lgtm-review --archive` writes to it; all other commands and the local server treat it as read-only.
+- **Automation (optional):** you can mirror sessions automatically via a cron job or git hook:
+  ```bash
+  # Cron example: daily mirror at 18:00
+  0 18 * * * npx lgtm-review --archive --dir /path/to/repo
+
+  # Git hook example: mirror on push (.git/hooks/pre-push)
+  npx lgtm-review --archive || true
+  ```
 
 ## Demo
 
