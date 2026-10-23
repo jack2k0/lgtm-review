@@ -29,7 +29,7 @@ export function SessionList({ data }: { data: SessionsResponse }) {
               <td className="mono">{s.branch || "—"}</td>
               <td className="nowrap">{formatStarted(s.startedAt)}</td>
               <td className="num">
-                {s.promptCount}{s.inheritedCount > 0 ? ` +${s.inheritedCount} inherited` : ""}
+                {s.promptCount}{s.inheritedCount > 0 ? ` + ${s.inheritedCount} inherited` : ""}
               </td>
               <td>
                 <span className="counts">

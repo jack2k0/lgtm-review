@@ -66,6 +66,42 @@ export function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: Pr
   );
 }
 
+const PROMPT_COLUMNS = ["Status", "Prompt", "Reason", "Review", "Time (approx.)", "Files", "Detail"] as const;
+
+function PromptHead() {
+  return (
+    <thead>
+      <tr>
+        {PROMPT_COLUMNS.map((c) => (
+          <th key={c} scope="col">{c}</th>
+        ))}
+      </tr>
+    </thead>
+  );
+}
+
+/** Collapsed-by-default group of prompts inherited from an earlier session; its rows use the same Row as own prompts. */
+function InheritedGroup({ sessionId, rows, from, openIdx, onToggle }: { sessionId: string; rows: readonly PromptAnalysis[]; from: string; openIdx: ReadonlySet<number>; onToggle: (i: number) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="inherited-group">
+      <button type="button" className="inherited-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        {`${plural(rows.length, "inherited prompt")} from ${from.slice(0, 8)}`}
+      </button>
+      {open ? (
+        <table className="prompts">
+          <PromptHead />
+          <tbody>
+            {rows.map((p) => (
+              <Row key={p.index} sessionId={sessionId} p={p} open={openIdx.has(p.index)} onToggle={() => onToggle(p.index)} />
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+    </div>
+  );
+}
+
 export function PromptTable({ session }: { session: SessionAnalysis }) {
   const [limit, setLimit] = useState(PROMPT_PAGE);
   // Keyed by prompt index (append-only in a session file), so rows stay expanded across live refreshes.
@@ -84,7 +120,7 @@ export function PromptTable({ session }: { session: SessionAnalysis }) {
       <div className="session-head">
         <h2>{session.title || session.sessionId}</h2>
         <p className="muted">
-          {session.branch ? <span className="mono">{session.branch}</span> : null} {plural(nonInheritedCount, "prompt")}{inheritedCount > 0 ? ` +${inheritedCount} inherited` : ""}
+          {session.branch ? <span className="mono">{session.branch}</span> : null} {plural(nonInheritedCount, "prompt")}{inheritedCount > 0 ? ` + ${inheritedCount} inherited` : ""}
         </p>
       </div>
       {session.warnings.length > 0 ? (
@@ -106,17 +142,7 @@ export function PromptTable({ session }: { session: SessionAnalysis }) {
         <>
           <TimeLegend />
           <table className="prompts">
-            <thead>
-              <tr>
-                <th scope="col">Status</th>
-                <th scope="col">Prompt</th>
-                <th scope="col">Reason</th>
-                <th scope="col">Review</th>
-                <th scope="col">Time (approx.)</th>
-                <th scope="col">Files</th>
-                <th scope="col">Detail</th>
-              </tr>
-            </thead>
+            <PromptHead />
             <tbody>
               {shown.map((p) => (
                 <Row key={p.index} sessionId={session.sessionId} p={p} open={openIdx.has(p.index)} onToggle={() => toggle(p.index)} />
@@ -130,6 +156,7 @@ export function PromptTable({ session }: { session: SessionAnalysis }) {
               </button>
             </p>
           ) : null}
+          {inheritedCount > 0 ? <InheritedGroup sessionId={session.sessionId} rows={inherited} from={from} openIdx={openIdx} onToggle={toggle} /> : null}
         </>
       )}
     </>

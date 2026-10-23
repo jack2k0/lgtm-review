@@ -191,6 +191,8 @@ tr.detail > td { background: var(--surface); }
 .kind { display: inline-block; width: 1.4em; font-weight: 600; font-family: ui-monospace, monospace; }
 .full-reason { margin: 0 0 4px; overflow-wrap: anywhere; }
 .more { font: inherit; color: var(--link); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
+.inherited-group { margin-top: 12px; }
+.inherited-toggle { font: inherit; color: var(--link); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
 
 .prompt-title { font-size: 18px; overflow-wrap: anywhere; }
 .prompt-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin: 4px 0; }
