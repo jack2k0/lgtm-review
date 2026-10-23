@@ -76,3 +76,11 @@ Three phases: (1) sidechain-aware parser and merge machinery in core with synthe
 
 - [ ] 3.1 `pnpm check` green
 - [ ] 3.2 Real-log audit: overall >= 97%, no regression
+
+## Plan-review amendments (accepted by orchestrator, 2026-10-23)
+
+- H3 (finding 3): the per-prompt cap of 20,000 merged subagent events is applied DURING the merge (stop inserting once reached, `truncated`); perf test also asserts heap delta < 150 MB for 100 files x 1 MB.
+- H5 (finding 5): distinct reason suffixes, each with a test: missing transcript "; subagent activity not analysed", event cap "; subagent transcript truncated (event cap)", text cap "; subagent transcript truncated (text cap)", depth > 3 "; subagent activity not analysed (depth > 3)".
+- H6 (finding 6): an unmatched subagent file (no parent `Agent` call with that `toolUseId`) is NOT attributed to any prompt: Warning "unmatched subagent <agentId>" only; no timestamp-proximity fallback.
+- H8 (finding 8): Phase 3 target is overall status match >= 96% on the owner's real logs and the non-subagent population >= 97.1% (no regression); a mid-phase baseline (fixtures only) is Phase 1's 100% fixture match.
+- Rejected: finding 1 (the merge is a pure function of the ordered inputs; determinism is tested by running twice and by shuffling the order of subagent files), finding 2 (analysis is computed over the whole file at `finish()`; a live poll recomputes from the files, there is no retroactive state; late async activity clamps to the prompt end), finding 4 (a subagent file's mtime changes only when it is appended, which is real new data; 304 is still returned when nothing changed), finding 7 (the existing node-free grep rule already covers this; no new rule).
