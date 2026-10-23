@@ -108,6 +108,18 @@ beforeAll(async () => {
       },
     }),
   );
+  // Tool 2b: Write a scratch note outside the repo (no beat expected)
+  lines.push(
+    rec("assistant", repo, {
+      message: { role: "assistant", content: [{ type: "tool_use", id: "t2b", name: "Write", input: { file_path: join(tmp, "scratch/brief.md"), content: "notes\n" } }] },
+    }),
+  );
+  lines.push(
+    rec("user", repo, {
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t2b", content: "ok" }] },
+      toolUseResult: { type: "create", filePath: join(tmp, "scratch/brief.md"), content: "notes\n", structuredPatch: [] },
+    }),
+  );
   // Tool 3: Bash test
   lines.push(
     rec("assistant", repo, {

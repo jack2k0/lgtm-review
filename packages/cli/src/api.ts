@@ -364,7 +364,8 @@ export function createApi(opts: ServerOptions): ApiHandler {
 
       const mappedSteps = promptDetail.steps.map((s) => ({
         ...s,
-        files: s.files.map((p) => toRepoRelative(p, [opts.dir, root]) ?? p),
+        // Files outside --dir (scratch notes, briefs) are not part of the change shown on the map.
+        files: s.files.map((p) => toRepoRelative(p, [opts.dir, root])).filter((p): p is string => p !== null),
       }));
 
       const diffsCallback = (path: string) => {
