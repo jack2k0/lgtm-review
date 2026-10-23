@@ -1,7 +1,7 @@
 ---
 change_id: status-accuracy
 title: Improve status accuracy on real session logs (audit-driven)
-status: planned
+status: implemented
 created: 2026-10-23
 updated: 2026-10-23
 archived_at: null
