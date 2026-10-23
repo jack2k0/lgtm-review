@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { analyzeFile, analyzeFileDetail, discoverSessions, loadRepoScripts, projectDirFor, type SessionFile } from "@lgtm/core/node";
 import type { Analyzer, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
 import { sortSessions } from "./format.js";
-import { sendJson, type ApiHandler } from "./http.js";
+import { etagFor, ifNoneMatch, sendJson, sendNotModified, type ApiHandler } from "./http.js";
 import type { ServerOptions } from "./server.js";
 
 export function summarize(s: SessionAnalysis): SessionSummary {
@@ -142,6 +142,35 @@ export function createApi(opts: ServerOptions): ApiHandler {
     }
   }
 
+  /** `path:mtime:size` from one `stat`, or null when the file is gone. Cheap: no reading, no analysis. */
+  async function versionOf(f: SessionFile): Promise<string | null> {
+    try {
+      const st = await stat(f.path);
+      return `${f.path}:${st.mtimeMs}:${st.size}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Sends a 200 with `etag`, or a 304 when `If-None-Match` matches (`*` too: the caller has produced the body,
+   * so the resource exists).
+   */
+  function reply(req: IncomingMessage, res: ServerResponse, etag: string, body: unknown): void {
+    if (ifNoneMatch(req.headers["if-none-match"], etag)) sendNotModified(res, etag);
+    else sendJson(req, res, 200, body, etag);
+  }
+
+  /**
+   * Early 304 before any analysis: only for a concrete tag (it was issued for this very resource and file state).
+   * `*` is deliberately not handled here; it needs proof that the resource exists.
+   */
+  function notModifiedEarly(req: IncomingMessage, res: ServerResponse, etag: string): boolean {
+    if (!ifNoneMatch(req.headers["if-none-match"], etag, false)) return false;
+    sendNotModified(res, etag);
+    return true;
+  }
+
   /** `/prompts/:index` and `/prompts/:index/diff?path=`. `path` is only ever compared with the prompt's own file list. */
   async function promptRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, rawIndex: string, isDiff: boolean): Promise<boolean> {
     if (!INDEX_RE.test(rawIndex)) {
@@ -158,19 +187,22 @@ export function createApi(opts: ServerOptions): ApiHandler {
       }
       wanted = p.value;
     }
+    const version = file ? await versionOf(file) : null;
+    const etag = version === null ? null : etagFor(`${isDiff ? "diff" : "prompt"}\0${version}\0${index}\0${wanted ?? ""}`);
+    if (file && etag && notModifiedEarly(req, res, etag)) return true;
     const d = file ? await detailFor(file) : null;
     const prompt = d?.analysis.prompts[index];
     if (!d || !prompt) return false;
     if (wanted === undefined) {
       const detail = d.details[index];
       if (!detail) return false;
-      sendJson(req, res, 200, detail);
+      reply(req, res, etag!, detail);
       return true;
     }
     const known = prompt.files.find((f) => f.path.replaceAll("\\", "/") === wanted);
     const diff = known ? d.analyzer.diffFor(index, known.path) : null;
     if (!diff) return false;
-    sendJson(req, res, 200, diff);
+    reply(req, res, etag!, diff);
     return true;
   }
 
@@ -181,12 +213,19 @@ export function createApi(opts: ServerOptions): ApiHandler {
     try {
       const files = await discover();
       if (match[1] === undefined) {
+        const versions: string[] = [];
+        for (const f of files) {
+          const v = await versionOf(f); // a file that vanished since discovery is skipped
+          if (v !== null) versions.push(v);
+        }
+        const etag = etagFor(`list\0${versions.join("\0")}`);
+        if (notModifiedEarly(req, res, etag)) return true;
         const sessions: SessionAnalysis[] = [];
         for (const f of files) {
           const a = await analysisFor(f); // sequential on purpose
           if (a) sessions.push(a);
         }
-        sendJson(req, res, 200, { dir: opts.dir, sessions: sortSessions(sessions).map(summarize) });
+        reply(req, res, etag, { dir: opts.dir, sessions: sortSessions(sessions).map(summarize) });
         return true;
       }
       let id: string;
@@ -198,9 +237,13 @@ export function createApi(opts: ServerOptions): ApiHandler {
       // The id is only ever compared against the discovered list; it never becomes a path.
       const file = files.find((f) => f.id === id);
       if (match[2] !== undefined) return await promptRoute(req, res, file, match[2], match[3] !== undefined);
-      const analysis = file ? await analysisFor(file) : null;
+      const version = file ? await versionOf(file) : null;
+      if (!file || version === null) return false;
+      const etag = etagFor(`session\0${version}`);
+      if (notModifiedEarly(req, res, etag)) return true;
+      const analysis = await analysisFor(file);
       if (!analysis) return false;
-      sendJson(req, res, 200, analysis);
+      reply(req, res, etag, analysis);
       return true;
     } catch {
       sendJson(req, res, 500, { error: "internal error" });

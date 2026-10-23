@@ -55,7 +55,7 @@ describe("GET /api/sessions", () => {
   test("summaries for every fixture session, no prompts", async () => {
     const r = await get(srv, "/api/sessions");
     expect(r.status).toBe(200);
-    expect(r.headers["cache-control"]).toBe("no-store");
+    expect(r.headers["cache-control"]).toBe("no-cache, private");
     expect(r.headers["content-type"]).toBe("application/json; charset=utf-8");
     expect(SessionsResponse.parse(r.json).dir).toBe(PROJECT);
     expect(r.json.dir).toBe(PROJECT);
@@ -133,7 +133,7 @@ describe("GET /api/sessions/:id/prompts/:index", () => {
       for (const p of full.prompts) {
         const r = await get(srv, `/api/sessions/${id}/prompts/${p.index}`);
         expect(r.status, `${id}#${p.index}`).toBe(200);
-        expect(r.headers["cache-control"]).toBe("no-store");
+        expect(r.headers["cache-control"]).toBe("no-cache, private");
         const d = PromptDetail.parse(r.json);
         expect(d.index).toBe(p.index);
         expect(d.status).toBe(p.status);
@@ -185,7 +185,7 @@ describe("GET /api/sessions/:id/prompts/:index/diff?path=", () => {
         for (const f of p.files) {
           const r = await get(srv, `/api/sessions/${id}/prompts/${p.index}/diff?path=${enc(f.path)}`);
           expect(r.status, `${id}#${p.index} ${f.path}`).toBe(200);
-          expect(r.headers["cache-control"]).toBe("no-store");
+          expect(r.headers["cache-control"]).toBe("no-cache, private");
           const d = FileDiff.parse(r.json);
           expect(d.path).toBe(f.path);
           expect(d.kind).toBe(f.kind);

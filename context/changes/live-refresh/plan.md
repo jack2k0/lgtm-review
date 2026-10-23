@@ -59,7 +59,7 @@ Two phases: (1) server conditional requests with tests; (2) web live polling, UI
 
 ### Phase 1: Server conditional requests
 
-- [ ] 1.1 `pnpm check` green incl. conditional-request tests and perf limits
+- [x] 1.1 `pnpm check` green incl. conditional-request tests and perf limits
 
 ### Phase 2: Web live polling
 
