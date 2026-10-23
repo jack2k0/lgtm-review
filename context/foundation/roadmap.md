@@ -121,7 +121,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** review-hints
 - **PRD refs:** FR-009, FR-010 (PRD v2 extension)
 - **Prerequisites:** S-03
-- **Status:** in progress (planned 2026-10-23, orchestrator decision)
+- **Status:** done
 
 ## Backlog Handoff
 

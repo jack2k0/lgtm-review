@@ -1,7 +1,7 @@
 # ORCHESTRATION state
 
 ## Faza łańcucha
-Etap A zakończony. MVP KOMPLETNE: F-01, S-01, S-02, S-03 zmergowane lokalnie na main i zarchiwizowane (2026-10-23). Nic nie wypchnięte. Czeka na właściciela: push/remote, nazwa/trademark, kredyt autora pomysłu, publikacja npm; slice'y post-MVP (S-04..S-10) są zaparkowane do czasu rozszerzenia PRD.
+Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) zmergowane: F-01, S-01, S-02, S-03 zmergowane lokalnie na main i zarchiwizowane (2026-10-23). Nic nie wypchnięte. Czeka na właściciela: push/remote, nazwa/trademark, kredyt autora pomysłu, publikacja npm; PRD v2 dodaje FR-009/010 (zrobione w S-05). Zaparkowane: S-04 import map, S-06 eksport HTML, S-07 Play the change, S-08 LLM, S-09 Python, S-10 watch (wymagają decyzji produktowych/rozszerzenia PRD). Procedura: plan Opus -> plan-review agy -> impl Sonnet -> weryfikacja Opus.
 
 ## Decyzje właściciela (2026-10-23)
 - Nazwa projektu/pakietu npm: `lgtm-review` (wolne na npm 2026-10-23; GitHub/znak towarowy do sprawdzenia przed publikacją). Hasło robocze: "Earn your LGTM."
