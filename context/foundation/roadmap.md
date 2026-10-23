@@ -162,7 +162,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** fork-dedupe
 - **PRD refs:** FR-001, FR-002 (accuracy of status counts); audit 2026-10-23: 15 of 109 rows (13.8%) were fork duplicates
 - **Prerequisites:** S-03
-- **Status:** in progress (planned 2026-10-23, orchestrator decision; implemented via Agy)
+- **Status:** done (2026-10-23; 2A Sonnet subagent, 2B OpenCode+Haiku)
 
 ## Backlog Handoff
 
