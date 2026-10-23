@@ -1,10 +1,10 @@
 ---
 change_id: play-the-change
 title: Play the change — step-by-step replay of a prompt on the import map
-status: planned
+status: done
 created: 2026-10-23
 updated: 2026-10-23
-archived_at: null
+archived_at: 2026-10-23
 ---
 
 ## Notes

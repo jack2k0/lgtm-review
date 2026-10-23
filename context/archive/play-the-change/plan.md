@@ -97,7 +97,7 @@ D7. Web:
 - [x] 3.2 Legend counts, new-edge style, play link + tests
 
 ### Phase 4: Docs
-- [ ] 4.1 README, PRD, roadmap
+- [x] 4.1 README, PRD, roadmap
 
 ## Proposed PRD addition
 

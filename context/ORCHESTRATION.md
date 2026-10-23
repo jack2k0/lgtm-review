@@ -19,7 +19,7 @@ Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-li
 - Uwagi do F-01: create-turbo stawia przykład Next.js, wymienić na core/cli/web; fixture'y w packages/core albo w turbo inputs; LICENSE+README w packages/cli; smoke test `pnpm pack` + npx w `pnpm check`; schemat Story eksportowany bez importów node:.
 
 ## Aktywne slice'y / worktree
-- S-07 play-the-change (2026-10-23, właściciel: ok): plan Opus, plan-review Agy (4 major/5 minor -> B1-B9, 9c95cd4). Worktree `../lgtm-review-play`, gałąź `change/play-the-change`. Faza 1 (core) -> Agy. Potem 2 (cli), 3 (web), 4 (docs, Opus).
+- S-10 demo-page (2026-10-23): OpenCode w1:pP (Big Pickle; pJ ma Nemotron), worktree `../lgtm-review-demo`, gałąź `change/demo-page`; syntetyczna sesja -> `--export` -> docs/demo/index.html.
 - S-09 walidacja na wdAir (subagent Sonnet, read-only): ekstraktor+resolver vs Python ast 2908/2908 krawędzi, 0 FP/0 FN; luka: zagnieżdżone projekty (vendor/letsfg) -> fix py-roots (OpenCode pQ, 6528775, zmergowany, zweryfikowany: 21/21 importów letsfg rozwiązanych).
 
 ## Bramki
@@ -38,6 +38,8 @@ Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-li
 
 - S-09 python-map (2026-10-23): plan Opus, plan-review Agy (5 major/5 minor -> A1-A7), faza 1 core + faza 2 cli/web: Agy (Gemini 3.8 Flash medium), 0 poprawek; faza 3 docs Opus (README Import map, PRD FR-013, roadmap). pnpm check zielone na main (35a559b + docs). Znane drobne ograniczenie: `# """` w komentarzu może przesłonić importy (regex, zgodnie z non-goals).
 - chore perf-split (2026-10-23, OpenCode pQ Big Pickle, 0 poprawek): perf testy osobno, sekwencyjnie w `pnpm check`.
+
+- S-07 play-the-change ZMERGOWANE (e0592cd + docs): plan Opus, plan-review Agy (B1-B9), fazy 1-3 Agy (0 poprawek), poprawki Opus: deterministyczne sortowanie, brak beatów dla plików spoza --dir, komunikat o obcięciu. Zweryfikowane na wdAir (play ~0.55 s; mapa na zimno 1.7 s przez detailFor 84 MB logu). UI nie oglądane w przeglądarce.
 
 ## Notatki
 - Repo ma remote `origin` (github.com/jack2k0/lgtm-review). Push main 426a7f4 za zgodą właściciela (2026-10-23); kolejne pushe tylko na polecenie.

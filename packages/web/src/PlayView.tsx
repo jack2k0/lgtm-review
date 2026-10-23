@@ -198,6 +198,7 @@ export function PlayView({ sessionId, map, play, initialBeat = 1, initialPlaying
           </span>
           <span className="play-text">{currentBeat?.text ?? "No beats"}</span>
           {currentBeat?.detail ? <p className="play-detail">{currentBeat.detail}</p> : null}
+          {play.truncated ? <p className="muted">Only the first {totalBeats} beats are shown.</p> : null}
         </div>
       </div>
       <MapView sessionId={sessionId} map={map} focus={focus} />

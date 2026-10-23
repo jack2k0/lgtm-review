@@ -40,6 +40,16 @@ The **Map** view (per session or per prompt) shows the changed source files and 
 - **TS/JS**: ESM `import`/`export … from`, literal `import()` and `require()`; relative paths and `tsconfig` `paths` aliases.
 - **Python**: `import a.b` and `from a import b` (relative imports too), resolved to `.py` files or `__init__.py` under the repository root, `src/` and every directory that contains a `manage.py`. Packages outside the repository (stdlib, virtualenv) are not shown. In a Django project each app is its own layer (`backend/shop`, `backend/core`).
 - Extraction is a regular-expression scan, not a parser: unusual syntax can produce a missing or an extra edge. `importlib`/`__import__` and computed specifiers are ignored.
+- Imports a session's own edits added are **new** edges (solid, highlighted); the rest are **existing** (grey). The legend counts both. Detection reads the `+` lines of each changed file's diff, so imports added by shell edits without a diff are shown as existing.
+
+## Play the change
+
+A prompt's map has a **▶ Play the change** link (only for prompts of this session that edited files or ran checks). It replays the prompt as a sequence of beats, `3 / 9`: each beat highlights the files and imports it is about and dims the rest.
+
+- Beats follow the order in which files were first edited: `Created cart.test.ts (+40)`, `Edited cart.ts (+3 -1)`, `views.py now imports models.py`. A file edited again while fixing a failed check gets a `Fix: edited …` beat. Every check is a beat: `pnpm vitest run -> failed`, with the first failing lines.
+- Files outside `--dir` (scratch notes, plans) are left out. At most 60 beats per prompt; the view says when more were cut.
+- Controls: `‹` / `›`, **Play**/**Pause** (a beat every 2.5 s), **Done** (back to the map). Keyboard: `←` `→`, `Space`, `Escape`. Autoplay does not start when the system asks for reduced motion.
+- Captions are templates, not an LLM. API: `GET /api/sessions/<id>/prompts/<index>/play` (token required, ETag/304 like the other routes).
 
 ## Live
 

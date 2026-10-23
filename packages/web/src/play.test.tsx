@@ -215,6 +215,14 @@ describe("PlayView static rendering", () => {
     expect(html).toContain(">Done</button>");
   });
 
+  test("says when beats were cut", () => {
+    const play = makePlay([{ n: 1 }]);
+    const cut = renderToStaticMarkup(<PlayView sessionId="s" map={makeMap()} play={{ ...play, truncated: true }} initialPlaying={false} />);
+    expect(cut).toContain("Only the first 1 beats are shown.");
+    const full = renderToStaticMarkup(<PlayView sessionId="s" map={makeMap()} play={play} initialPlaying={false} />);
+    expect(full).not.toContain("Only the first");
+  });
+
   test("beat 1 focuses src/a.ts and dims non-focused elements", () => {
     const map = makeMap({
       nodes: [

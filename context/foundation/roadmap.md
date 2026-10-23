@@ -204,7 +204,6 @@ Reserved IDs follow `docs/PROPOSAL.md` §17 so existing references (S-08, S-09) 
 
 - **S-04: Isometric import map** — Why parked: PRD §Non-Goals; reduced 2D version moved to active section (S-04), isometric stays parked.
 - **Local archive (FR-008, second half)** — Why parked: only the export half shipped in S-06.
-- **S-07: "Play the change"** — Why parked: PRD §Non-Goals (after MVP, v0.2).
 - **S-08: LLM layer (titles and captions; default model decided in its plan)** — Why parked: PRD §Non-Goals; MVP titles come from templates and prompt text.
 - **S-10 (rest): demo page** — Why parked: not in PRD; live refresh was split off as its own slice, markdown summary shipped in S-05.
 - **Agents other than Claude Code** — Why parked: PRD §Non-Goals.
@@ -214,5 +213,6 @@ Reserved IDs follow `docs/PROPOSAL.md` §17 so existing references (S-08, S-09) 
 
 ## Done
 
+- **S-07: Play the change (template captions, new-import edges)** — FR-014; done 2026-10-23 (`context/archive/play-the-change/`).
 - **S-09: Python imports in the import map (+ Django layers and hints)** — FR-013; done 2026-10-23 (`context/archive/python-map/`).
 
