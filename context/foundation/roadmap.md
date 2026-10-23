@@ -164,6 +164,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Prerequisites:** S-03
 - **Status:** done (2026-10-23; 2A Sonnet subagent, 2B OpenCode+Haiku)
 
+### S-14: Background checks resolved from task notifications (v0.2)
+
+- **Outcome:** A check started with `run_in_background` is no longer stuck as "check did not complete": its later `<task-notification>` (matched by tool-use id or background task id) supplies completion and exit code, so the prompt that issued it gets checked/failing like a foreground check. Audit 2026-10-23: 57 background checks by ground truth, 26 seen; `gh run watch`/`verify` stayed "incomplete".
+- **Change ID:** bg-checks
+- **PRD refs:** FR-002 (status accuracy); Success Criterion status match >= 95%
+- **Prerequisites:** S-11
+- **Status:** planned (2026-10-23, orchestrator decision)
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
