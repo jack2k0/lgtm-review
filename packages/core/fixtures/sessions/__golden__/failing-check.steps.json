@@ -8,6 +8,8 @@
     "startedAt": "2026-01-01T00:00:01.000Z",
     "activeMs": 4000,
     "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,

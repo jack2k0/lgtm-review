@@ -70,7 +70,7 @@ describe("DiffView markup", () => {
 
 describe("links into the diff", () => {
   const step = { n: 1, phase: "write" as const, title: "Edit", startedAt: null, durationMs: 0, quotes: [], actions: [], files: ["/repo/src/a b.ts", "/repo/lib/c.ts"] };
-  const detail = { index: 0, text: "t", status: "unchecked" as const, reason: "r", headline: "h", startedAt: null, activeMs: 0, truncated: false, steps: [step] };
+  const detail = { index: 0, text: "t", status: "unchecked" as const, reason: "r", headline: "h", startedAt: null, activeMs: 0, truncated: false, hints: [], recommendation: "skim" as const, steps: [step] };
   test("step chips show the short path and open the exact path", () => {
     const html = renderToStaticMarkup(<StepsView sessionId="s" detail={detail} onOpenFile={() => {}} />);
     expect(html).toContain(">src/a b.ts<");
@@ -81,7 +81,7 @@ describe("links into the diff", () => {
     const session = {
       sessionId: "s", title: "T", branch: null, startedAt: null, warnings: [],
       prompts: [{
-        index: 3, uuid: "u", text: "p", status: "unchecked", reason: "r", partial: false, activeMs: 0, headline: "h",
+        index: 3, uuid: "u", text: "p", status: "unchecked", reason: "r", partial: false, activeMs: 0, headline: "h", hints: [], recommendation: "skim",
         timeSplit: { readMs: 0, writeMs: 0, checkMs: 0, fixMs: 0 },
         files: [{ path: "/repo/src/a b.ts", kind: "M", added: 1, removed: 0, maybeIncomplete: false }],
       }],

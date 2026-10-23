@@ -8,6 +8,15 @@
     "startedAt": "2026-01-01T00:00:01.000Z",
     "activeMs": 6000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/add.js",
+        "reason": "edited after the last completed check"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,

@@ -80,7 +80,7 @@ Three phases: (1) core hints + recommendation with goldens, (2) web display, (3)
 
 ### Phase 2: Web display
 
-- [ ] 2.1 `pnpm check` green incl. scans and contrast
+- [x] 2.1 `pnpm check` green incl. scans and contrast (PromptDetail also carries hints and recommendation, so a Steps deep link needs no session data)
 - [ ] 2.2 Screenshots reviewed
 
 ### Phase 3: CLI summary

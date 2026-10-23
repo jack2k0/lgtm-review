@@ -8,6 +8,27 @@
     "startedAt": "2026-01-01T00:00:01.000Z",
     "activeMs": 8000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "sensitive-path",
+        "severity": "high",
+        "path": "/home/user/project/src/auth/session.js",
+        "reason": "path matches sensitive pattern \"auth\""
+      },
+      {
+        "rule": "dependency-change",
+        "severity": "warn",
+        "path": "/home/user/project/package.json",
+        "reason": "dependency manifest or lockfile edited"
+      },
+      {
+        "rule": "config-change",
+        "severity": "info",
+        "path": "/home/user/project/tsconfig.json",
+        "reason": "build, lint, TypeScript or CI configuration edited"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,
@@ -76,6 +97,39 @@
     "startedAt": "2026-01-01T00:00:10.000Z",
     "activeMs": 4000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "sensitive-path",
+        "severity": "high",
+        "path": "/home/user/project/.github/workflows/ci.yml",
+        "reason": "path matches sensitive pattern \".github/workflows\""
+      },
+      {
+        "rule": "sensitive-path",
+        "severity": "high",
+        "path": "/home/user/project/Dockerfile",
+        "reason": "path matches sensitive pattern \"Dockerfile\""
+      },
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/.github/workflows/ci.yml",
+        "reason": "edited and no check completed in this prompt"
+      },
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/Dockerfile",
+        "reason": "edited and no check completed in this prompt"
+      },
+      {
+        "rule": "config-change",
+        "severity": "info",
+        "path": "/home/user/project/.github/workflows/ci.yml",
+        "reason": "build, lint, TypeScript or CI configuration edited"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,
@@ -114,6 +168,8 @@
     "startedAt": "2026-01-01T00:00:15.000Z",
     "activeMs": 2000,
     "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
     "steps": [
       {
         "n": 1,
@@ -143,6 +199,27 @@
     "startedAt": "2026-01-01T00:00:18.000Z",
     "activeMs": 8000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "public-surface",
+        "severity": "warn",
+        "path": "/home/user/project/openapi.yaml",
+        "reason": "public surface edited (schema or OpenAPI)"
+      },
+      {
+        "rule": "public-surface",
+        "severity": "warn",
+        "path": "/home/user/project/src/index.ts",
+        "reason": "public surface edited (package entry point)"
+      },
+      {
+        "rule": "public-surface",
+        "severity": "warn",
+        "path": "/home/user/project/src/routes/users.ts",
+        "reason": "public surface edited (routes or API)"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,

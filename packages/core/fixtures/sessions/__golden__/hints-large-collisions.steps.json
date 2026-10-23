@@ -8,6 +8,15 @@
     "startedAt": "2026-01-01T00:00:01.000Z",
     "activeMs": 4000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "large-change",
+        "severity": "info",
+        "path": "/home/user/project/src/parser.js",
+        "reason": "350 changed lines (limit 300)"
+      }
+    ],
+    "recommendation": "skim",
     "steps": [
       {
         "n": 1,
@@ -62,6 +71,8 @@
     "startedAt": "2026-01-01T00:00:06.000Z",
     "activeMs": 12000,
     "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
     "steps": [
       {
         "n": 1,
@@ -144,6 +155,21 @@
     "startedAt": "2026-01-01T00:00:19.000Z",
     "activeMs": 6000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "sensitive-path",
+        "severity": "high",
+        "path": "/home/user/project/src/AuthService.ts",
+        "reason": "path matches sensitive pattern \"auth\""
+      },
+      {
+        "rule": "sensitive-path",
+        "severity": "high",
+        "path": "/home/user/project/src/tokens/refresh-token.ts",
+        "reason": "path matches sensitive pattern \"tokens\""
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,
@@ -205,6 +231,15 @@
     "startedAt": "2026-01-01T00:00:26.000Z",
     "activeMs": 4000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "assertions-removed",
+        "severity": "high",
+        "path": "/home/user/project/tests/x.test.ts",
+        "reason": "3 assertion lines removed, 0 added"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,
@@ -259,6 +294,27 @@
     "startedAt": "2026-01-01T00:00:31.000Z",
     "activeMs": 8000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "assertions-removed",
+        "severity": "high",
+        "path": "/home/user/project/tests/pay.test.ts",
+        "reason": "2 assertion lines removed, 0 added"
+      },
+      {
+        "rule": "test-modified-during-fix",
+        "severity": "high",
+        "path": "/home/user/project/tests/pay.test.ts",
+        "reason": "test file edited 1 time while fixing a failing check"
+      },
+      {
+        "rule": "test-skipped",
+        "severity": "high",
+        "path": "/home/user/project/tests/pay.test.ts",
+        "reason": "1 skip marker added"
+      }
+    ],
+    "recommendation": "read-all",
     "steps": [
       {
         "n": 1,

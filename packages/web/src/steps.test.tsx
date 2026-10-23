@@ -14,6 +14,8 @@ const detail = (over: Partial<PromptDetail> = {}): PromptDetail => ({
   startedAt: "2026-01-02T03:04:05Z",
   activeMs: 65_000,
   truncated: false,
+  hints: [],
+  recommendation: "skim",
   steps: [
     {
       n: 1,

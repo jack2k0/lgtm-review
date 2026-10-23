@@ -8,6 +8,15 @@
     "startedAt": "2026-01-01T00:00:01.000Z",
     "activeMs": 21400,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "test-modified-during-fix",
+        "severity": "high",
+        "path": "/home/user/project/src/add.test.js",
+        "reason": "test file edited 1 time while fixing a failing check"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,
@@ -165,6 +174,8 @@
     "startedAt": "2026-01-01T00:00:39.400Z",
     "activeMs": 2000,
     "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
     "steps": [
       {
         "n": 1,

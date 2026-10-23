@@ -448,6 +448,8 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           startedAt: p.startedAtMs === null ? null : new Date(p.startedAtMs).toISOString(),
           activeMs: a.activeMs,
           truncated: p.truncated || truncated,
+          hints: a.hints,
+          recommendation: a.recommendation,
           steps,
         };
       });

@@ -273,6 +273,16 @@ describe("prompt detail", () => {
     expect(d.activeMs).toBeGreaterThanOrEqual(0);
   });
 
+  test("carries the hints and recommendation of the analysis", () => {
+    const lines = [prompt("p"), ...edit("e1"), ...bash("b", "pnpm test")];
+    const a = createAnalyzer({ detail: true });
+    for (const l of lines) a.push(l);
+    const analysis = a.finish();
+    const d = a.details()[0]!;
+    expect(d.hints).toEqual(analysis.prompts[0]!.hints);
+    expect(d.recommendation).toBe(analysis.prompts[0]!.recommendation);
+  });
+
   test("is deterministic", () => {
     const lines = [prompt("p"), say("a"), ...read("r1"), ...edit("e1"), ...bash("b", "pnpm test", { exit: 1 })];
     const first = JSON.stringify(run(lines));

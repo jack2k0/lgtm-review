@@ -1,4 +1,4 @@
-import type { PromptAnalysis, SessionSummary, Status, Step, StepCheck, TimeSplit } from "@lgtm/core";
+import type { Hint, PromptAnalysis, Recommendation, SessionSummary, Severity, Status, Step, StepCheck, TimeSplit } from "@lgtm/core";
 
 export const PROMPT_PAGE = 500;
 
@@ -249,3 +249,67 @@ export function diffCounts(hunks: readonly { lines: readonly { t: "+" | "-" | " 
   else if (l.t === "-") removed++;
   return { added, removed };
 }
+
+const REC_LABELS: Record<Recommendation, string> = { skim: "Skim", "read-flagged": "Read flagged", "read-all": "Read all" };
+/** Text markers (empty, half, full circle) so the recommendation is told apart without color. */
+const REC_MARKERS: Record<Recommendation, string> = { skim: "○", "read-flagged": "◐", "read-all": "●" };
+const REC_HELP: Record<Recommendation, string> = {
+  skim: "Skim: no high-severity hints",
+  "read-flagged": "Read flagged: review the files with hints",
+  "read-all": "Read all: several high-severity kinds of hints",
+};
+
+export function recommendationLabel(r: Recommendation): string {
+  return REC_LABELS[r];
+}
+export function recommendationMarker(r: Recommendation): string {
+  return REC_MARKERS[r];
+}
+export function recommendationHelp(r: Recommendation): string {
+  return REC_HELP[r];
+}
+
+const SEVERITY_RANK: Record<Severity, number> = { high: 0, warn: 1, info: 2 };
+const SEVERITY_LABELS: Record<Severity, string> = { high: "High", warn: "Warn", info: "Info" };
+
+export function severityLabel(s: Severity): string {
+  return SEVERITY_LABELS[s];
+}
+
+/** Hints ordered by severity (high first), then path, then rule; a new array. */
+export function sortHints(hints: readonly Hint[]): Hint[] {
+  return [...hints].sort(
+    (a, b) =>
+      SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
+      (a.path ?? "").localeCompare(b.path ?? "") ||
+      a.rule.localeCompare(b.rule),
+  );
+}
+
+export const WHERE_TO_LOOK_MAX = 5;
+
+/** First `max` hints by severity then path, and how many were left out. */
+export function topHints(hints: readonly Hint[], max = WHERE_TO_LOOK_MAX): { shown: Hint[]; hidden: number } {
+  const sorted = sortHints(hints);
+  return { shown: sorted.slice(0, max), hidden: Math.max(0, sorted.length - max) };
+}
+
+/** Distinct rule names of the hints, in severity order. */
+export function distinctRules(hints: readonly Hint[]): string[] {
+  return [...new Set(sortHints(hints).map((h) => h.rule))];
+}
+
+/** Rule names per file path (hints without a path are left out). */
+export function rulesByPath(hints: readonly Hint[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const h of sortHints(hints)) {
+    if (h.path === null) continue;
+    const list = out.get(h.path) ?? [];
+    if (!list.includes(h.rule)) list.push(h.rule);
+    out.set(h.path, list);
+  }
+  return out;
+}
+
+/** Shown instead of a path for prompt-level hints. */
+export const PROMPT_LEVEL = "(whole prompt)";

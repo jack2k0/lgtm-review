@@ -8,6 +8,8 @@
     "startedAt": "2026-01-01T00:00:01.000Z",
     "activeMs": 4000,
     "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
     "steps": [
       {
         "n": 1,
@@ -62,6 +64,15 @@
     "startedAt": "2026-01-01T00:00:10.000Z",
     "activeMs": 2000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/sub.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,

@@ -1,12 +1,14 @@
 import { useState } from "react";
 import type { PromptAnalysis, SessionAnalysis } from "@lgtm/core";
+import { HintList, ReviewCell, RuleMarkers } from "./Hints";
 import { StatusTag } from "./StatusDot";
 import { TimeBar, TimeLegend } from "./TimeBar";
-import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, plural, routeHref, shortPath, visiblePrompts } from "./viewmodel";
+import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, plural, routeHref, rulesByPath, shortPath, visiblePrompts } from "./viewmodel";
 
 /** Changed files of a prompt; each path links to its diff (the link carries the exact path from the list). */
 export function FileList({ sessionId, p }: { sessionId: string; p: PromptAnalysis }) {
   const paths = p.files.map((f) => f.path);
+  const flagged = rulesByPath(p.hints);
   if (p.files.length === 0) return <p className="muted">No changed files.</p>;
   return (
     <ul className="files">
@@ -16,13 +18,14 @@ export function FileList({ sessionId, p }: { sessionId: string; p: PromptAnalysi
           <a className="mono file-link" href={routeHref({ kind: "diff", id: sessionId, index: p.index, path: f.path })} title={`Open diff of ${f.path}`}>{shortPath(f.path, paths)}</a>{" "}
           +{f.added} -{f.removed}
           {f.maybeIncomplete ? <span className="marker">may be incomplete</span> : null}
+          {flagged.has(f.path) ? <RuleMarkers rules={flagged.get(f.path)!} /> : null}
         </li>
       ))}
     </ul>
   );
 }
 
-function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: PromptAnalysis; open: boolean; onToggle: () => void }) {
+export function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: PromptAnalysis; open: boolean; onToggle: () => void }) {
   const totals = fileTotals(p);
   const markers = incompleteMarkers(p);
   const detailId = `detail-${p.index}`;
@@ -37,6 +40,7 @@ function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: PromptAna
           </button>
         </td>
         <td className="reason"><span className={open ? "" : "clamp"}>{p.reason}</span></td>
+        <td className="review"><ReviewCell rec={p.recommendation} hints={p.hints} /></td>
         <td><TimeBar split={p.timeSplit} headline={p.headline} /></td>
         <td className="nowrap">
           {filesText(totals)}
@@ -51,8 +55,9 @@ function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: PromptAna
       {open ? (
         <tr className="detail" id={detailId}>
           <td />
-          <td colSpan={5}>
+          <td colSpan={6}>
             <p className="full-reason"><strong>Reason:</strong> {p.reason}</p>
+            <HintList hints={p.hints} />
             <FileList sessionId={sessionId} p={p} />
           </td>
         </tr>
@@ -105,6 +110,7 @@ export function PromptTable({ session }: { session: SessionAnalysis }) {
                 <th scope="col">Status</th>
                 <th scope="col">Prompt</th>
                 <th scope="col">Reason</th>
+                <th scope="col">Review</th>
                 <th scope="col">Time (approx.)</th>
                 <th scope="col">Files</th>
                 <th scope="col">Detail</th>

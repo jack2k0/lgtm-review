@@ -175,6 +175,9 @@ export const PromptDetail = z.object({
   activeMs: z.number().int().nonnegative(),
   /** True when steps or actions were dropped because of the retention caps. */
   truncated: z.boolean(),
+  /** Same as `PromptAnalysis.hints`/`recommendation`, so a deep link to the Steps view needs no session data. */
+  hints: z.array(Hint),
+  recommendation: Recommendation,
   steps: z.array(Step),
 });
 export type PromptDetail = z.infer<typeof PromptDetail>;

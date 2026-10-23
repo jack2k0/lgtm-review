@@ -1,11 +1,12 @@
 import type { PromptDetail } from "@lgtm/core";
+import { WhereToLook } from "./Hints";
 import { StepCard } from "./StepCard";
 import { StatusTag } from "./StatusDot";
 import { formatDuration, formatStarted, plural, promptHeading, routeHref, shortPath } from "./viewmodel";
 
 /** Steps of one prompt. The header comes from the same response, so a deep link needs no other request. */
 export function StepsView({ sessionId, detail, onOpenFile }: { sessionId: string; detail: PromptDetail; onOpenFile?: (path: string) => void }) {
-  const allFiles = [...new Set(detail.steps.flatMap((s) => s.files))];
+  const allFiles = [...new Set([...detail.steps.flatMap((s) => s.files), ...detail.hints.flatMap((h) => (h.path === null ? [] : [h.path]))])];
   const pathLabel = (p: string): string => shortPath(p, allFiles);
   return (
     <>
@@ -25,6 +26,7 @@ export function StepsView({ sessionId, detail, onOpenFile }: { sessionId: string
           This prompt is large: some steps or actions beyond the retention limits are not shown.
         </p>
       ) : null}
+      <WhereToLook rec={detail.recommendation} hints={detail.hints} pathLabel={pathLabel} />
       {detail.steps.length === 0 ? (
         <p className="empty">No steps were recorded for this prompt.</p>
       ) : (

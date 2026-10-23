@@ -8,6 +8,21 @@
     "startedAt": "2026-01-01T00:00:01.000Z",
     "activeMs": 8000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "assertions-removed",
+        "severity": "high",
+        "path": "/home/user/project/tests/add.test.ts",
+        "reason": "2 assertion lines removed, 1 added"
+      },
+      {
+        "rule": "test-modified-during-fix",
+        "severity": "high",
+        "path": "/home/user/project/tests/add.test.ts",
+        "reason": "test file edited 1 time while fixing a failing check"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,
@@ -108,6 +123,15 @@
     "startedAt": "2026-01-01T00:00:10.000Z",
     "activeMs": 6000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "test-skipped",
+        "severity": "high",
+        "path": "/home/user/project/tests/net.test.ts",
+        "reason": "1 skip marker added"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,
@@ -169,6 +193,8 @@
     "startedAt": "2026-01-01T00:00:17.000Z",
     "activeMs": 4000,
     "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
     "steps": [
       {
         "n": 1,

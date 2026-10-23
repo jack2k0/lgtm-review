@@ -8,6 +8,8 @@
     "startedAt": "2026-01-01T10:00:00.000Z",
     "activeMs": 18000,
     "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
     "steps": [
       {
         "n": 1,
@@ -79,6 +81,8 @@
     "startedAt": "2026-01-01T10:16:40.000Z",
     "activeMs": 14000,
     "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
     "steps": [
       {
         "n": 1,
@@ -181,6 +185,15 @@
     "startedAt": "2026-01-01T10:33:20.000Z",
     "activeMs": 9000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/add.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,
@@ -235,6 +248,15 @@
     "startedAt": "2026-01-01T10:50:00.000Z",
     "activeMs": 9000,
     "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/add.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
     "steps": [
       {
         "n": 1,
@@ -300,6 +322,8 @@
     "startedAt": "2026-01-01T11:06:40.000Z",
     "activeMs": 6000,
     "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
     "steps": [
       {
         "n": 1,
@@ -371,6 +395,8 @@
     "startedAt": "2026-01-01T11:23:20.000Z",
     "activeMs": 0,
     "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
     "steps": []
   }
 ]
