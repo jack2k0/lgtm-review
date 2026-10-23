@@ -85,8 +85,8 @@ D7. Web:
 ## Progress
 
 ### Phase 1: Core
-- [ ] 1.1 Schema `MapEdge.new`, `PlayBeat`, `PlayResponse`
-- [ ] 1.2 `buildBeats` + tests
+- [x] 1.1 Schema `MapEdge.new`, `PlayBeat`, `PlayResponse`
+- [x] 1.2 `buildBeats` + tests
 
 ### Phase 2: CLI
 - [ ] 2.1 New-edge detection in map build + tests

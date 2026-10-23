@@ -33,6 +33,11 @@ export {
   MapEdge,
   MapLayer,
   ImportMapResponse,
+  PlayBeatKind,
+  PlayBeatFocusEdge,
+  PlayBeatFocus,
+  PlayBeat,
+  PlayResponse,
 } from "./schema.js";
 export { makeHeadline } from "./timing.js";
 export { computeHints, recommend, isTestPath, sensitiveMatch, isManifestPath, isConfigPath, publicSurfaceKind } from "./hints.js";
@@ -76,3 +81,5 @@ export {
   MAP_PAD,
 } from "./map-layout.js";
 export type { MapNodeInput, MapEdgeInput, MapLayout, NeighbourRank, SelectedMapNodes, LayoutImportMapOptions } from "./map-layout.js";
+export { buildBeats, BEATS_MAX } from "./play.js";
+export type { BuildBeatsInput, BuildBeatsResult, DiffsInput } from "./play.js";
