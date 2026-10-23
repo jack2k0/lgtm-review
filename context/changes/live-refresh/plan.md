@@ -65,3 +65,12 @@ Two phases: (1) server conditional requests with tests; (2) web live polling, UI
 
 - [ ] 2.1 `pnpm check` green incl. smoke 200 -> 304
 - [ ] 2.2 Live update observed in a headless browser
+
+## Plan-review amendments (accepted by orchestrator, 2026-10-23)
+
+- E1 (finding 1): clarified: Host/Origin/token validation runs first; no ETag is computed or revealed before it passes; test asserts a 403 carries no `ETag` header.
+- E2 (finding 2): already required (abort in-flight on route change/unmount); add an explicit test of the abort path in the scheduler/client.
+- E5 (finding 5): header value for the four routes is exactly `Cache-Control: no-cache, private`; test asserts it; other routes unchanged.
+- E6 (finding 6): add tests for `If-None-Match` forms: strong tag, `W/"tag"` (matches weakly), list with several tags, `*` (match only when resource exists), non-matching tag.
+- E8 (finding 8): unit test that re-applying fresh data with the same prompt indices/step numbers preserves the expanded sets (view-model level); headless check includes expanding a row before the update and confirming it is still expanded after.
+- Rejected: finding 3 (flicker of the transient "truncated last line" warning is accepted; it is truthful and the next poll corrects it), finding 4 (prompt index and step number are append-only stable within a session file; keys stay index based), finding 7 (stat per session file per poll is cheap at expected scale; revisit if > 200 session files is observed).
