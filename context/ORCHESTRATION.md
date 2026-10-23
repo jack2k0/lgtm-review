@@ -41,3 +41,4 @@ brak
 
 ## Otwarte problemy
 brak
+- S-04 import-map (2026-10-23, STOP: limit): fazy 1 (OpenCode Big Pickle), 2 (Sonnet), 3 (OpenCode, gałąź change/import-map-web) każda osobno zielona; po merge web do change/import-map (worktree ../lgtm-review-import-map) pnpm check CZERWONY (0/2 tasks) - prawdopodobnie konflikt typów/duplikat pól schema (promptIndex/notes dodane równolegle). Do zrobienia: naprawić, pnpm check, merge do main, archiwizacja, audyt realnych logów S-14 (wymaga zgody na odczyt ~/.claude).
