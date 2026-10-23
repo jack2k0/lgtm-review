@@ -105,3 +105,16 @@ D7. Web:
 - **Description**: For a prompt, the developer can replay its change as a sequence of beats on the import map: files created/edited/deleted in first-edit order, imports the prompt added, and check results, each with a template caption and the related nodes highlighted.
 - **Priority**: nice-to-have
 - **Acceptance Criteria**: beats follow first-edit order with Fix re-edits and check results; added imports are distinguished from existing ones on the map; keyboard ←/→/Space/Escape; no autoplay under reduced motion; captions come from templates (no LLM).
+
+## Orchestrator review amendments (Opus, 2026-10-23, from Agy plan-review M1-M9) — override the sections above
+
+- B1 (M1) `diffFor` needs the detail analysis: `mapRoute` (and the play route) get it via the existing `detailFor(file)` LRU and pass `diffFor: (idx, path) => FileDiff | null` into `planImportMap` as an OPTIONAL argument; missing/null diff => no `new` edges for that file (never an error).
+- B2 (M2) `ImportMapResponse.playable: z.boolean().optional()` — true only for a per-prompt map of a non-inherited prompt that has at least one step with files or a check. The web shows the Play link iff `map.playable === true`.
+- B3 (M3) Separate `playCache` (same LRU size as `mapCache`), slot `${id}\0${prompt}`, key = per-prompt map key + `\0play`; `mapCache` holds only `ImportMapResponse`.
+- B4 (M4) Inherited prompts (`inheritedFrom` set): play route -> 404, `playable` false/omitted.
+- B5 (M5) reduced-motion check guarded: `typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches`.
+- B6 (M6) Global Space handler ignores events whose target is a `BUTTON` (native click handles it).
+- B7 (M7) Beat text container `role="status" aria-live="polite"`; buttons `aria-label` "Previous beat" / "Next beat" / "Play" / "Pause" / "Done".
+- B8 (M8) Exact templates: non-fix `Created <file> (+a)`, `Edited <file> (+a -r)`, `Deleted <file>`; fix `Fix: created …`, `Fix: edited …`, `Fix: deleted …`; when the file's prompt diff has no `+`/`-` lines (shell edit, maybeIncomplete) omit the `(+a -r)` suffix.
+- B9 (M9) Pseudo-source for new-edge detection: `+` lines joined with `\n` within a hunk, hunks separated by `\n;\n\n` so the extractors never bridge two hunks.
+- Phase 1 schema work includes `playable` (B2) and `MapEdge.new` (D2).
