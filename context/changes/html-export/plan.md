@@ -67,7 +67,7 @@ Three phases: (1) core redaction module with corpus tests; (2) renderer + CLI fl
 
 ### Phase 1: Core redaction
 
-- [ ] 1.1 `pnpm check` green, node-free grep empty
+- [x] 1.1 `pnpm check` green, node-free grep empty
 
 ### Phase 2: Renderer and CLI
 
