@@ -1,7 +1,7 @@
 ---
 change_id: steps-and-diff
 title: Steps view with raw actions and a unified diff of the agent's recorded edits
-status: planned
+status: implemented
 created: 2026-10-23
 updated: 2026-10-23
 archived_at: null

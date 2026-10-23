@@ -166,7 +166,7 @@ Detail analysis on demand only; caps on retained text; LRU cache of 3 sessions.
 
 #### Manual
 
-- [ ] 1.3 Step goldens reviewed
+- [x] 1.3 Step goldens reviewed
 
 ### Phase 2: Core diffs
 
@@ -177,7 +177,7 @@ Detail analysis on demand only; caps on retained text; LRU cache of 3 sessions.
 
 #### Manual
 
-- [ ] 2.3 Golden diff reviewed
+- [x] 2.3 Golden diff reviewed
 
 ### Phase 3: Server detail API
 
@@ -194,7 +194,7 @@ Detail analysis on demand only; caps on retained text; LRU cache of 3 sessions.
 
 #### Manual
 
-- [ ] 4.2 Steps view reviewed in headless browser
+- [x] 4.2 Steps view reviewed in headless browser
 
 ### Phase 5: Web diff view and end-to-end
 
@@ -205,7 +205,7 @@ Detail analysis on demand only; caps on retained text; LRU cache of 3 sessions.
 
 #### Manual
 
-- [ ] 5.3 Real-session walk-through prompt -> steps -> diff
+- [x] 5.3 Real-session walk-through prompt -> steps -> diff
 
 ## Plan-review amendments (accepted by orchestrator, 2026-10-23)
 
