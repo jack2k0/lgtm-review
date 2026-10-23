@@ -19,7 +19,8 @@ Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-li
 - Uwagi do F-01: create-turbo stawia przykład Next.js, wymienić na core/cli/web; fixture'y w packages/core albo w turbo inputs; LICENSE+README w packages/cli; smoke test `pnpm pack` + npx w `pnpm check`; schemat Story eksportowany bez importów node:.
 
 ## Aktywne slice'y / worktree
-brak
+- S-07 play-the-change (2026-10-23, właściciel: ok): plan Opus, plan-review Agy (4 major/5 minor -> B1-B9, 9c95cd4). Worktree `../lgtm-review-play`, gałąź `change/play-the-change`. Faza 1 (core) -> Agy. Potem 2 (cli), 3 (web), 4 (docs, Opus).
+- S-09 walidacja na wdAir (subagent Sonnet, read-only): ekstraktor+resolver vs Python ast 2908/2908 krawędzi, 0 FP/0 FN; luka: zagnieżdżone projekty (vendor/letsfg) -> fix py-roots (OpenCode pQ, 6528775, zmergowany, zweryfikowany: 21/21 importów letsfg rozwiązanych).
 
 ## Bramki
 - Npm publish: czeka na decyzję właściciela.
