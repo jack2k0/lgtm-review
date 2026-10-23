@@ -32,6 +32,7 @@ brak
 - S-02: plan Opus, plan-review agy, impl Sonnet high/medium (p1-4 + hardening), security review Opus (agy zablokowany filtrem Gemini). Weekly limit trafiony raz, worker wznowiony SendMessage.
 - OpenCode (pane w1:pJ) działa przez `herdr agent prompt w1:pJ "..." --wait` (użyty do plan-review live-refresh; wynik do pliku w scratchpadzie). agy headless: tylko prompt inline.
 - POLECENIE WŁAŚCICIELA (2026-10-23): priorytet Agy (pane w1:p3, ustawiony model Claude Sonnet 4.6 Thinking; ~99% tygodnia na Claude/GPT, ~16% Gemini). Deleguj implementacje i review do Agy przez `herdr agent prompt w1:p3 "..." --wait`; Claude Code = architekt/weryfikacja; Grok tylko krytyczne.
+- STOP na polecenie właściciela (2026-10-23): praca wstrzymana po fazie 1 slice'a S-13 (fork-dedupe). Gałąź `change/fork-dedupe` (worktree `../lgtm-review-fork-dedupe`, commit 7cd3010, zweryfikowane: pnpm check 10/10, audit czysty) zawiera fazę 1 (core `markInherited`, schemat); NIE zmergowana na main. Do zrobienia: faza 2A (API/CLI/export/summary/ETag/smoke) i 2B (web) wg `context/changes/fork-dedupe/plan.md` + amendments I1-I8, potem merge i archiwizacja. Implementacje przez Agy (pane w1:p3, Claude Sonnet 4.6; `herdr agent prompt ... --wait` zwraca się za wcześnie gdy Agy uruchamia własnego subagenta - czekać na commit w worktree).
 
 ## Notatki
 - Repo lokalne, bez remote. Nie pushować. Branch startowy `master`, docelowy `main` (do zmiany przy commicie fundamentu).
