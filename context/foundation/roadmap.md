@@ -154,7 +154,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** subagent-prompts
 - **PRD refs:** FR-002, FR-004, FR-005; Success Criterion status match >= 95%
 - **Prerequisites:** S-11
-- **Status:** in progress (planned 2026-10-23, orchestrator decision)
+- **Status:** done (real-log audit: overall 95.3%, subagent prompts 19/22)
 
 ## Backlog Handoff
 
