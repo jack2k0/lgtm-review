@@ -59,3 +59,14 @@ Two phases: (1) core `markInherited`, schemas, summary computation, with unit te
 ### Phase 2: Consumers
 
 - [ ] 2.1 `pnpm check` green incl. smoke
+
+## Plan-review amendments (accepted by orchestrator, 2026-10-23)
+
+- I1: `forkOf` tie-break uses the ownership comparator (earliest `startedAt`, then smallest `sessionId`).
+- I2: single-session and prompt-route ETags use the project-level stamp (all session files' versions + subagent stamps) plus the id; test: a sibling file change flips the ETag.
+- I3: `summarize()` itself filters inherited prompts (`statusCounts`, `promptCount`) and computes `inheritedCount`; correctness must not depend on call-site pre-filtering.
+- I4: schema additions (`PromptAnalysis.inheritedFrom?`, `SessionSummary.inheritedCount` default 0, `SessionSummary.forkOf?`) land in Phase 1 before any consumer.
+- I5: web session header counts non-inherited prompts and shows "+ N inherited".
+- I6: chain fixtures include `startedAt(B) == startedAt(C)` and null `startedAt`; the determinism test shuffles input order; ownership sorting is done once up front and the "from itself" guard compares against that order.
+- I7: Phase 2 is split into 2A (API/CLI/export/summary/ETag/smoke) and 2B (web); checkboxes 2.1 (2A) and 2.2 (2B).
+- I8: all prompts inherited: `--summary` prints the heading plus exactly `All N prompts inherited from <id8>. No prompts to review.`, exit 0; `--export` HTML shows that note in the session card; `--json` unchanged (prompts present with `inheritedFrom`).
