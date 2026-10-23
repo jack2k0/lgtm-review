@@ -1,0 +1,14 @@
+{
+  "fixture": "shell-edits",
+  "source": "synthetic",
+  "prompts": [
+    { "index": 0, "expectedStatus": "unchecked", "note": "sed -i without bashEditDiff: counted as a heuristic edit of src/config.js, no check ran" },
+    { "index": 1, "expectedStatus": "checked", "note": "sed -i.bak on docs, then passing pnpm test" },
+    { "index": 2, "expectedStatus": "checked", "note": "python heredoc open(...,'w') is an edit; verify script with log redirect is the check (log capture is not an edit)" },
+    { "index": 3, "expectedStatus": "no-changes", "note": "redirect and tee to /tmp and $TMPDIR are scratch, not edits" },
+    { "index": 4, "expectedStatus": "no-changes", "note": "the sed -i command failed (exit 1): not an edit" },
+    { "index": 5, "expectedStatus": "failing", "note": "git apply and perl -pi are edits; the last check failed" },
+    { "index": 6, "expectedStatus": "unchecked", "note": "check and sed -i in one command, the edit comes after the check segment" },
+    { "index": 7, "expectedStatus": "unchecked", "note": "bashEditDiff present: one real edit, the heuristic does not count it twice" }
+  ]
+}

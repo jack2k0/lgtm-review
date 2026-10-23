@@ -63,6 +63,17 @@ Rules (severity):
 
 The web UI shows the recommendation in a **Review** column, marks flagged files with the rule name, lists the hints in an expanded row, and shows a **Where to look** block (top 5 hints) above the steps of a prompt. Hints are also part of `GET /api/sessions/<id>` and `GET /api/sessions/<id>/prompts/<index>`.
 
+## Status accuracy and limits
+
+Statuses are heuristics read from the session log, not verdicts. Known limits:
+
+- **Shell edits.** File changes made through Bash are exact only when the log carries a diff for them (Claude Code records one when the session started inside the repository). Without it lgtm-review reads the command text: `sed -i`, `perl -pi`, `tee`, `>`/`>>` redirects, `git apply`, `git mv` and `python - <<` scripts that `open(..., 'w')` count as edits, listed as "may be incomplete" with the target path when it is trivial to parse and `(shell edit)` otherwise, and the reason ends with "(shell edits may be incomplete)". Redirects to `/tmp`, `$TMPDIR`, `.cache`, scratch directories, log files and `/dev/*`, and failed commands, are ignored. Other writers (`mv`, `cp`, `rm`, formatters, package managers, code generators) are not detected.
+- **Git operations.** Edits made by a command whose only mutating parts are `git merge|rebase|pull|checkout|stash|cherry-pick|mv|restore|reset` stay in the file list (marked incomplete) but never change a status or invalidate an earlier passing check. A prompt with only such edits is "no changes".
+- **Masked exit codes.** When a check's exit code does not reflect the check (a pipe such as `| tail`, `|| true`, `; echo`), lgtm-review looks for failure signals (for example `2 failed`, `EXIT=1`, `BUILD FAILURE`) in the last 4 KB of the output and reports `failing` when it finds one. Otherwise the reason says "(exit code not verified)". A check followed by `git checkout|restore|stash` on files is marked "(edits may have been reverted)".
+- **Not analysed.** Subagent activity (prompts are marked partial) and background tasks.
+
+To measure how these limits affect your own sessions, run `pnpm build` and then `node scripts/audit-status.mjs [--dir <repo>] [--projects-dir <dir>]` from a checkout of the repository. It runs the built CLI with `--list --json` and prints aggregate counts only: sessions and prompts, the status distribution, the share of partial prompts, the share of prompts with heuristic shell edits and the share of checks with an unverified exit code. It never prints prompt text, paths, commands or reasons; add `--json` for machine-readable output.
+
 ## Summary
 
 ```

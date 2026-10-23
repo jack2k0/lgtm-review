@@ -43,13 +43,13 @@ const PM_VALUE_OPTS: Record<string, Set<string>> = {
   bun: new Set(["--cwd", "--filter"]),
 };
 
-interface Segment {
+export interface Segment {
   text: string;
   /** Operator that follows this segment: "&&", "||", "|", ";", "&", "\n" or "" at the end. */
   op: string;
 }
 
-function stripHeredocs(cmd: string): string {
+export function stripHeredocs(cmd: string): string {
   if (!cmd.includes("<<")) return cmd;
   const out: string[] = [];
   let delim: string | null = null;
@@ -66,7 +66,7 @@ function stripHeredocs(cmd: string): string {
 }
 
 /** Quote-aware split on `&&`, `||`, `|`, `;`, `&` and newlines. */
-function splitSegments(cmd: string): Segment[] {
+export function splitSegments(cmd: string): Segment[] {
   const segs: Segment[] = [];
   let cur = "";
   let quote: string | null = null;
@@ -142,7 +142,7 @@ const PREFIXES: RegExp[] = [
   /^yarn\s+dlx\s+/,
 ];
 
-function stripPrefixes(seg: string): string {
+export function stripPrefixes(seg: string): string {
   let s = seg.trim();
   for (let guard = 0; guard < 20; guard++) {
     let changed = false;
@@ -159,7 +159,7 @@ function stripPrefixes(seg: string): string {
 }
 
 /** Strips "./" and bin directories from the first token ("./node_modules/.bin/vitest" -> "vitest"). */
-function normalizeFirstToken(s: string): string {
+export function normalizeFirstToken(s: string): string {
   const m = /^(\S+)/.exec(s);
   if (!m || m[1] === undefined) return s;
   let tok = m[1];
@@ -269,7 +269,7 @@ const SIMPLE_RES: RegExp[] = [
 ];
 
 /** Is this (prefix-stripped) segment a check command? */
-function matchSegment(raw: string, repo: RepoScripts | undefined): boolean {
+export function matchSegment(raw: string, repo: RepoScripts | undefined): boolean {
   const s = normalizeFirstToken(stripPrefixes(raw));
   if (s === "") return false;
   const toks = tokens(s);

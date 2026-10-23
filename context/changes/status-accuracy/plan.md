@@ -61,7 +61,7 @@ Two phases: (1) parse/classifier changes (items 1-3), (2) edit heuristics and gi
 
 ### Phase 2: Shell edit heuristics, git-op, audit script
 
-- [ ] 2.1 `pnpm check` green
+- [x] 2.1 `pnpm check` green
 - [ ] 2.2 Real-log audit re-run: status >= 95%, reason >= 88%
 
 ## Plan-review amendments (accepted by orchestrator, 2026-10-23)

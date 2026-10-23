@@ -1,0 +1,247 @@
+{
+  "sessionId": "git-ops",
+  "title": "Fix the bug, test it, then bring in main.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Fix the bug, test it, then bring in main.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/a.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/more.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": true
+        },
+        {
+          "path": "/home/user/project/src/other.js",
+          "kind": "M",
+          "added": 2,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000008",
+      "text": "Fix, test, rebase and pop the stash.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/b.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/rebased.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000015",
+      "text": "Just merge main into the branch.",
+      "status": "no-changes",
+      "reason": "no edits (git operations only)",
+      "files": [
+        {
+          "path": "/home/user/project/src/other.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000018",
+      "text": "Fix, then check and move the file in one command.",
+      "status": "checked",
+      "reason": "bash scripts/check.sh passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/c.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/c2.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 4,
+      "uuid": "00000000-0000-4000-8000-000000000023",
+      "text": "Fix, test, merge, then fix again.",
+      "status": "unchecked",
+      "reason": "1 edit after last check",
+      "files": [
+        {
+          "path": "/home/user/project/src/d.js",
+          "kind": "M",
+          "added": 2,
+          "removed": 2,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/pulled.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 6000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 8000,
+      "headline": "Mostly writing (75%), 1 check",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/d.js",
+          "reason": "edited after the last completed check"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 5,
+      "uuid": "00000000-0000-4000-8000-000000000032",
+      "text": "Fix, break the test, then merge.",
+      "status": "failing",
+      "reason": "pnpm test failed: FAIL src/e.test.js 1 failed",
+      "files": [
+        {
+          "path": "/home/user/project/src/e.js",
+          "kind": "M",
+          "added": 2,
+          "removed": 2,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 2000
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (33%), 1 check",
+      "hints": [],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 6,
+      "uuid": "00000000-0000-4000-8000-000000000039",
+      "text": "Move a file with git, no diff in the log.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/f.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/g.js",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (33%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    }
+  ],
+  "warnings": []
+}

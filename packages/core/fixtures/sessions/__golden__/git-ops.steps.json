@@ -1,0 +1,495 @@
+[
+  {
+    "index": 0,
+    "text": "Fix the bug, test it, then bring in main.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/a.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/a.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/a.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/a.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "write",
+        "title": "Edit src/other.js (+2 -0), edit src/more.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:06.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git merge origin/main",
+            "ok": true,
+            "ts": "2026-01-01T00:00:06.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/other.js",
+          "/home/user/project/src/more.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Fix, test, rebase and pop the stash.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:08.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/b.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:09.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/b.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/b.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:09.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/b.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:11.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:11.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "write",
+        "title": "Edit src/rebased.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:13.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git stash && git rebase origin/main && git stash pop",
+            "ok": true,
+            "ts": "2026-01-01T00:00:13.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/rebased.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Just merge main into the branch.",
+    "status": "no-changes",
+    "reason": "no edits (git operations only)",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:15.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/other.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:16.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git merge origin/main",
+            "ok": true,
+            "ts": "2026-01-01T00:00:16.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/other.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Fix, then check and move the file in one command.",
+    "status": "checked",
+    "reason": "bash scripts/check.sh passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:18.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/c.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:19.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/c.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/c.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:19.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/c.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run bash scripts/check.sh -> passed",
+        "startedAt": "2026-01-01T00:00:21.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "bash scripts/check.sh && git mv src/c.js src/c2.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:21.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/c2.js"
+        ],
+        "check": {
+          "command": "bash scripts/check.sh && git mv src/c.js src/c2.js",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "text": "Fix, test, merge, then fix again.",
+    "status": "unchecked",
+    "reason": "1 edit after last check",
+    "headline": "Mostly writing (75%), 1 check",
+    "startedAt": "2026-01-01T00:00:23.000Z",
+    "activeMs": 8000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/d.js",
+        "reason": "edited after the last completed check"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/d.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:24.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/d.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/d.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:24.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/d.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:26.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:26.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "write",
+        "title": "Edit src/pulled.js (+1 -1), edit src/d.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:28.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git pull --ff-only",
+            "ok": true,
+            "ts": "2026-01-01T00:00:28.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "src/d.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:30.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/pulled.js",
+          "/home/user/project/src/d.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 5,
+    "text": "Fix, break the test, then merge.",
+    "status": "failing",
+    "reason": "pnpm test failed: FAIL src/e.test.js 1 failed",
+    "headline": "Mostly writing (33%), 1 check",
+    "startedAt": "2026-01-01T00:00:32.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/e.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:33.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/e.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/e.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:33.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/e.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> failed (exit 1)",
+        "startedAt": "2026-01-01T00:00:35.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": false,
+            "ts": "2026-01-01T00:00:35.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 1,
+          "passed": false,
+          "excerpt": "FAIL src/e.test.js\n1 failed"
+        }
+      },
+      {
+        "n": 3,
+        "phase": "fix",
+        "title": "Fix: edit src/e.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:37.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git checkout main -- src/e.js && git cherry-pick abc123",
+            "ok": true,
+            "ts": "2026-01-01T00:00:37.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/e.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 6,
+    "text": "Move a file with git, no diff in the log.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly writing (33%), 1 check",
+    "startedAt": "2026-01-01T00:00:39.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/f.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:40.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/f.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/f.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:40.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/f.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:42.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:42.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "read",
+        "title": "Edit src/g.js (+0 -0)",
+        "startedAt": "2026-01-01T00:00:44.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git mv src/f.js src/g.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:44.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/g.js"
+        ]
+      }
+    ]
+  }
+]

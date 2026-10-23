@@ -154,7 +154,7 @@ describe("files", () => {
     expect(one(lines).files).toEqual([{ path: "/home/user/project/n.ts", kind: "M", added: 2, removed: 0, maybeIncomplete: true }]);
   });
 
-  test("Bash edits come only from bashEditDiff", () => {
+  test("Bash edits come from bashEditDiff; a command without one is counted heuristically (maybeIncomplete)", () => {
     const lines = [
       prompt("q"),
       toolUse("b1", "Bash", { command: "sed -i s/a/b/ x.txt" }),
@@ -164,7 +164,10 @@ describe("files", () => {
       ...bash("b2", "sed -i s/a/b/ y.txt"),
     ];
     const p = one(lines);
-    expect(p.files.map((f) => f.path)).toEqual(["/home/user/project/x.txt"]);
+    expect(p.files).toEqual([
+      { path: "/home/user/project/x.txt", kind: "M", added: 1, removed: 1, maybeIncomplete: false },
+      { path: "/home/user/project/y.txt", kind: "M", added: 0, removed: 0, maybeIncomplete: true },
+    ]);
     expect(p.status).toBe("unchecked");
   });
 
@@ -282,5 +285,125 @@ describe("slash command turns", () => {
 
   test("skipped commands open no prompt", () => {
     expect(analyzeSession([prompt("first"), cmd("clear"), cmd("model", "opus"), ...edit("e1")]).prompts).toHaveLength(1);
+  });
+});
+
+describe("shell edits without bashEditDiff", () => {
+  test("sed -i is an edit with the target path and a reason suffix", () => {
+    const p = one([prompt("q"), ...bash("b1", "sed -i 's/a/b/' src/x.js")]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran (shell edits may be incomplete)" });
+    expect(p.files).toEqual([{ path: "/home/user/project/src/x.js", kind: "M", added: 0, removed: 0, maybeIncomplete: true }]);
+  });
+
+  test("an unparseable target becomes (shell edit)", () => {
+    const p = one([prompt("q"), ...bash("b1", "git apply fix.patch")]);
+    expect(p.files.map((f) => f.path)).toEqual(["(shell edit)"]);
+  });
+
+  test("edit then passing check => checked, suffix kept", () => {
+    expect(one([prompt("q"), ...bash("b1", "perl -pi -e 's/a/b/' lib.pl"), ...bash("b2", "pnpm test")])).toMatchObject({
+      status: "checked",
+      reason: "pnpm test passed after last edit (shell edits may be incomplete)",
+    });
+  });
+
+  test("a failed command is not an edit", () => {
+    expect(one([prompt("q"), ...bash("b1", "sed -i 's/a/b/' x.js", { exit: 1, output: "no such file" })]).status).toBe("no-changes");
+  });
+
+  test("scratch redirects and a check's log capture are not edits", () => {
+    expect(one([prompt("q"), ...bash("b1", "echo hi > /tmp/x.txt"), ...bash("b2", "ls > $TMPDIR/l"), ...bash("b3", "bash scripts/verify-x.sh > verify.log 2>&1")]).status).toBe("no-changes");
+  });
+
+  test("does not double-count when bashEditDiff is present", () => {
+    const lines = [
+      prompt("q"),
+      toolUse("b1", "Bash", { command: "sed -i s/a/b/ x.txt" }),
+      toolResult("b1", "", {
+        toolUseResult: { bashEditDiff: { files: [{ filePath: "/home/user/project/x.txt", hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-a", "+b"] }] }] } },
+      }),
+    ];
+    const p = one(lines);
+    expect(p.files).toHaveLength(1);
+    expect(p.reason).toBe("no checks ran");
+  });
+
+  test("an empty bashEditDiff is trusted: nothing changed", () => {
+    const lines = [prompt("q"), toolUse("b1", "Bash", { command: "sed -i s/a/b/ x.txt" }), toolResult("b1", "", { toolUseResult: { bashEditDiff: { files: [] } } })];
+    expect(one(lines).status).toBe("no-changes");
+  });
+
+  test("check and sed -i in one command: order decides", () => {
+    expect(one([prompt("q"), ...bash("b1", "sed -i s/a/b/ x.js && pnpm test")])).toMatchObject({ status: "checked" });
+    expect(one([prompt("q"), ...bash("b1", "pnpm test && sed -i s/a/b/ x.js")])).toMatchObject({ status: "unchecked", reason: "1 edit after last check (shell edits may be incomplete)" });
+  });
+
+  test("subagent suffix follows the shell suffix", () => {
+    const p = one([prompt("q"), toolUse("a1", "Agent", { prompt: "x" }), toolResult("a1", "done"), ...bash("b1", "tee out.js < in.js")]);
+    expect(p.reason).toBe("no checks ran (shell edits may be incomplete); subagent activity not analysed");
+  });
+});
+
+describe("git operations", () => {
+  const diffBash = (id: string, command: string, path = "/home/user/project/src/merged.js") => [
+    toolUse(id, "Bash", { command }),
+    toolResult(id, "", {
+      toolUseResult: { bashEditDiff: { files: [{ filePath: path, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-a", "+b", "+c"] }] }] } },
+    }),
+  ];
+
+  test("G8: check, then git merge with bashEditDiff => still checked, reason unchanged, file listed as maybeIncomplete", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge main")]);
+    expect(p).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit" });
+    expect(p.files.map((f) => [f.path, f.maybeIncomplete])).toEqual([
+      ["/home/user/project/src/add.js", false],
+      ["/home/user/project/src/merged.js", true],
+    ]);
+  });
+
+  test.each(["git rebase main", "git pull --ff-only", "git checkout main", "git stash pop", "git cherry-pick abc123", "git reset --hard HEAD~1", "git restore src/x.js", "git -C ../w mv a.js b.js"])(
+    "%s never invalidates a passing check",
+    (cmd) => {
+      expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", cmd)]).status).toBe("checked");
+    },
+  );
+
+  test("a failing check stays failing and an unchecked prompt stays unchecked after a git op", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test", { exit: 1 }), ...diffBash("b2", "git merge main")]).status).toBe("failing");
+    expect(one([prompt("q"), ...edit("e1"), ...diffBash("b2", "git merge main")])).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("only git operations => no-changes, files still listed", () => {
+    const p = one([prompt("q"), ...diffBash("b1", "git merge main")]);
+    expect(p).toMatchObject({ status: "no-changes", reason: "no edits (git operations only)" });
+    expect(p.files).toHaveLength(1);
+    expect(p.files[0]!.maybeIncomplete).toBe(true);
+  });
+
+  test("a git op mixed with another mutating segment is a normal edit", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge main && sed -i s/a/b/ src/merged.js")]).status).toBe("unchecked");
+  });
+
+  test("git mv without a diff is a git-op edit: listed, never moves the status", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bash("b2", "git mv src/a.js src/b.js")]);
+    expect(p).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit" });
+    expect(p.files.map((f) => f.path)).toContain("/home/user/project/src/b.js");
+  });
+
+  test("the audit shape: check and git mv in one command never reports 0 edits", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...diffBash("b1", "bash scripts/check.sh && git mv a.js b.js", "/home/user/project/b.js")]);
+    expect(p.status).toBe("checked");
+    expect(p.reason).not.toMatch(/\b0 edits?\b/);
+  });
+
+  test("an edit in a command the classifier cannot order is never reported as 0 edits", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...diffBash("b1", "make fmt && pnpm test")]);
+    expect(p.reason).toBe("edit in the same command as the last check");
+    expect(p.status).toBe("unchecked");
+  });
+
+  test("git op edits do not feed the hints", () => {
+    const p = one([prompt("q"), ...diffBash("b1", "git merge main", "/home/user/project/src/auth/login.js")]);
+    expect(p.hints).toEqual([]);
   });
 });

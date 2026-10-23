@@ -1,0 +1,65 @@
+{
+  "0:/home/user/project/src/config.js": {
+    "path": "/home/user/project/src/config.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "1:/home/user/project/docs/limits.md": {
+    "path": "/home/user/project/docs/limits.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "2:/home/user/project/src/table.json": {
+    "path": "/home/user/project/src/table.json",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "5:(shell edit)": {
+    "path": "(shell edit)",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "5:/home/user/project/src/header.js": {
+    "path": "/home/user/project/src/header.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "6:/home/user/project/package.json": {
+    "path": "/home/user/project/package.json",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "7:/home/user/project/src/real.js": {
+    "path": "/home/user/project/src/real.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "x1"
+          },
+          {
+            "t": "+",
+            "s": "x2"
+          }
+        ]
+      }
+    ]
+  }
+}

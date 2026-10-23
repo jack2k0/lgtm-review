@@ -1,0 +1,243 @@
+{
+  "sessionId": "shell-edits",
+  "title": "Rename the constant in the config loader.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Rename the constant in the config loader.",
+      "status": "unchecked",
+      "reason": "no checks ran (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/src/config.js",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/config.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000005",
+      "text": "Rename it in the docs too and run the tests.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/docs/limits.md",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly reading (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000010",
+      "text": "Generate the lookup table and verify.",
+      "status": "checked",
+      "reason": "bash scripts/verify-table.sh > verify.log 2>&1 passed after last edit (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/src/table.json",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly reading (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000015",
+      "text": "Dump the environment to a scratch file.",
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 4000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 4,
+      "uuid": "00000000-0000-4000-8000-000000000020",
+      "text": "Patch the parser.",
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 5,
+      "uuid": "00000000-0000-4000-8000-000000000023",
+      "text": "Apply the patch and fix the header, then test.",
+      "status": "failing",
+      "reason": "pnpm test failed: FAIL src/header.test.js 1 failed (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "(shell edit)",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        },
+        {
+          "path": "/home/user/project/src/header.js",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 4000,
+        "writeMs": 0,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly reading (67%), 1 check",
+      "hints": [],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 6,
+      "uuid": "00000000-0000-4000-8000-000000000030",
+      "text": "Bump the version and test in one go.",
+      "status": "unchecked",
+      "reason": "1 edit after last check (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/package.json",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 0,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly checking (100%), 1 check",
+      "hints": [
+        {
+          "rule": "dependency-change",
+          "severity": "warn",
+          "path": "/home/user/project/package.json",
+          "reason": "dependency manifest or lockfile edited"
+        },
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/package.json",
+          "reason": "edited after the last completed check"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 7,
+      "uuid": "00000000-0000-4000-8000-000000000033",
+      "text": "Edit through a shell that does log the diff.",
+      "status": "unchecked",
+      "reason": "no checks ran",
+      "files": [
+        {
+          "path": "/home/user/project/src/real.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/real.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    }
+  ],
+  "warnings": []
+}

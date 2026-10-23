@@ -1,0 +1,283 @@
+{
+  "0:/home/user/project/src/a.js": {
+    "path": "/home/user/project/src/a.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "0:/home/user/project/src/more.js": {
+    "path": "/home/user/project/src/more.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "m0"
+          },
+          {
+            "t": "+",
+            "s": "m1"
+          }
+        ]
+      }
+    ]
+  },
+  "0:/home/user/project/src/other.js": {
+    "path": "/home/user/project/src/other.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": [
+      {
+        "header": "@@ -1,0 +1,2 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "n1"
+          },
+          {
+            "t": "+",
+            "s": "n2"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/src/b.js": {
+    "path": "/home/user/project/src/b.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/src/rebased.js": {
+    "path": "/home/user/project/src/rebased.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "r0"
+          },
+          {
+            "t": "+",
+            "s": "r1"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/src/other.js": {
+    "path": "/home/user/project/src/other.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "n0"
+          },
+          {
+            "t": "+",
+            "s": "n1"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/src/c.js": {
+    "path": "/home/user/project/src/c.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/src/c2.js": {
+    "path": "/home/user/project/src/c2.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": [
+      {
+        "header": "@@ -1,0 +1,1 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "c"
+          }
+        ]
+      }
+    ]
+  },
+  "4:/home/user/project/src/d.js": {
+    "path": "/home/user/project/src/d.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      },
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "4:/home/user/project/src/pulled.js": {
+    "path": "/home/user/project/src/pulled.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "q"
+          },
+          {
+            "t": "+",
+            "s": "p"
+          }
+        ]
+      }
+    ]
+  },
+  "5:/home/user/project/src/e.js": {
+    "path": "/home/user/project/src/e.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      },
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "f"
+          },
+          {
+            "t": "+",
+            "s": "e"
+          }
+        ]
+      }
+    ]
+  },
+  "6:/home/user/project/src/f.js": {
+    "path": "/home/user/project/src/f.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "6:/home/user/project/src/g.js": {
+    "path": "/home/user/project/src/g.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  }
+}

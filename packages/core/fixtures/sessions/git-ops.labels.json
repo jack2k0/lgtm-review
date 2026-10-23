@@ -1,0 +1,13 @@
+{
+  "fixture": "git-ops",
+  "source": "synthetic",
+  "prompts": [
+    { "index": 0, "expectedStatus": "checked", "note": "edit, passing test, git merge with a diff: the merge does not invalidate the check" },
+    { "index": 1, "expectedStatus": "checked", "note": "stash + rebase + stash pop only mutate through git operations" },
+    { "index": 2, "expectedStatus": "no-changes", "note": "only a git merge: no edits of the agent" },
+    { "index": 3, "expectedStatus": "checked", "note": "check.sh && git mv in one command: the edit before it was checked; the move is a git op" },
+    { "index": 4, "expectedStatus": "unchecked", "note": "a real edit after the merge makes the prompt unchecked (1 edit after last check)" },
+    { "index": 5, "expectedStatus": "failing", "note": "failing check, then git checkout/cherry-pick: status stays failing" },
+    { "index": 6, "expectedStatus": "checked", "note": "git mv without a diff in the log is a git-op edit: status unchanged" }
+  ]
+}

@@ -32,6 +32,8 @@ export {
 export { makeHeadline } from "./timing.js";
 export { computeHints, recommend, isTestPath, sensitiveMatch, isManifestPath, isConfigPath, publicSurfaceKind } from "./hints.js";
 export { classifyCommand } from "./check-patterns.js";
+export { classifyShellMutation } from "./shell-edits.js";
+export type { ShellMutation } from "./shell-edits.js";
 export type { CommandClass, RepoScripts } from "./check-patterns.js";
 export { analyzeSession, createAnalyzer } from "./analyze.js";
 export type { AnalyzeOptions, Analyzer } from "./analyze.js";

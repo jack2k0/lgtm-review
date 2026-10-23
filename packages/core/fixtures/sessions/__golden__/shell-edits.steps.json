@@ -1,0 +1,377 @@
+[
+  {
+    "index": 0,
+    "text": "Rename the constant in the config loader.",
+    "status": "unchecked",
+    "reason": "no checks ran (shell edits may be incomplete)",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/config.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Edit src/config.js (+0 -0)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "sed -i 's/OLD_LIMIT/MAX_LIMIT/g' src/config.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/config.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Rename it in the docs too and run the tests.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit (shell edits may be incomplete)",
+    "headline": "Mostly reading (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:05.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Edit docs/limits.md (+0 -0)",
+        "startedAt": "2026-01-01T00:00:06.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "sed -i.bak 's/OLD_LIMIT/MAX_LIMIT/' docs/limits.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:06.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/docs/limits.md"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:08.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Generate the lookup table and verify.",
+    "status": "checked",
+    "reason": "bash scripts/verify-table.sh > verify.log 2>&1 passed after last edit (shell edits may be incomplete)",
+    "headline": "Mostly reading (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:10.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Edit src/table.json (+0 -0)",
+        "startedAt": "2026-01-01T00:00:11.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "python3 - <<'PY' import json with open('src/table.json', 'w') as f: json.dump({'a': 1}, f) PY",
+            "ok": true,
+            "ts": "2026-01-01T00:00:11.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/table.json"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run bash scripts/verify-table.sh > verify.log 2>&1 -> passed",
+        "startedAt": "2026-01-01T00:00:13.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "bash scripts/verify-table.sh > verify.log 2>&1",
+            "ok": true,
+            "ts": "2026-01-01T00:00:13.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "bash scripts/verify-table.sh > verify.log 2>&1",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Dump the environment to a scratch file.",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:15.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Run 2 commands",
+        "startedAt": "2026-01-01T00:00:16.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "env > /tmp/env-dump.txt",
+            "ok": true,
+            "ts": "2026-01-01T00:00:16.000Z"
+          },
+          {
+            "tool": "Bash",
+            "summary": "ls -la | tee $TMPDIR/listing.txt",
+            "ok": true,
+            "ts": "2026-01-01T00:00:18.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "text": "Patch the parser.",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:20.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Run 1 command",
+        "startedAt": "2026-01-01T00:00:21.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "sed -i 's/foo/bar/' src/parser.js",
+            "ok": false,
+            "ts": "2026-01-01T00:00:21.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  },
+  {
+    "index": 5,
+    "text": "Apply the patch and fix the header, then test.",
+    "status": "failing",
+    "reason": "pnpm test failed: FAIL src/header.test.js 1 failed (shell edits may be incomplete)",
+    "headline": "Mostly reading (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:23.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Edit (shell edit) (+0 -0), edit src/header.js (+0 -0)",
+        "startedAt": "2026-01-01T00:00:24.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git apply fix-header.patch",
+            "ok": true,
+            "ts": "2026-01-01T00:00:24.000Z"
+          },
+          {
+            "tool": "Bash",
+            "summary": "perl -pi -e 's/Header/Title/' src/header.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:26.000Z"
+          }
+        ],
+        "files": [
+          "(shell edit)",
+          "/home/user/project/src/header.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> failed (exit 1)",
+        "startedAt": "2026-01-01T00:00:28.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": false,
+            "ts": "2026-01-01T00:00:28.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 1,
+          "passed": false,
+          "excerpt": "FAIL src/header.test.js\n1 failed"
+        }
+      }
+    ]
+  },
+  {
+    "index": 6,
+    "text": "Bump the version and test in one go.",
+    "status": "unchecked",
+    "reason": "1 edit after last check (shell edits may be incomplete)",
+    "headline": "Mostly checking (100%), 1 check",
+    "startedAt": "2026-01-01T00:00:30.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "dependency-change",
+        "severity": "warn",
+        "path": "/home/user/project/package.json",
+        "reason": "dependency manifest or lockfile edited"
+      },
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/package.json",
+        "reason": "edited after the last completed check"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:31.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test && sed -i 's/1.0.0/1.0.1/' package.json",
+            "ok": true,
+            "ts": "2026-01-01T00:00:31.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/package.json"
+        ],
+        "check": {
+          "command": "pnpm test && sed -i 's/1.0.0/1.0.1/' package.json",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 7,
+    "text": "Edit through a shell that does log the diff.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:33.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/real.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/real.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:34.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "sed -i 's/x1/x2/' src/real.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:34.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/real.js"
+        ]
+      }
+    ]
+  }
+]

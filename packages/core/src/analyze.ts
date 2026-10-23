@@ -1,4 +1,5 @@
 import { classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
+import { classifyShellMutation, resolveTarget } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, recommend, type EditEvidence, type EditStats } from "./hints.js";
 import { createParser, type Event, type ToolInput, type ToolResultEvent } from "./parse.js";
@@ -55,9 +56,14 @@ interface FileTouch {
 }
 
 interface EditRec {
-  /** Position in the event stream when the edit result arrived. */
+  /**
+   * Position in the event stream when the edit result arrived. An edit in the same command as a check is
+   * ordered by segment: half a step before the result when the check ran on it, half a step after otherwise.
+   */
   seq: number;
   files: FileTouch[];
+  /** Produced by a command whose only mutating segments are git operations: never changes the status. */
+  gitOp: boolean;
 }
 
 interface CheckRec {
@@ -85,6 +91,8 @@ interface PromptState {
   edits: EditRec[];
   checks: CheckRec[];
   partial: boolean;
+  /** A shell edit was counted from the command text: the file list and the diffs may be incomplete. */
+  shellHeuristic: boolean;
   timing: TimingTracker;
   /** The last completed check failed: work now counts as Fix. */
   failing: boolean;
@@ -139,6 +147,7 @@ function lastCheckSeq(p: PromptState): number | null {
 function evidenceOf(p: PromptState): EditEvidence[] {
   const out: EditEvidence[] = [];
   for (const e of p.edits) {
+    if (e.gitOp) continue;
     for (const t of e.files) out.push({ seq: e.seq, path: t.path, inFix: t.inFix, changed: t.added + t.removed, stats: t.stats });
   }
   return out;
@@ -164,6 +173,11 @@ function aggregateFiles(edits: EditRec[]): FileChange[] {
   return [...byPath.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
+/** Sequence number of an edit made in the same command as a check, ordered by segment. */
+function orderedSeq(seq: number, order: "before-check" | "after-check" | "unknown"): number {
+  return order === "before-check" ? seq - 0.5 : order === "after-check" ? seq + 0.5 : seq;
+}
+
 function failureOutput(output: string): string {
   return oneLine(output.replace(/^\s*(?:Error:\s*)?Exit code \d+/, ""), FAIL_OUTPUT_MAX);
 }
@@ -174,7 +188,10 @@ function plural(n: number, word: string): string {
 
 function judge(p: PromptState): { status: Status; reason: string } {
   if (p.edits.length === 0) return { status: "no-changes", reason: "no edits" };
-  const lastEdit = p.edits.reduce((m, e) => Math.max(m, e.seq), -1);
+  // Git operations (merge, rebase, checkout, ...) bring in other people's changes: they never move the status.
+  const edits = p.edits.filter((e) => !e.gitOp);
+  if (edits.length === 0) return { status: "no-changes", reason: "no edits (git operations only)" };
+  const lastEdit = edits.reduce((m, e) => Math.max(m, e.seq), -1);
   const real = p.checks.filter((c) => !c.ignored);
   const completed = real.filter((c) => c.completed);
   const lastCompleted = completed.reduce<CheckRec | null>(
@@ -203,8 +220,14 @@ function judge(p: PromptState): { status: Status; reason: string } {
   }
 
   if (lastCompleted === null) return { status: "unchecked", reason: "no checks ran" };
-  const after = p.edits.filter((e) => e.seq > lastCompleted.resultSeq).length;
+  const after = edits.filter((e) => e.seq > lastCompleted.resultSeq).length;
+  if (after === 0) return { status: "unchecked", reason: "edit in the same command as the last check" };
   return { status: "unchecked", reason: `${plural(after, "edit")} after last check` };
+}
+
+function reasonOf(p: PromptState, reason: string): string {
+  const r = p.shellHeuristic ? `${reason} (shell edits may be incomplete)` : reason;
+  return p.partial ? `${r}; subagent activity not analysed` : r;
 }
 
 export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
@@ -261,6 +284,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           edits: [],
           checks: [],
           partial: false,
+          shellHeuristic: false,
           timing: createTimingTracker(),
           failing: false,
           startedAtMs: parseTs(ev.ts),
@@ -384,23 +408,46 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             if (detail) t.patch = retain(use.prompt, t.path, t.kind === "A" ? ev.createPatch : ev.patch);
             touches = [t];
           }
-        } else if (use.name === "Bash" && ev.bashEditDiff && ev.bashEditDiff.length > 0) {
-          touches = ev.bashEditDiff.map((f) => {
-            const t: FileTouch = {
-              path: f.path,
-              kind: f.kind,
-              added: f.added,
-              removed: f.removed,
-              maybeIncomplete: f.maybeIncomplete,
-              inFix: phase === "fix",
-              stats: f.stats,
-            };
-            if (detail) t.patch = retain(use.prompt, f.path, f.patch);
-            return t;
-          });
+        }
+        let gitOp = false;
+        let seqAt = seq;
+        if (use.name === "Bash" && use.input.command !== undefined && (ev.bashEditDiff === undefined || ev.bashEditDiff.length > 0)) {
+          const sm = classifyShellMutation(use.input.command, opts.repo);
+          if (ev.bashEditDiff !== undefined) {
+            gitOp = sm.gitOnly;
+            if (!gitOp) seqAt = orderedSeq(seq, sm.order);
+            touches = ev.bashEditDiff.map((f) => {
+              const t: FileTouch = {
+                path: f.path,
+                kind: f.kind,
+                added: f.added,
+                removed: f.removed,
+                maybeIncomplete: f.maybeIncomplete || gitOp,
+                inFix: phase === "fix",
+                stats: f.stats,
+              };
+              if (detail) t.patch = retain(use.prompt, f.path, f.patch);
+              return t;
+            });
+          } else if (sm.edits.length > 0) {
+            // No diff in the log (the session did not start inside the repo): count what the command text says.
+            gitOp = sm.gitOnly;
+            if (!gitOp) seqAt = orderedSeq(seq, sm.order);
+            const cwd = parser.meta().cwd;
+            touches = sm.edits.map((e) => ({
+              path: resolveTarget(e.file, cwd, sm.hasCd),
+              kind: "M" as const,
+              added: 0,
+              removed: 0,
+              maybeIncomplete: true,
+              inFix: use.failing,
+              stats: emptyStats(),
+            }));
+            if (!gitOp) use.prompt.shellHeuristic = true;
+          }
         }
         if (touches.length > 0) {
-          use.prompt.edits.push({ seq, files: touches });
+          use.prompt.edits.push({ seq: seqAt, files: touches, gitOp });
           if (act) act.edits = touches.map((t) => ({ path: t.path, kind: t.kind, added: t.added, removed: t.removed }));
         }
         return;
@@ -429,7 +476,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           uuid: p.uuid,
           text: p.text,
           status: j.status,
-          reason: p.partial ? `${j.reason}; subagent activity not analysed` : j.reason,
+          reason: reasonOf(p, j.reason),
           files: aggregateFiles(p.edits),
           partial: p.partial,
           ...p.timing.result(p.checks.filter((c) => !c.ignored).length),
