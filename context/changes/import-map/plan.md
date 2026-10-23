@@ -67,7 +67,7 @@ Provide a 2D layered architectural map for a session (and per prompt) displaying
 - [ ] 2.1 Working tree traversal, `/api/sessions/:id/map` route, ETag caching and tests
 
 ### Phase 3: Web UI
-- [ ] 3.1 MapView SVG component, route handling, click-to-diff navigation and tests
+- [x] 3.1 MapView SVG component, route handling, click-to-diff navigation and tests
 
 ## Proposed PRD addition
 

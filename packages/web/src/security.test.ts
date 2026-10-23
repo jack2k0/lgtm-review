@@ -21,7 +21,7 @@ describe("log content is rendered as text only", () => {
   test("web sources contain no HTML injection or rich-text rendering", () => {
     const files = readdirSync(here).filter((f) => /\.(tsx?|css|html)$/.test(f));
     expect(files.length).toBeGreaterThan(5);
-    for (const f of ["StepsView.tsx", "StepCard.tsx", "steps.test.tsx", "DiffView.tsx", "diff.test.tsx", "Hints.tsx", "hints.test.tsx", "PromptTable.tsx", "Live.tsx", "live.ts", "live.test.ts", "live.test.tsx", "api.ts", "api.test.ts"]) expect(files, f).toContain(f);
+    for (const f of ["StepsView.tsx", "StepCard.tsx", "steps.test.tsx", "DiffView.tsx", "diff.test.tsx", "Hints.tsx", "hints.test.tsx", "PromptTable.tsx", "MapView.tsx", "MapView.test.tsx", "App.tsx", "Live.tsx", "live.ts", "live.test.ts", "live.test.tsx", "api.ts", "api.test.ts"]) expect(files, f).toContain(f);
     for (const f of files) {
       const src = readFileSync(join(here, f), "utf8");
       for (const re of banned) expect(src, `${f} ${re}`).not.toMatch(re);

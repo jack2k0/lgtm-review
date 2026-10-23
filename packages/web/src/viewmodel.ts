@@ -125,7 +125,8 @@ export type Route =
   | { kind: "list" }
   | { kind: "session"; id: string }
   | { kind: "steps"; id: string; index: number }
-  | { kind: "diff"; id: string; index: number; path: string };
+  | { kind: "diff"; id: string; index: number; path: string }
+  | { kind: "map"; id: string; index: number | null };
 
 const INDEX_RE = /^(?:0|[1-9]\d{0,8})$/;
 
@@ -137,19 +138,26 @@ function decode(s: string): string | null {
   }
 }
 
-/** Hash routes: `#/session/<id>`, `#/session/<id>/prompt/<index>`, `#/session/<id>/prompt/<index>/diff?path=<file>`. Anything else is the list. */
+/** Hash routes: `#/session/<id>`, `#/session/<id>/map`, `#/session/<id>/prompt/<index>[/map]`, `#/session/<id>/prompt/<index>/diff?path=<file>`. Anything else is the list. */
 export function parseRoute(hash: string): Route {
-  const m = /^#\/session\/([^/?]+)(?:\/prompt\/([^/?]+)(?:(\/diff)\?path=([^&]*))?)?$/.exec(hash);
+  const m = /^#\/session\/([^/?]+)(?:\/prompt\/([^/?]+))?(?:\/(map|diff)(?:\?path=([^&]*))?)?$/.exec(hash);
   if (!m) return { kind: "list" };
   const id = decode(m[1]!);
   if (id === null) return { kind: "list" };
-  if (m[2] === undefined) return { kind: "session", id };
-  if (!INDEX_RE.test(m[2])) return { kind: "list" };
-  const index = Number(m[2]);
-  if (m[3] === undefined) return { kind: "steps", id, index };
+  const index = m[2];
+  const action = m[3];
+  if (index === undefined) {
+    if (action === undefined) return { kind: "session", id };
+    if (action === "map") return { kind: "map", id, index: null };
+    return { kind: "list" };
+  }
+  if (!INDEX_RE.test(index)) return { kind: "list" };
+  const n = Number(index);
+  if (action === undefined) return { kind: "steps", id, index: n };
+  if (action === "map") return { kind: "map", id, index: n };
   const path = decode(m[4] ?? "");
   if (!path) return { kind: "list" };
-  return { kind: "diff", id, index, path };
+  return { kind: "diff", id, index: n, path };
 }
 
 export function routeHref(r: Route): string {
@@ -162,6 +170,10 @@ export function routeHref(r: Route): string {
       return `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}`;
     case "diff":
       return `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}/diff?path=${encodeURIComponent(r.path)}`;
+    case "map":
+      return r.index === null
+        ? `#/session/${encodeURIComponent(r.id)}/map`
+        : `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}/map`;
   }
 }
 
