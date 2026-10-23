@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import type { PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
-import { errorMessage, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
+import type { FileDiff, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
+import { errorMessage, fetchFileDiff, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
+import { DiffView } from "./DiffView";
 import { PromptTable } from "./PromptTable";
 import { SessionList } from "./SessionList";
 import { StepsView } from "./StepsView";
@@ -24,9 +25,10 @@ function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key: string): Loa
   return res.key === key ? res.value : { state: "loading" };
 }
 
-function Status<T>({ res, children }: { res: Load<T>; children: (data: T) => React.ReactNode }) {
-  if (res.state === "loading") return <p className="muted" role="status">Loading…</p>;
-  if (res.state === "error") return <p className="error" role="alert">{res.message}</p>;
+function Status<T>({ res, back, children }: { res: Load<T>; back?: string; children: (data: T) => React.ReactNode }) {
+  const link = back ? <p><a href={back}>&larr; Back to steps</a></p> : null;
+  if (res.state === "loading") return <>{link}<p className="muted" role="status">Loading…</p></>;
+  if (res.state === "error") return <>{link}<p className="error" role="alert">{res.message}</p></>;
   return <>{children(res.data)}</>;
 }
 
@@ -49,18 +51,26 @@ function StepsRoute({ token, id, index }: { token: string | null; id: string; in
   const res = useLoad<PromptDetail>((s) => fetchPromptDetail(token, id, index, s), `p:${id}:${index}`);
   return (
     <Status res={res}>
-      {(d) => <StepsView sessionId={id} detail={d} />}
+      {(d) => <StepsView sessionId={id} detail={d} onOpenFile={(path) => { window.location.hash = routeHref({ kind: "diff", id, index, path }); }} />}
     </Status>
   );
 }
 
-/** Reserved for the diff view; `#/session/<id>/prompt/<n>/diff?path=` already parses. */
-function DiffRoute({ id, index }: { id: string; index: number }) {
+function DiffRoute({ token, id, index, path }: { token: string | null; id: string; index: number; path: string }) {
+  const res = useLoad<FileDiff>((s) => fetchFileDiff(token, id, index, path, s), `d:${id}:${index}:${path}`);
+  // Escape goes back to the steps of this prompt.
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      window.location.hash = routeHref({ kind: "steps", id, index });
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [id, index]);
   return (
-    <>
-      <p><a href={routeHref({ kind: "steps", id, index })}>&larr; Back to steps</a></p>
-      <p className="empty">The diff view is not available yet.</p>
-    </>
+    <Status res={res} back={routeHref({ kind: "steps", id, index })}>
+      {(d) => <DiffView sessionId={id} index={index} diff={d} />}
+    </Status>
   );
 }
 
@@ -71,7 +81,7 @@ function Routed({ token, route }: { token: string | null; route: Route }) {
     case "steps":
       return <StepsRoute token={token} id={route.id} index={route.index} />;
     case "diff":
-      return <DiffRoute id={route.id} index={route.index} />;
+      return <DiffRoute token={token} id={route.id} index={route.index} path={route.path} />;
     case "list":
       return <ListView token={token} />;
   }

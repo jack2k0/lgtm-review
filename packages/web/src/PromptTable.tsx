@@ -2,7 +2,25 @@ import { useState } from "react";
 import type { PromptAnalysis, SessionAnalysis } from "@lgtm/core";
 import { StatusTag } from "./StatusDot";
 import { TimeBar, TimeLegend } from "./TimeBar";
-import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, plural, routeHref, visiblePrompts } from "./viewmodel";
+import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, plural, routeHref, shortPath, visiblePrompts } from "./viewmodel";
+
+/** Changed files of a prompt; each path links to its diff (the link carries the exact path from the list). */
+export function FileList({ sessionId, p }: { sessionId: string; p: PromptAnalysis }) {
+  const paths = p.files.map((f) => f.path);
+  if (p.files.length === 0) return <p className="muted">No changed files.</p>;
+  return (
+    <ul className="files">
+      {p.files.map((f) => (
+        <li key={f.path}>
+          <span className="kind" title={kindLabel(f.kind)}>{f.kind}</span>{" "}
+          <a className="mono file-link" href={routeHref({ kind: "diff", id: sessionId, index: p.index, path: f.path })} title={`Open diff of ${f.path}`}>{shortPath(f.path, paths)}</a>{" "}
+          +{f.added} -{f.removed}
+          {f.maybeIncomplete ? <span className="marker">may be incomplete</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: PromptAnalysis; open: boolean; onToggle: () => void }) {
   const totals = fileTotals(p);
@@ -35,18 +53,7 @@ function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: PromptAna
           <td />
           <td colSpan={5}>
             <p className="full-reason"><strong>Reason:</strong> {p.reason}</p>
-            {p.files.length === 0 ? (
-              <p className="muted">No changed files.</p>
-            ) : (
-              <ul className="files">
-                {p.files.map((f) => (
-                  <li key={f.path}>
-                    <span className="kind">{f.kind}</span> <span className="mono">{f.path}</span> +{f.added} -{f.removed}
-                    {f.maybeIncomplete ? <span className="marker">may be incomplete</span> : null}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <FileList sessionId={sessionId} p={p} />
           </td>
         </tr>
       ) : null}

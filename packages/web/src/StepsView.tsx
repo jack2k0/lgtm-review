@@ -1,10 +1,12 @@
 import type { PromptDetail } from "@lgtm/core";
 import { StepCard } from "./StepCard";
 import { StatusTag } from "./StatusDot";
-import { formatDuration, formatStarted, plural, promptHeading, routeHref } from "./viewmodel";
+import { formatDuration, formatStarted, plural, promptHeading, routeHref, shortPath } from "./viewmodel";
 
 /** Steps of one prompt. The header comes from the same response, so a deep link needs no other request. */
 export function StepsView({ sessionId, detail, onOpenFile }: { sessionId: string; detail: PromptDetail; onOpenFile?: (path: string) => void }) {
+  const allFiles = [...new Set(detail.steps.flatMap((s) => s.files))];
+  const pathLabel = (p: string): string => shortPath(p, allFiles);
   return (
     <>
       <p><a href={routeHref({ kind: "session", id: sessionId })}>&larr; Back to session</a></p>
@@ -28,7 +30,7 @@ export function StepsView({ sessionId, detail, onOpenFile }: { sessionId: string
       ) : (
         <ol className="steps">
           {detail.steps.map((s) => (
-            <StepCard key={s.n} step={s} {...(onOpenFile ? { onOpenFile } : {})} />
+            <StepCard key={s.n} step={s} pathLabel={pathLabel} {...(onOpenFile ? { onOpenFile } : {})} />
           ))}
         </ol>
       )}

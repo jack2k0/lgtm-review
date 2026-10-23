@@ -202,3 +202,50 @@ export function actionsLabel(n: number): string {
 export function promptHeading(index: number, text: string): string {
   return `Prompt ${index + 1}: ${text.trim() || "(empty prompt)"}`;
 }
+
+const KIND_LABELS = { M: "Modified", A: "Added", D: "Deleted" } as const;
+
+/** Text label of a file change kind, so the kind is never conveyed by color or a single letter alone. */
+export function kindLabel(k: "M" | "A" | "D"): string {
+  return KIND_LABELS[k];
+}
+
+/** Prefix drawn in front of a diff line; the `+`/`-`/space character is part of the text, not only a color. */
+export function diffPrefix(t: "+" | "-" | " "): string {
+  return t;
+}
+
+const isAbs = (p: string): boolean => p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p);
+
+/**
+ * Display form of `path` among `all` (the files of one prompt): absolute paths lose their common directory
+ * prefix, a lone absolute path keeps its last two segments. Display only; the API always gets the exact path.
+ */
+export function shortPath(path: string, all: readonly string[]): string {
+  if (!isAbs(path)) return path;
+  const split = (p: string): string[] => p.split(/[\\/]/);
+  const dirs = [...new Set([path, ...all])].filter(isAbs).map((p) => split(p).slice(0, -1));
+  let common = dirs[0]!;
+  if (dirs.length > 1) {
+    for (const d of dirs.slice(1)) {
+      let i = 0;
+      while (i < common.length && i < d.length && common[i] === d[i]) i++;
+      common = common.slice(0, i);
+    }
+  } else {
+    common = common.slice(0, Math.max(0, common.length - 1));
+  }
+  const parts = split(path);
+  const rest = parts.slice(common.length);
+  const out = rest.join("/").replace(/^\/+/, "");
+  return out || (parts[parts.length - 1] ?? path);
+}
+
+/** Total `+` and `-` lines of a diff, for the header. */
+export function diffCounts(hunks: readonly { lines: readonly { t: "+" | "-" | " " }[] }[]): { added: number; removed: number } {
+  let added = 0;
+  let removed = 0;
+  for (const h of hunks) for (const l of h.lines) if (l.t === "+") added++;
+  else if (l.t === "-") removed++;
+  return { added, removed };
+}

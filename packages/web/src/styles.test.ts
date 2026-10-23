@@ -35,6 +35,8 @@ const pairs: [string, string, number][] = [
   ["pass", "bg", 4.5], ["pass", "surface", 4.5], ["error", "surface", 4.5],
   ["badge-read", "bg", 4.5], ["badge-write", "bg", 4.5], ["badge-check", "bg", 4.5], ["badge-fix", "bg", 4.5],
   ["badge-read", "surface", 4.5], ["badge-write", "surface", 4.5], ["badge-check", "surface", 4.5], ["badge-fix", "surface", 4.5],
+  ["text", "add-bg", 4.5], ["text", "del-bg", 4.5], ["muted", "hunk-bg", 4.5],
+  ["add-fg", "add-bg", 4.5], ["del-fg", "del-bg", 4.5],
   ["seg-read", "surface", 3], ["seg-write", "surface", 3], ["seg-check", "surface", 3], ["seg-fix", "surface", 3],
 ];
 

@@ -6,7 +6,7 @@ import { actionsLabel, checkOutcome, formatClock, formatStepDuration, phaseLabel
 export const ACTION_PAGE = 200;
 
 /** Every string below comes from a session log and is rendered as a React text node only. */
-export function StepCard({ step, onOpenFile }: { step: Step; onOpenFile?: (path: string) => void }) {
+export function StepCard({ step, onOpenFile, pathLabel }: { step: Step; onOpenFile?: (path: string) => void; pathLabel?: (path: string) => string }) {
   const [open, setOpen] = useState(false);
   const [limit, setLimit] = useState(ACTION_PAGE);
   const listId = `actions-${step.n}`;
@@ -41,10 +41,10 @@ export function StepCard({ step, onOpenFile }: { step: Step; onOpenFile?: (path:
                 type="button"
                 className="chip mono"
                 disabled={!onOpenFile}
-                title={onOpenFile ? undefined : "The diff view is not available yet"}
+                title={onOpenFile ? `Open diff of ${f}` : "The diff view is not available yet"}
                 onClick={() => onOpenFile?.(f)}
               >
-                {f}
+                {pathLabel ? pathLabel(f) : f}
               </button>
             </li>
           ))}
