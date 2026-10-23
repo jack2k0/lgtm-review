@@ -200,8 +200,8 @@ Detail analysis on demand only; caps on retained text; LRU cache of 3 sessions.
 
 #### Automated
 
-- [ ] 5.1 `pnpm check` green incl. extended smoke
-- [ ] 5.2 Tarball < 2 MB
+- [x] 5.1 `pnpm check` green incl. extended smoke
+- [x] 5.2 Tarball < 2 MB
 
 #### Manual
 

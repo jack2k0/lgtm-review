@@ -1,10 +1,11 @@
 // Pack packages/cli, verify tarball contents, run it via npx in isolation.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const fixturesDir = resolve(dirname(fileURLToPath(import.meta.url)), "../packages/core/fixtures/sessions");
 const cliDir = resolve(dirname(fileURLToPath(import.meta.url)), "../packages/cli");
 const dirs = [];
 let server = null;
@@ -73,6 +74,12 @@ try {
   // Server mode: URL printed, /api needs the token.
   const projects = join(runDir, "projects");
   mkdirSync(projects);
+  // One fixture session (Edit, Write, shell edits) so the detail routes have something to serve.
+  const sessionId = "diffs-mixed";
+  const sessionDir = join(projects, runDir.replace(/[/.]/g, "-"));
+  mkdirSync(sessionDir);
+  copyFileSync(join(fixturesDir, `${sessionId}.jsonl`), join(sessionDir, `${sessionId}.jsonl`));
+  const filePath = "/home/user/project/src/greet.js";
   const url = new URL(await startPacked(tarball, runDir, ["--no-open", "--port", "0", "--projects-dir", projects, "--dir", runDir]));
   const token = url.hash.slice(3);
   const denied = await fetch(`${url.origin}/api/sessions`);
@@ -80,6 +87,30 @@ try {
   const allowed = await fetch(`${url.origin}/api/sessions`, { headers: { "X-Lgtm-Token": token } });
   if (allowed.status !== 200) fail(`/api/sessions with token: expected 200, got ${allowed.status}`);
   console.log("smoke ok: server auth");
+
+  // Detail routes: steps and diff of one fixture prompt; 403 without the token, 404 for unknown prompt or path.
+  const get = (path, withToken = true) => fetch(`${url.origin}${path}`, withToken ? { headers: { "X-Lgtm-Token": token } } : {});
+  const stepsPath = `/api/sessions/${sessionId}/prompts/0`;
+  const diffPath = `${stepsPath}/diff?path=${encodeURIComponent(filePath)}`;
+  for (const p of [stepsPath, diffPath]) {
+    const r = await get(p, false);
+    if (r.status !== 403) fail(`GET ${p} without token: expected 403, got ${r.status}`);
+  }
+  const stepsRes = await get(stepsPath);
+  if (stepsRes.status !== 200) fail(`GET ${stepsPath}: expected 200, got ${stepsRes.status}`);
+  const steps = await stepsRes.json();
+  if (!Array.isArray(steps.steps) || steps.steps.length === 0) fail("prompt detail has no steps");
+  if (!steps.steps.some((st) => st.files.includes(filePath))) fail("no step lists the edited file");
+  const diffRes = await get(diffPath);
+  if (diffRes.status !== 200) fail(`GET diff: expected 200, got ${diffRes.status}`);
+  const diff = await diffRes.json();
+  if (diff.path !== filePath || diff.kind !== "M" || !Array.isArray(diff.hunks) || diff.hunks.length === 0) fail(`unexpected diff: ${JSON.stringify(diff).slice(0, 200)}`);
+  if (!diff.hunks[0].lines.some((l) => l.t === "+")) fail("diff has no added lines");
+  const outside = await get(`${stepsPath}/diff?path=${encodeURIComponent("/etc/passwd")}`);
+  if (outside.status !== 404) fail(`diff of a path outside the prompt's files: expected 404, got ${outside.status}`);
+  const noPrompt = await get(`/api/sessions/${sessionId}/prompts/9999`);
+  if (noPrompt.status !== 404) fail(`unknown prompt: expected 404, got ${noPrompt.status}`);
+  console.log("smoke ok: detail routes (steps, diff, 403, 404)");
 
   // Bundled UI: index.html and a JS asset with the right Content-Type.
   const root = await fetch(`${url.origin}/`);
