@@ -148,6 +148,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Status:** done (real-log audit: status 97.1%, reason 97.1% without subagent prompts; 94.5% / 87.4% overall)
 - Deferred from the audit to later slices: subagent transcripts merged into prompts (S-12), fork/resume dedupe across files (S-13), background-task completion mapping (S-14).
 
+### S-12: Subagent activity inside prompts (v0.2)
+
+- **Outcome:** Edits and checks performed by subagents (`Agent` tool) count toward the parent prompt's status, files, time split, steps and hints; the "subagent activity not analysed" hedge disappears when the subagent transcript is found. Target: overall status match >= 97% on the owner's real logs (audit after S-11: 94.5% overall vs 97.1% without subagent prompts).
+- **Change ID:** subagent-prompts
+- **PRD refs:** FR-002, FR-004, FR-005; Success Criterion status match >= 95%
+- **Prerequisites:** S-11
+- **Status:** in progress (planned 2026-10-23, orchestrator decision)
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
