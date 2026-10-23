@@ -1,0 +1,31 @@
+{
+  "fixture": "shell-empty-diff",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "note": "sed -i + git commit in one command, empty bashEditDiff: the harness missed the edit, the heuristic counts it"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "git add + git commit only, empty bashEditDiff: nothing else mutated"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "note": "non-empty bashEditDiff is trusted: one real edit, no double counting"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "checked",
+      "note": "heredoc write before the check in one command, empty diff: the edit precedes the check"
+    },
+    {
+      "index": 4,
+      "expectedStatus": "unchecked",
+      "note": "check, then sed -i + commit in one command, empty diff: edit after the check"
+    }
+  ]
+}

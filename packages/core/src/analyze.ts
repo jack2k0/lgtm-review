@@ -465,9 +465,9 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
         }
         let gitOp = false;
         let seqAt = seq;
-        if (use.name === "Bash" && use.input.command !== undefined && (ev.bashEditDiff === undefined || ev.bashEditDiff.length > 0)) {
+        if (use.name === "Bash" && use.input.command !== undefined) {
           const sm = classifyShellMutation(use.input.command, opts.repo);
-          if (ev.bashEditDiff !== undefined) {
+          if (ev.bashEditDiff !== undefined && ev.bashEditDiff.length > 0) {
             gitOp = sm.gitOnly;
             if (!gitOp) seqAt = orderedSeq(seq, sm.order);
             touches = ev.bashEditDiff.map((f) => {
@@ -483,8 +483,9 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               if (detail) t.patch = retain(use.prompt, f.path, f.patch);
               return t;
             });
-          } else if (sm.edits.length > 0) {
-            // No diff in the log (the session did not start inside the repo): count what the command text says.
+          } else if (sm.edits.length > 0 && !(ev.bashEditDiff !== undefined && sm.gitOnly)) {
+            // No diff in the log (the session did not start inside the repo), or an empty one next to an explicit
+            // edit (the harness snapshots before the command ends and misses edits committed within it): count the command text.
             gitOp = sm.gitOnly;
             if (!gitOp) seqAt = orderedSeq(seq, sm.order);
             const cwd = parser.meta().cwd;

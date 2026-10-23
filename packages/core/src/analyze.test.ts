@@ -328,9 +328,23 @@ describe("shell edits without bashEditDiff", () => {
     expect(p.reason).toBe("no checks ran");
   });
 
-  test("an empty bashEditDiff is trusted: nothing changed", () => {
-    const lines = [prompt("q"), toolUse("b1", "Bash", { command: "sed -i s/a/b/ x.txt" }), toolResult("b1", "", { toolUseResult: { bashEditDiff: { files: [] } } })];
-    expect(one(lines).status).toBe("no-changes");
+  describe("empty bashEditDiff", () => {
+    const empty = { bashEditDiff: { files: [] } };
+    const run = (command: string) => one([prompt("q"), toolUse("b1", "Bash", { command }), toolResult("b1", "", { toolUseResult: empty })]);
+    test.each([
+      ["sed -i + git commit", "sed -i 's/a/b/' x.js && git commit -am m", "unchecked", "no checks ran (shell edits may be incomplete)", ["/home/user/project/x.js"]],
+      ["perl -pi + commit", "perl -pi -e 's/a/b/' x.pl && git commit -am m", "unchecked", "no checks ran (shell edits may be incomplete)", ["/home/user/project/x.pl"]],
+      ["printf >> file", "printf 'x' >> notes.txt && git commit -am m", "unchecked", "no checks ran (shell edits may be incomplete)", ["/home/user/project/notes.txt"]],
+      ["git apply", "git apply fix.patch && git commit -am m", "unchecked", "no checks ran (shell edits may be incomplete)", ["(shell edit)"]],
+      ["heredoc write before check", "cat > x.js <<'EOF'\nx\nEOF\npnpm test", "checked", "pnpm test passed after last edit (shell edits may be incomplete)", ["/home/user/project/x.js"]],
+      ["check before sed -i", "pnpm test && sed -i 's/a/b/' x.js", "unchecked", "1 edit after last check (shell edits may be incomplete)", ["/home/user/project/x.js"]],
+      ["plain git commit", "git add -A && git commit -m m", "no-changes", "no edits", []],
+      ["git-op only", "git merge origin/main", "no-changes", "no edits", []],
+      ["scratch redirect", "echo hi > /tmp/x && git commit -m m", "no-changes", "no edits", []],
+    ])("%s", (_n, command, status, reason, files) => {
+      const p = run(command);
+      expect({ status: p.status, reason: p.reason, files: p.files.map((f) => f.path) }).toEqual({ status, reason, files });
+    });
   });
 
   test("check and sed -i in one command: order decides", () => {

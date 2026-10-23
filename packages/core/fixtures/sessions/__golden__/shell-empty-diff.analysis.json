@@ -1,0 +1,157 @@
+{
+  "sessionId": "shell-empty-diff",
+  "title": "Patch with sed and commit in one command.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Patch with sed and commit in one command.",
+      "status": "unchecked",
+      "reason": "no checks ran (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/src/a.js",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/a.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000004",
+      "text": "Only commit.",
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000007",
+      "text": "Patch with sed, commit; the log has a diff.",
+      "status": "unchecked",
+      "reason": "no checks ran",
+      "files": [
+        {
+          "path": "/home/user/project/src/real.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/real.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000010",
+      "text": "Write a file with a heredoc, then test, in one command.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/src/new.js",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 0,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly checking (100%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 4,
+      "uuid": "00000000-0000-4000-8000-000000000013",
+      "text": "Test, patch, commit in one command.",
+      "status": "unchecked",
+      "reason": "1 edit after last check (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/src/c.js",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 0,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly checking (100%), 1 check",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/c.js",
+          "reason": "edited after the last completed check"
+        }
+      ],
+      "recommendation": "read-flagged"
+    }
+  ],
+  "warnings": []
+}

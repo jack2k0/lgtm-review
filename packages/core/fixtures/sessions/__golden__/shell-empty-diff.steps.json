@@ -1,0 +1,198 @@
+[
+  {
+    "index": 0,
+    "text": "Patch with sed and commit in one command.",
+    "status": "unchecked",
+    "reason": "no checks ran (shell edits may be incomplete)",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/a.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Edit src/a.js (+0 -0)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "sed -i 's/a/b/' src/a.js && git commit -am 'fix a'",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/a.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Only commit.",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:04.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Run 1 command",
+        "startedAt": "2026-01-01T00:00:05.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git add -A && git commit -m 'wip'",
+            "ok": true,
+            "ts": "2026-01-01T00:00:05.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Patch with sed, commit; the log has a diff.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:07.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/real.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/real.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:08.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "sed -i 's/a/b/' src/real.js && git commit -am 'fix'",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/real.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Write a file with a heredoc, then test, in one command.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit (shell edits may be incomplete)",
+    "headline": "Mostly checking (100%), 1 check",
+    "startedAt": "2026-01-01T00:00:10.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:11.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "cat > src/new.js <<'EOF' export const x = 1; EOF pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:11.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/new.js"
+        ],
+        "check": {
+          "command": "cat > src/new.js <<'EOF' export const x = 1; EOF pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "text": "Test, patch, commit in one command.",
+    "status": "unchecked",
+    "reason": "1 edit after last check (shell edits may be incomplete)",
+    "headline": "Mostly checking (100%), 1 check",
+    "startedAt": "2026-01-01T00:00:13.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/c.js",
+        "reason": "edited after the last completed check"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:14.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test && sed -i 's/a/b/' src/c.js && git commit -am 'c'",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/c.js"
+        ],
+        "check": {
+          "command": "pnpm test && sed -i 's/a/b/' src/c.js && git commit -am 'c'",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  }
+]

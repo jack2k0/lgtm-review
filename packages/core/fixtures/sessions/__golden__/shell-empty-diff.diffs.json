@@ -1,0 +1,44 @@
+{
+  "0:/home/user/project/src/a.js": {
+    "path": "/home/user/project/src/a.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "2:/home/user/project/src/real.js": {
+    "path": "/home/user/project/src/real.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/src/new.js": {
+    "path": "/home/user/project/src/new.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "4:/home/user/project/src/c.js": {
+    "path": "/home/user/project/src/c.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  }
+}
