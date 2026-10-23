@@ -75,12 +75,16 @@ export function PromptTable({ session }: { session: SessionAnalysis }) {
 
   const toggle = (i: number) => setOpenIdx((prev) => toggleKey(prev, i));
 
+  const nonInheritedCount = session.prompts.filter((p) => !p.inheritedFrom).length;
+  const inheritedCount = session.prompts.length - nonInheritedCount;
+
   return (
     <>
       <div className="session-head">
         <h2>{session.title || session.sessionId}</h2>
         <p className="muted">
-          {session.branch ? <span className="mono">{session.branch}</span> : null} {plural(session.prompts.length, "prompt")}
+          {session.branch ? <span className="mono">{session.branch}</span> : null}
+          {nonInheritedCount} {plural(nonInheritedCount, "prompt")}{inheritedCount > 0 ? ` +${inheritedCount} inherited` : ""}
         </p>
       </div>
       {session.warnings.length > 0 ? (
