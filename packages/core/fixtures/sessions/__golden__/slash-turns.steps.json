@@ -1,0 +1,212 @@
+[
+  {
+    "index": 0,
+    "text": "Fix the add function.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Review the parser.",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "No timing data",
+    "startedAt": "2026-01-01T00:00:09.000Z",
+    "activeMs": 0,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": []
+  },
+  {
+    "index": 2,
+    "text": "/review-code src/ parser module",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:11.000Z",
+    "activeMs": 7000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/add.js",
+        "reason": "edited and no check completed in this prompt"
+      },
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/other.js",
+        "reason": "edited and no check completed in this prompt"
+      },
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/sub.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit 3 files (+3 -3)",
+        "startedAt": "2026-01-01T00:00:13.000Z",
+        "durationMs": 7000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:13.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "src/sub.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:15.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "src/other.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:17.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js",
+          "/home/user/project/src/sub.js",
+          "/home/user/project/src/other.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "/ship-it now",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly writing (60%), 1 check",
+    "startedAt": "2026-01-01T00:00:21.000Z",
+    "activeMs": 5000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:23.000Z",
+        "durationMs": 3000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:23.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:25.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:25.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "text": "/explain the cache",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "No timing data",
+    "startedAt": "2026-01-01T00:00:28.000Z",
+    "activeMs": 0,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": []
+  }
+]

@@ -94,7 +94,7 @@ describe("status rule", () => {
   test("unreliable passing check is flagged in the reason", () => {
     const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pytest | tail -5")]);
     expect(p.status).toBe("checked");
-    expect(p.reason).toContain("may be masked");
+    expect(p.reason).toContain("(exit code not verified)");
   });
 
   test("results are paired by id, not by position", () => {
@@ -197,5 +197,90 @@ describe("session fields", () => {
     const r = a.finish();
     expect(a.finish()).toBe(r);
     expect(r).toEqual(analyzeSession(lines));
+  });
+});
+
+describe("masked exit codes", () => {
+  const run = (cmd: string, output: string) => one([prompt("q"), ...edit("e1"), ...bash("b1", cmd, { output })]);
+
+  test("pipe to tail with failures in the output => failing, even though the exit is 0", () => {
+    expect(run("pytest -q 2>&1 | tail -3", "=== 2 failed, 10 passed in 1s ===")).toMatchObject({
+      status: "failing",
+      reason: "pytest -q 2>&1 output indicates failures (exit code masked)",
+    });
+  });
+
+  test("pipe to tail with clean output stays checked, with a reason suffix", () => {
+    expect(run("pytest -q | tail -3", "12 passed in 1s")).toMatchObject({
+      status: "checked",
+      reason: "pytest -q passed after last edit (exit code not verified)",
+    });
+  });
+
+  test("trailing echo of the exit code is read from the output", () => {
+    expect(run("pytest; echo EXIT=$?", "...\nEXIT=1")).toMatchObject({ status: "failing" });
+    expect(run("pytest; echo EXIT=$?", "...\nEXIT=0")).toMatchObject({ status: "checked" });
+  });
+
+  test("only the tail of a long output counts (the head is cut at parse time)", () => {
+    const long = `${"progress line\n".repeat(200)}=== 1 failed, 4 passed ===`;
+    expect(run("pytest | tail -300", long).status).toBe("failing");
+    expect(run("pytest | tail -300", `Traceback (most recent call last):\n  boom\n${"progress line\n".repeat(200)}12 passed`).status).toBe("checked");
+  });
+
+  test("a reliable exit code is trusted: no inspection of the output", () => {
+    expect(run("pytest -q", "1 failed")).toMatchObject({ status: "checked", reason: "pytest -q passed after last edit" });
+  });
+
+  test("mutation probe: a clean pass is checked but flagged as possibly reverted", () => {
+    expect(run("pytest -q 2>&1 | tail -1; git checkout -q src/add.js", "12 passed")).toMatchObject({
+      status: "checked",
+      reason: "pytest -q 2>&1 passed after last edit (edits may have been reverted)",
+    });
+  });
+
+  test("mutation probe with failing output => failing", () => {
+    expect(run("pytest -q 2>&1 | tail -1; git checkout -q src/add.js", "1 failed").status).toBe("failing");
+  });
+
+  test("a masked failure is superseded by a later clean check", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pytest | tail -1", { output: "1 failed" }), ...edit("e2"), ...bash("b2", "pytest -q")]);
+    expect(p.status).toBe("checked");
+  });
+
+  test("a masked failure followed by an edit => unchecked, edits after last check", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pytest | tail -1", { output: "1 failed" }), ...edit("e2")]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
+  });
+
+  test("detail mode: the masked check is shown as failed with the signal line", () => {
+    const a = createAnalyzer({ detail: true });
+    for (const l of [prompt("q"), ...edit("e1"), ...bash("b1", "pytest | tail -2", { output: "x\n2 failed, 1 passed" })]) a.push(l);
+    a.finish();
+    const check = a.details()[0]!.steps.find((s) => s.check !== undefined)!;
+    expect(check.title).toContain("failed (exit code masked)");
+    expect(check.check).toMatchObject({ exitCode: 0, passed: false, excerpt: "2 failed, 1 passed" });
+    expect(a.details()[0]!.status).toBe("failing");
+  });
+});
+
+describe("slash command turns", () => {
+  const cmd = (name: string, args = "") =>
+    prompt(`<command-message>${name}</command-message>\n<command-name>/${name}</command-name>` + (args ? `\n<command-args>${args}</command-args>` : ""));
+
+  test("a work command with edits is its own prompt", () => {
+    const a = analyzeSession([prompt("first"), ...edit("e1"), ...bash("b1", "pnpm test"), cmd("review", "the parser"), ...edit("e2"), ...edit("e3", "/home/user/project/src/b.js")]);
+    expect(a.prompts).toHaveLength(2);
+    expect(a.prompts[0]).toMatchObject({ status: "checked" });
+    expect(a.prompts[1]).toMatchObject({ text: "/review the parser", status: "unchecked", reason: "no checks ran" });
+    expect(a.prompts[1]!.files).toHaveLength(2);
+  });
+
+  test("a command without tool activity is a no-changes prompt", () => {
+    expect(analyzeSession([cmd("review")]).prompts[0]).toMatchObject({ text: "/review", status: "no-changes" });
+  });
+
+  test("skipped commands open no prompt", () => {
+    expect(analyzeSession([prompt("first"), cmd("clear"), cmd("model", "opus"), ...edit("e1")]).prompts).toHaveLength(1);
   });
 });

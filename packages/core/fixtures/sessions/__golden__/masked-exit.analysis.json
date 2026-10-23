@@ -1,0 +1,252 @@
+{
+  "sessionId": "masked-exit",
+  "title": "Port the tests to .NET.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Port the tests to .NET.",
+      "status": "failing",
+      "reason": "dotnet test 2>&1 output indicates failures (exit code masked)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000007",
+      "text": "Run pytest quietly.",
+      "status": "failing",
+      "reason": "pytest -q 2>&1 output indicates failures (exit code masked)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000013",
+      "text": "Probe with a pass.",
+      "status": "checked",
+      "reason": "pytest -q 2>&1 passed after last edit (edits may have been reverted)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000019",
+      "text": "Check, trimmed.",
+      "status": "checked",
+      "reason": "pytest -q passed after last edit (exit code not verified)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 4,
+      "uuid": "00000000-0000-4000-8000-000000000025",
+      "text": "Check and print the exit code.",
+      "status": "failing",
+      "reason": "pytest -q output indicates failures (exit code masked)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 5,
+      "uuid": "00000000-0000-4000-8000-000000000031",
+      "text": "Maven, tailed.",
+      "status": "failing",
+      "reason": "mvn -q test 2>&1 output indicates failures (exit code masked)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 6,
+      "uuid": "00000000-0000-4000-8000-000000000037",
+      "text": "Fix then recheck.",
+      "status": "checked",
+      "reason": "pytest -q passed after last edit (exit code not verified)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 2,
+          "removed": 2,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 4000,
+        "fixMs": 2000
+      },
+      "activeMs": 8000,
+      "headline": "Mostly checking (50%), 2 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 7,
+      "uuid": "00000000-0000-4000-8000-000000000047",
+      "text": "Unittest summary.",
+      "status": "checked",
+      "reason": "python -m unittest 2>&1 passed after last edit (exit code not verified)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 8,
+      "uuid": "00000000-0000-4000-8000-000000000053",
+      "text": "Rerun summary says zero.",
+      "status": "failing",
+      "reason": "pytest -q output indicates failures (exit code masked)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "read-flagged"
+    }
+  ],
+  "warnings": []
+}

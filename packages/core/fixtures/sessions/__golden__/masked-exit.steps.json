@@ -1,0 +1,568 @@
+[
+  {
+    "index": 0,
+    "text": "Port the tests to .NET.",
+    "status": "failing",
+    "reason": "dotnet test 2>&1 output indicates failures (exit code masked)",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run dotnet test 2>&1 -> failed (exit code masked)",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "dotnet test 2>&1 | tail -5",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "dotnet test 2>&1 | tail -5",
+          "exitCode": 0,
+          "passed": false,
+          "excerpt": "Failed! - Failed: 2, Passed: 10, Skipped: 0, Total: 12"
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Run pytest quietly.",
+    "status": "failing",
+    "reason": "pytest -q 2>&1 output indicates failures (exit code masked)",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:07.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:08.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pytest -q 2>&1 -> failed (exit code masked)",
+        "startedAt": "2026-01-01T00:00:10.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pytest -q 2>&1 | tail -1; git checkout -q src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:10.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pytest -q 2>&1 | tail -1; git checkout -q src/add.js",
+          "exitCode": 0,
+          "passed": false,
+          "excerpt": "1 failed, 11 passed in 0.9s"
+        }
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Probe with a pass.",
+    "status": "checked",
+    "reason": "pytest -q 2>&1 passed after last edit (edits may have been reverted)",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:13.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:14.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pytest -q 2>&1 -> passed",
+        "startedAt": "2026-01-01T00:00:16.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pytest -q 2>&1 | tail -1; git checkout -q src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:16.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pytest -q 2>&1 | tail -1; git checkout -q src/add.js",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Check, trimmed.",
+    "status": "checked",
+    "reason": "pytest -q passed after last edit (exit code not verified)",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:19.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:20.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:20.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pytest -q -> passed",
+        "startedAt": "2026-01-01T00:00:22.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pytest -q | tail -3",
+            "ok": true,
+            "ts": "2026-01-01T00:00:22.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pytest -q | tail -3",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "text": "Check and print the exit code.",
+    "status": "failing",
+    "reason": "pytest -q output indicates failures (exit code masked)",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:25.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:26.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:26.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pytest -q -> failed (exit code masked)",
+        "startedAt": "2026-01-01T00:00:28.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pytest -q; echo EXIT=$?",
+            "ok": true,
+            "ts": "2026-01-01T00:00:28.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pytest -q; echo EXIT=$?",
+          "exitCode": 0,
+          "passed": false,
+          "excerpt": "EXIT=1"
+        }
+      }
+    ]
+  },
+  {
+    "index": 5,
+    "text": "Maven, tailed.",
+    "status": "failing",
+    "reason": "mvn -q test 2>&1 output indicates failures (exit code masked)",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:31.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:32.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:32.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run mvn -q test 2>&1 -> failed (exit code masked)",
+        "startedAt": "2026-01-01T00:00:34.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "mvn -q test 2>&1 | tail -20",
+            "ok": true,
+            "ts": "2026-01-01T00:00:34.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "mvn -q test 2>&1 | tail -20",
+          "exitCode": 0,
+          "passed": false,
+          "excerpt": "[ERROR] Tests run: 5, Failures: 1, Errors: 0, Skipped: 0"
+        }
+      }
+    ]
+  },
+  {
+    "index": 6,
+    "text": "Fix then recheck.",
+    "status": "checked",
+    "reason": "pytest -q passed after last edit (exit code not verified)",
+    "headline": "Mostly checking (50%), 2 checks",
+    "startedAt": "2026-01-01T00:00:37.000Z",
+    "activeMs": 8000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:38.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:38.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pytest -q -> failed (exit code masked)",
+        "startedAt": "2026-01-01T00:00:40.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pytest -q | tail -1",
+            "ok": true,
+            "ts": "2026-01-01T00:00:40.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pytest -q | tail -1",
+          "exitCode": 0,
+          "passed": false,
+          "excerpt": "3 failed"
+        }
+      },
+      {
+        "n": 3,
+        "phase": "fix",
+        "title": "Fix: edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:42.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:42.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 4,
+        "phase": "check",
+        "title": "Run pytest -q -> passed",
+        "startedAt": "2026-01-01T00:00:44.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pytest -q | tail -1",
+            "ok": true,
+            "ts": "2026-01-01T00:00:44.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pytest -q | tail -1",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 7,
+    "text": "Unittest summary.",
+    "status": "checked",
+    "reason": "python -m unittest 2>&1 passed after last edit (exit code not verified)",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:47.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:48.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:48.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run python -m unittest 2>&1 -> passed",
+        "startedAt": "2026-01-01T00:00:50.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "python -m unittest 2>&1 | tail -4",
+            "ok": true,
+            "ts": "2026-01-01T00:00:50.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "python -m unittest 2>&1 | tail -4",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 8,
+    "text": "Rerun summary says zero.",
+    "status": "failing",
+    "reason": "pytest -q output indicates failures (exit code masked)",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:53.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:54.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:54.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pytest -q -> failed (exit code masked)",
+        "startedAt": "2026-01-01T00:00:56.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pytest -q | tail -5",
+            "ok": true,
+            "ts": "2026-01-01T00:00:56.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pytest -q | tail -5",
+          "exitCode": 0,
+          "passed": false,
+          "excerpt": "FAILED tests/test_a.py::test_x"
+        }
+      }
+    ]
+  }
+]

@@ -10,6 +10,8 @@ import type { Warning } from "./schema.js";
 
 export const PROMPT_TEXT_MAX = 200;
 const RESULT_TEXT_MAX = 500;
+/** Tail of a result kept for the masked-exit inspection. */
+export const RESULT_TAIL_MAX = 4096;
 const COMMAND_MAX = 4000;
 const PATH_MAX = 1000;
 const MAX_WARNINGS = 1000;
@@ -65,6 +67,8 @@ export type ToolResultEvent = {
   bashEditDiff?: BashEdit[];
   /** The command was started in the background; the exit code is unknown. */
   background: boolean;
+  /** Last ~4 KB of the result text; only set when the result is longer than `text` (which keeps the head). */
+  tail?: string;
   /** Raw record timestamp (ISO string) or null when the record has none. */
   ts: string | null;
   line: number;
@@ -184,6 +188,42 @@ function blocksText(content: unknown, max: number, sep: string): string {
   return truncate(out, max);
 }
 
+/** Last `max` characters of a message `content` (string, or list of text blocks). */
+function blocksTail(content: unknown, max: number): string {
+  if (typeof content === "string") return content.length > max ? content.slice(content.length - max) : content;
+  if (!Array.isArray(content)) return "";
+  const parts: string[] = [];
+  for (const b of content) if (isObj(b) && b.type === "text" && typeof b.text === "string") parts.push(b.text);
+  const all = parts.join("\n");
+  return all.length > max ? all.slice(all.length - max) : all;
+}
+
+/**
+ * Slash commands that never start a unit of work (session management, settings, help).
+ * Every other command (including skills and custom commands) opens a prompt.
+ */
+const SKIPPED_COMMANDS = new Set([
+  "clear", "compact", "model", "help", "status", "config", "login", "logout", "cost", "context", "resume", "exit",
+  "ide", "permissions", "mcp", "memory", "hooks", "doctor", "terminal-setup", "statusline", "vim", "theme", "fast",
+]);
+const COMMAND_NAME_RE = /<command-name>\s*\/?([^<\s]+)\s*<\/command-name>/;
+const COMMAND_ARGS_RE = /<command-args>([\s\S]*?)<\/command-args>/;
+
+/**
+ * Prompt text of a slash-command turn (`/name args`), or null when the command is not "work"
+ * (or the record is not a command record at all).
+ */
+function slashPromptText(raw: string): string | null {
+  const name = COMMAND_NAME_RE.exec(raw)?.[1];
+  if (name === undefined) return null;
+  const args = (COMMAND_ARGS_RE.exec(raw)?.[1] ?? "").trim();
+  const key = name.toLowerCase();
+  if (SKIPPED_COMMANDS.has(key)) return null;
+  if (key === "goal" && args.toLowerCase() === "clear") return null;
+  const flat = args.replace(/\s+/g, " ");
+  return truncate(flat === "" ? `/${name}` : `/${name} ${flat}`, PROMPT_TEXT_MAX);
+}
+
 function hintOf(input: Record<string, unknown>): string | undefined {
   for (const k of ["pattern", "url", "query", "description", "path"]) {
     const v = input[k];
@@ -275,6 +315,8 @@ export function createParser(opts: ParserOptions = {}): Parser {
   let finished: Warning[] | null = null;
   const seen = new Set<string>();
   const unknown = new Map<string, { first: number; count: number }>();
+  /** The last slash-command prompt, until the agent first answers. */
+  let slash: { uuid: string | null; answered: boolean } | null = null;
   const meta: ParserMeta = { sessionId: null, branch: null, startedAt: null, title: null, cwd: null };
 
   function warn(line: number, reason: string): void {
@@ -307,6 +349,10 @@ export function createParser(opts: ParserOptions = {}): Parser {
         const isError = b.is_error === true;
         const text = blocksText(b.content, RESULT_TEXT_MAX, "\n");
         const ev: ToolResultEvent = { type: "tool_result", toolUseId: id, isError, text, background: false, ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo };
+        if (text.length >= RESULT_TEXT_MAX) {
+          const tail = blocksTail(b.content, RESULT_TAIL_MAX);
+          if (tail.length > 0) ev.tail = tail;
+        }
         if (isError) {
           const code = exitCodeOf(results.length === 1 && typeof rec.toolUseResult === "string" ? rec.toolUseResult : undefined, text);
           if (code !== undefined) ev.exitCode = code;
@@ -355,14 +401,24 @@ export function createParser(opts: ParserOptions = {}): Parser {
       if (k !== undefined && k !== "human") return;
     }
 
-    const text = blocksText(content, PROMPT_TEXT_MAX, "\n");
     const head = (typeof content === "string" ? content : blocksText(content, 40, "")).trimStart();
+    if (head.startsWith("<command-name>") || head.startsWith("<command-message>")) {
+      const t = slashPromptText(blocksText(content, 4000, "\n"));
+      if (t === null) return;
+      slash = { uuid: nonEmptyStr(rec.uuid) ?? null, answered: false };
+      out.push({ type: "prompt", uuid: nonEmptyStr(rec.uuid) ?? `line-${lineNo}`, text: t, ts: str(rec.timestamp) ?? null, line: lineNo });
+      return;
+    }
+    // The expansion of a skill or command follows its command record before any agent output.
+    if (slash !== null && !slash.answered && slash.uuid !== null && rec.parentUuid === slash.uuid) return;
+    const text = blocksText(content, PROMPT_TEXT_MAX, "\n");
     if (head.startsWith("[Request interrupted")) {
       out.push({ type: "boundary", kind: "interrupt" });
       return;
     }
     if (NON_PROMPT_PREFIXES.some((p) => head.startsWith(p))) return;
     if (typeof content === "string" ? content.trim() === "" : blocks.length === 0) return;
+    slash = null;
     out.push({
       type: "prompt",
       uuid: nonEmptyStr(rec.uuid) ?? `line-${lineNo}`,
@@ -373,6 +429,7 @@ export function createParser(opts: ParserOptions = {}): Parser {
   }
 
   function handleAssistant(rec: Record<string, unknown>, message: Record<string, unknown>, out: Event[]): void {
+    if (slash !== null) slash.answered = true;
     if (!Array.isArray(message.content)) return;
     for (const b of message.content) {
       if (detail && isObj(b) && b.type === "text" && typeof b.text === "string") {

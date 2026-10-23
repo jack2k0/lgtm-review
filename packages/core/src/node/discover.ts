@@ -42,7 +42,7 @@ export async function discoverSessions(dir: string, warnings?: string[]): Promis
 
 const PKG_SCRIPTS = new Set(["test", "lint", "typecheck", "check", "build"]);
 const MAKE_TARGETS = new Set(["test", "check", "lint", "build"]);
-const SCRIPT_FILE_RE = /^(check|test|lint|ci)[^/\s]*\.sh$/;
+const SCRIPT_FILE_RE = /^(check|test|lint|ci|verify|validate|gate|mutation|smoke)[^/\s]*\.sh$/;
 
 async function readText(path: string): Promise<string | null> {
   try {

@@ -135,7 +135,7 @@ function cap(s: string, max: number): string {
 
 function checkTitle(c: CheckRec): string {
   const what = c.label !== "" ? c.label : oneLine(c.command, CHECK_LABEL_MAX);
-  const outcome = c.passed === true ? "passed" : c.exitCode !== null ? `failed (exit ${c.exitCode})` : c.notRun ? "did not run" : "no result";
+  const outcome = c.passed === true ? "passed" : c.passed === false && c.exitCode === 0 ? "failed (exit code masked)" : c.exitCode !== null ? `failed (exit ${c.exitCode})` : c.notRun ? "did not run" : "no result";
   return `Run ${what} -> ${outcome}`;
 }
 

@@ -1,0 +1,107 @@
+{
+  "0:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/src/other.js": {
+    "path": "/home/user/project/src/other.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/src/sub.js": {
+    "path": "/home/user/project/src/sub.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  }
+}

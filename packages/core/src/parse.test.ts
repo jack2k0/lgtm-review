@@ -86,7 +86,9 @@ describe("tool pairing data", () => {
       toolUse("t1", "Write", { file_path: "/home/user/project/a.txt", content: big }),
       toolResult("t1", big, { toolUseResult: { type: "create", content: "l1\nl2\n", originalFile: big, structuredPatch: [] } }),
     ]);
-    expect(JSON.stringify(events).length).toBeLessThan(2000);
+    // Only a 4 KB tail of the result is kept (for the masked-exit inspection), never the full text.
+    expect(JSON.stringify(events).length).toBeLessThan(6000);
+    expect((events[1] as { tail?: string }).tail).toHaveLength(4096);
     expect(events[1]).toMatchObject({ createLines: 2, resultType: "create" });
   });
 
@@ -201,4 +203,65 @@ describe("dedupe, metadata and warnings", () => {
 
 test("helpers produce expected shapes", () => {
   expect(kinds([prompt("p"), ...edit("e1"), ...bash("b1", "pnpm test")])).toEqual(["prompt", "tool_use", "tool_result", "tool_use", "tool_result"]);
+});
+
+describe("slash command prompts", () => {
+  const cmd = (name: string, args?: string, extra: Record<string, unknown> = {}) =>
+    prompt(`<command-message>${name}</command-message>\n<command-name>/${name}</command-name>${args !== undefined ? `\n<command-args>${args}</command-args>` : ""}`, extra);
+  const texts = (lines: string[]) => parseLines(lines).events.flatMap((e) => (e.type === "prompt" ? [e.text] : []));
+
+  test("a work command opens a prompt: /name args", () => {
+    expect(texts([cmd("review", "src/a.ts please")])).toEqual(["/review src/a.ts please"]);
+    expect(texts([cmd("review")])).toEqual(["/review"]);
+    expect(texts([cmd("my-plugin:ship", "")])).toEqual(["/my-plugin:ship"]);
+  });
+
+  test("the name may come before the message and args may span lines", () => {
+    expect(texts([prompt("<command-name>/review</command-name>\n<command-args>a\n  b</command-args>")])).toEqual(["/review a b"]);
+    expect(texts([prompt([{ type: "text", text: "<command-name>/review</command-name>" }])])).toEqual(["/review"]);
+  });
+
+  test("args are truncated like prompts", () => {
+    expect(texts([cmd("review", "x".repeat(500))])[0]).toHaveLength(200);
+  });
+
+  test.each([
+    "clear", "compact", "model", "help", "status", "config", "login", "logout", "cost", "context", "resume", "exit",
+    "ide", "permissions", "mcp", "memory", "hooks", "doctor", "terminal-setup", "statusline", "vim", "theme", "fast",
+  ])("/%s opens no prompt", (name) => {
+    expect(texts([cmd(name, "x")])).toEqual([]);
+  });
+
+  test("/goal clear is skipped, /goal with text is a prompt", () => {
+    expect(texts([cmd("goal", "clear")])).toEqual([]);
+    expect(texts([cmd("goal", "ship the parser")])).toEqual(["/goal ship the parser"]);
+  });
+
+  test("the skill expansion record (isMeta) does not open a second prompt", () => {
+    expect(texts([cmd("review", "x"), prompt("Base directory for this skill: /somewhere\n\nDo the review.", { isMeta: true })])).toEqual(["/review x"]);
+  });
+
+  test("an expansion without isMeta that answers the command record before any agent output is skipped", () => {
+    const c = cmd("review", "x");
+    const uuid = (JSON.parse(c) as { uuid: string }).uuid;
+    expect(texts([c, prompt("Expanded skill body.", { parentUuid: uuid })])).toEqual(["/review x"]);
+    // after the agent answered, a follow-up under the same parent is a human prompt
+    const lines = [c, ...edit("e1"), prompt("next", { parentUuid: uuid })];
+    expect(texts(lines)).toEqual(["/review x", "next"]);
+  });
+
+  test("local command output stays hidden", () => {
+    expect(texts([cmd("review"), prompt("<local-command-stdout>ok</local-command-stdout>")])).toEqual(["/review"]);
+  });
+});
+
+describe("result tail", () => {
+  test("short results carry no tail; long ones keep the last 4096 characters", () => {
+    const short = parseLines([toolResult("t1", "ok")]).events[0] as { tail?: string };
+    expect(short.tail).toBeUndefined();
+    const text = "h".repeat(3000) + "T".repeat(5000);
+    const long = parseLines([toolResult("t1", [{ type: "text", text }])]).events[0] as { text: string; tail?: string };
+    expect(long.text).toHaveLength(500);
+    expect(long.tail).toBe(text.slice(-4096));
+  });
 });

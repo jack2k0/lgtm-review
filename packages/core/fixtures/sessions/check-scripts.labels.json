@@ -1,0 +1,41 @@
+{
+  "fixture": "check-scripts",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "bash scripts/verify-x.sh (redirected) is recognised by name alone, exit 0"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "note": "bash -n only checks syntax: not a check"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "note": "--dry-run runs nothing: not a check"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "unchecked",
+      "note": "ruff check --fix edits files: not a check"
+    },
+    {
+      "index": 4,
+      "expectedStatus": "checked",
+      "note": "python manage.py test passes after the edit"
+    },
+    {
+      "index": 5,
+      "expectedStatus": "checked",
+      "note": "gh run watch --exit-status counts as a check"
+    },
+    {
+      "index": 6,
+      "expectedStatus": "unchecked",
+      "note": "gh run watch without --exit-status never fails the command: not a check"
+    }
+  ]
+}

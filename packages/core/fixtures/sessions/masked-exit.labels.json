@@ -1,0 +1,51 @@
+{
+  "fixture": "masked-exit",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "failing",
+      "note": "dotnet test | tail: exit 0 from tail, output shows Failed: 2 => failing"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "failing",
+      "note": "pytest | tail; git checkout file: output shows 1 failed => failing (masked, probe)"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "checked",
+      "note": "mutation probe with clean output: checked, reason notes the edits may have been reverted"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "checked",
+      "note": "pipe to tail with clean output: checked, exit code not verified"
+    },
+    {
+      "index": 4,
+      "expectedStatus": "failing",
+      "note": "echo EXIT=$? shows EXIT=1 => failing"
+    },
+    {
+      "index": 5,
+      "expectedStatus": "failing",
+      "note": "mvn | tail: BUILD FAILURE in the output tail"
+    },
+    {
+      "index": 6,
+      "expectedStatus": "checked",
+      "note": "masked failure followed by a fix and a clean check"
+    },
+    {
+      "index": 7,
+      "expectedStatus": "checked",
+      "note": "Ran N tests ... OK is a clean final summary"
+    },
+    {
+      "index": 8,
+      "expectedStatus": "failing",
+      "note": "a failure signal wins over a later negative phrase"
+    }
+  ]
+}

@@ -1,0 +1,412 @@
+[
+  {
+    "index": 0,
+    "text": "Fix the add function.",
+    "status": "checked",
+    "reason": "bash scripts/verify-x.sh > log 2>&1 passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run bash scripts/verify-x.sh > log 2>&1 -> passed",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "bash scripts/verify-x.sh > log 2>&1",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "bash scripts/verify-x.sh > log 2>&1",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Tweak the script.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (50%), 0 checks",
+    "startedAt": "2026-01-01T00:00:07.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/scripts/check.sh",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit scripts/check.sh (+1 -1)",
+        "startedAt": "2026-01-01T00:00:08.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/scripts/check.sh."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "scripts/check.sh",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/scripts/check.sh"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "read",
+        "title": "Run 1 command",
+        "startedAt": "2026-01-01T00:00:10.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "bash -n scripts/check.sh",
+            "ok": true,
+            "ts": "2026-01-01T00:00:10.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Preview the gate.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (50%), 0 checks",
+    "startedAt": "2026-01-01T00:00:13.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/add.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:14.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "read",
+        "title": "Run 1 command",
+        "startedAt": "2026-01-01T00:00:16.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "bash scripts/verify-x.sh --dry-run",
+            "ok": true,
+            "ts": "2026-01-01T00:00:16.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Format the module.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (50%), 0 checks",
+    "startedAt": "2026-01-01T00:00:19.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/add.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:20.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:20.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "read",
+        "title": "Run 1 command",
+        "startedAt": "2026-01-01T00:00:22.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "ruff check --fix src/",
+            "ok": true,
+            "ts": "2026-01-01T00:00:22.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "text": "Add a Django test.",
+    "status": "checked",
+    "reason": "python manage.py test app.tests passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:25.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:26.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:26.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run python manage.py test app.tests -> passed",
+        "startedAt": "2026-01-01T00:00:28.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "python manage.py test app.tests",
+            "ok": true,
+            "ts": "2026-01-01T00:00:28.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "python manage.py test app.tests",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 5,
+    "text": "Wait for CI.",
+    "status": "checked",
+    "reason": "gh run watch 4242 --exit-status passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:31.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:32.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:32.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run gh run watch 4242 --exit-status -> passed",
+        "startedAt": "2026-01-01T00:00:34.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "gh run watch 4242 --exit-status",
+            "ok": true,
+            "ts": "2026-01-01T00:00:34.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "gh run watch 4242 --exit-status",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 6,
+    "text": "Look at CI.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (50%), 0 checks",
+    "startedAt": "2026-01-01T00:00:37.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/add.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:38.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:38.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "read",
+        "title": "Run 1 command",
+        "startedAt": "2026-01-01T00:00:40.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "gh run watch 4242",
+            "ok": true,
+            "ts": "2026-01-01T00:00:40.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  }
+]

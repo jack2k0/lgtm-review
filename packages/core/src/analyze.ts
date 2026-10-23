@@ -1,4 +1,4 @@
-import { classifyCommand, type RepoScripts } from "./check-patterns.js";
+import { classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, recommend, type EditEvidence, type EditStats } from "./hints.js";
 import { createParser, type Event, type ToolInput, type ToolResultEvent } from "./parse.js";
@@ -69,6 +69,12 @@ interface CheckRec {
   exit: number;
   label: string;
   unreliable: boolean;
+  /** A command after the check may have reverted the edits (`; git checkout file`). */
+  probe: boolean;
+  /** Exit 0, but the output tail shows failures (the exit code was masked by a pipe or trailing command). */
+  masked: boolean;
+  /** First line of the output tail that shows the masked failure. */
+  maskedLine: string;
   output: string;
 }
 
@@ -182,8 +188,11 @@ function judge(p: PromptState): { status: Status; reason: string } {
   if (incompleteAfter) return { status: "unchecked", reason: "check did not complete" };
 
   if (lastCompleted !== null && lastCompleted.resultSeq > lastEdit) {
+    if (lastCompleted.masked) {
+      return { status: "failing", reason: `${lastCompleted.label} output indicates failures (exit code masked)` };
+    }
     if (lastCompleted.exit === 0) {
-      const note = lastCompleted.unreliable ? " (exit code may be masked by a pipe or trailing command)" : "";
+      const note = lastCompleted.probe ? " (edits may have been reverted)" : lastCompleted.unreliable ? " (exit code not verified)" : "";
       return { status: "checked", reason: `${lastCompleted.label} passed after last edit${note}` };
     }
     const out = failureOutput(lastCompleted.output);
@@ -280,6 +289,9 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               exit: 0,
               label: cls.label,
               unreliable: cls.unreliable,
+              probe: cls.mutationProbe,
+              masked: false,
+              maskedLine: "",
               output: "",
             };
             cur.checks.push(check);
@@ -334,7 +346,12 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             use.check.completed = true;
             use.check.exit = 0;
             use.check.resultSeq = seq;
-            use.prompt.failing = false;
+            const line = use.check.unreliable ? findMaskedFailure(ev.tail ?? ev.text) : null;
+            if (line !== null) {
+              use.check.masked = true;
+              use.check.maskedLine = line;
+            }
+            use.prompt.failing = line !== null;
           }
         }
         const edited = !ev.isError && use.name === "Bash" && ev.bashEditDiff !== undefined && ev.bashEditDiff.length > 0;
@@ -348,12 +365,13 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           act.resTs = ts;
           if (use.check) {
             const exitCode = ev.isError ? (ev.exitCode ?? null) : ev.background ? null : 0;
+            const masked = use.check.masked;
             act.check = {
               command: use.input.command ?? "",
               label: use.check.label,
               exitCode,
-              passed: exitCode === null ? null : exitCode === 0,
-              excerpt: ev.isError ? (exitCode === null ? oneLine(ev.text, 200) : failureExcerpt(ev.text)) : "",
+              passed: exitCode === null ? null : exitCode === 0 && !masked,
+              excerpt: ev.isError ? (exitCode === null ? oneLine(ev.text, 200) : failureExcerpt(ev.text)) : masked ? oneLine(use.check.maskedLine, 200) : "",
               notRun: ev.isError && ev.exitCode === undefined,
             };
           }

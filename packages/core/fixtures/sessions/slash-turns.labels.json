@@ -1,0 +1,31 @@
+{
+  "fixture": "slash-turns",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "plain prompt: edit then passing pnpm test"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "reading only"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "note": "/review-code args opens its own prompt; three edits, no check; the skill expansion is not a second prompt"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "checked",
+      "note": "/ship-it now: one edit then passing check; /model before it opens no prompt"
+    },
+    {
+      "index": 4,
+      "expectedStatus": "no-changes",
+      "note": "/explain with no tool activity is listed as no-changes; /goal clear opens no prompt"
+    }
+  ]
+}
