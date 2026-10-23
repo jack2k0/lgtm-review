@@ -1,7 +1,7 @@
 ---
 change_id: review-hints
 title: Deterministic review hints with recommendation, and markdown summary
-status: planned
+status: implemented
 created: 2026-10-23
 updated: 2026-10-23
 archived_at: null

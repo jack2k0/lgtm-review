@@ -81,12 +81,12 @@ Three phases: (1) core hints + recommendation with goldens, (2) web display, (3)
 ### Phase 2: Web display
 
 - [x] 2.1 `pnpm check` green incl. scans and contrast (PromptDetail also carries hints and recommendation, so a Steps deep link needs no session data)
-- [ ] 2.2 Screenshots reviewed
+- [x] 2.2 Screenshots reviewed
 
 ### Phase 3: CLI summary
 
 - [x] 3.1 `pnpm check` green incl. smoke (--summary on packed CLI)
-- [ ] 3.2 Summary reviewed on a real local session (not committed)
+- [x] 3.2 Summary reviewed on a real local session (not committed)
 
 ## Plan-review amendments (accepted by orchestrator, 2026-10-23)
 
