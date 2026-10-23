@@ -118,3 +118,14 @@ D8. Web: empty state text -> "No supported source files changed (TS/JS, Python)"
   - `import x.y`, `from x import y`, relative `from .m import n` resolve to repo files (`.py` or `__init__.py`) under the repo root, `src/` and Django project roots.
   - Django apps form separate map layers.
   - Python/Django manifests, configs, tests and URL/view modules feed the existing review hints.
+
+## Orchestrator review amendments (Opus, 2026-10-23, from Agy plan-review F1-F9) — override the sections above
+
+- A1 (F1) `from M import *` (names `[]`) resolves to module `M` itself (`M.py` or `M/__init__.py`).
+- A2 (F2) Relative resolution, unified: k = leading dots, rest = text after the dots; baseDir = dirname(fromFile) ascended k-1 times (escaping root -> `[]`); target = rest ? `baseDir/rest(dots->/)` : baseDir. For each name x: `target/x.py` or `target/x/__init__.py`; names that miss fall back (once) to `target.py` or `target/__init__.py`. Same rule as absolute imports, just a different base. `from .. import x` works the same way.
+- A3 (F3, F7, F8) Pre-processing before matching, all preserving line count: (1) triple-quoted blocks -> as many `\n` as they contained; (2) `#` to end of line removed (outside string literals is not required — regex tolerance as S-04); (3) backslash continuations `\\[ \t]*\r?\n` -> a space, for both forms (line of the statement = line where it starts; keep a line map or compute the line before joining).
+- A4 (F4) `;` is a statement separator: `import os; import sys` yields both; a module/name token ends at `;`, `,`, `)`, whitespace or end of line.
+- A5 (F5) D4 roots: manageDirs = NON-EMPTY dirs containing `manage.py`, sorted; roots = dedupe([...manageDirs, ...(hasSrc ? ["src"] : []), ""]).
+- A6 (F6) `isTestPath`: `/^(?:test_.*|.*_test|tests?|conftest)\.py$/i`.
+- A7 (F9) `publicSurfaceKind`: also any `.py` under a `urls/` directory -> "routes or API".
+- Phases stay split (two briefs, separate commits, `pnpm check` green after each).
