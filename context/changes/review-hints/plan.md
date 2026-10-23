@@ -85,7 +85,7 @@ Three phases: (1) core hints + recommendation with goldens, (2) web display, (3)
 
 ### Phase 3: CLI summary
 
-- [ ] 3.1 `pnpm check` green incl. smoke
+- [x] 3.1 `pnpm check` green incl. smoke (--summary on packed CLI)
 - [ ] 3.2 Summary reviewed on a real local session (not committed)
 
 ## Plan-review amendments (accepted by orchestrator, 2026-10-23)

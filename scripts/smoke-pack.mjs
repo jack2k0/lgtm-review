@@ -71,6 +71,33 @@ try {
   if (!/^lgtm-review \d+\.\d+\.\d+/m.test(res.stdout)) fail(`unexpected stdout: ${res.stdout.trim()}`);
   console.log(`smoke ok: ${res.stdout.trim()}`);
 
+  // --summary on a fixture with hints: key lines present, command output absent, conflicts rejected.
+  const sumProjects = join(runDir, "sum-projects");
+  const sumDir = join(sumProjects, runDir.replace(/[/.]/g, "-"));
+  mkdirSync(sumDir, { recursive: true });
+  copyFileSync(join(fixturesDir, "hints-test-edits.jsonl"), join(sumDir, "hints-test-edits.jsonl"));
+  copyFileSync(join(fixturesDir, "failing-check.jsonl"), join(sumDir, "failing-check.jsonl"));
+  const runSummary = (args) => spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review", "--summary", "--projects-dir", sumProjects, "--dir", runDir, ...args], { cwd: runDir, encoding: "utf8" });
+  const sum = runSummary(["--session", "hints-test"]);
+  if (sum.status !== 0) fail(`--summary exited ${sum.status}: ${(sum.stderr || "").trim()}`);
+  for (const line of [
+    "# Review summary: Fix the add function so the tests pass.",
+    "| # | Status | Review | Prompt | Files | +/- |",
+    "- **high** `assertions-removed`: `/home/user/project/tests/add.test.ts`",
+    "- **high** `test-skipped`: `/home/user/project/tests/net.test.ts`",
+  ]) {
+    if (!sum.stdout.includes(line)) fail(`--summary output lacks ${JSON.stringify(line)}:\n${sum.stdout}`);
+  }
+  if (!/heuristic/.test(sum.stdout)) fail("--summary output lacks the heuristic footer");
+  const failing = runSummary(["--session", "failing-check"]);
+  if (failing.status !== 0 || !failing.stdout.includes("(pnpm test failed)")) fail(`--summary of a failing check: ${failing.stdout}`);
+  if (failing.stdout.includes("Tests: ") || /excerpt/i.test(sum.stdout + failing.stdout)) fail("--summary leaks command output");
+  const noTitles = runSummary(["--session", "hints-test", "--no-titles"]);
+  if (noTitles.stdout.includes("Fix the add function")) fail("--no-titles still prints prompt text");
+  const conflict = spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review", "--summary", "--json"], { cwd: runDir, encoding: "utf8" });
+  if (conflict.status !== 1 || !/cannot be combined/.test(conflict.stderr)) fail(`--summary --json: expected exit 1, got ${conflict.status}`);
+  console.log("smoke ok: --summary");
+
   // Server mode: URL printed, /api needs the token.
   const projects = join(runDir, "projects");
   mkdirSync(projects);

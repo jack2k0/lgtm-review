@@ -61,6 +61,42 @@ describe("built CLI", () => {
     expect(r.stdout).toContain("No Claude Code sessions found for /home/user/other");
   });
 
+  test("--summary prints markdown for the newest session; --session picks one by prefix", () => {
+    const r = run(["--summary", "--projects-dir", projects, "--dir", PROJECT]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/^# Review summary/);
+    expect(r.stdout).toContain("| # | Status | Review | Prompt | Files | +/- |");
+    expect(r.stdout).toContain("heuristic");
+    const one = run(["--summary", "--session", "hints-test", "--projects-dir", projects, "--dir", PROJECT]);
+    expect(one.status).toBe(0);
+    expect(one.stdout).toContain("# Review summary: Fix the add function so the tests pass.");
+    expect(one.stdout).toContain("**high** `assertions-removed`: `tests/add.test.ts`");
+    expect(one.stdout).not.toContain("Tests: 1 failed");
+    const nt = run(["--summary", "--no-titles", "--session", "hints-test", "--projects-dir", projects, "--dir", PROJECT]);
+    expect(nt.stdout).toContain("# Review summary\n");
+    expect(nt.stdout).not.toContain("Fix the add function");
+  });
+
+  test("--summary with --list or --json => exit 1 with a message", () => {
+    for (const other of ["--list", "--json"]) {
+      const r = run(["--summary", other, "--projects-dir", projects, "--dir", PROJECT]);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("--summary cannot be combined with --list or --json");
+      expect(r.stdout).toBe("");
+    }
+  });
+
+  test("--summary: unknown or ambiguous session prefix, no sessions, and flags without --summary => exit 1", () => {
+    expect(run(["--summary", "--session", "nope", "--projects-dir", projects, "--dir", PROJECT]).stderr).toContain('no session id starts with "nope"');
+    const amb = run(["--summary", "--session", "h", "--projects-dir", projects, "--dir", PROJECT]);
+    expect(amb.status).toBe(1);
+    expect(amb.stderr).toContain("matches");
+    expect(run(["--summary", "--projects-dir", projects, "--dir", "/home/user/other"]).status).toBe(1);
+    expect(run(["--list", "--no-titles", "--projects-dir", projects, "--dir", PROJECT]).status).toBe(1);
+    expect(run(["--list", "--session", "x", "--projects-dir", projects, "--dir", PROJECT]).status).toBe(1);
+    expect(run(["--summary", "--session", "../x", "--projects-dir", projects, "--dir", PROJECT]).status).toBe(1);
+  });
+
   test("bad flag => exit 1", () => {
     expect(run(["--nope"]).status).toBe(1);
   });

@@ -5,6 +5,7 @@ import type { SessionFile } from "@lgtm/core/node";
 import { discoverSessions, loadRepoScripts, projectDirFor, analyzeFile, defaultProjectsDir } from "@lgtm/core/node";
 import type { Analysis, SessionAnalysis } from "@lgtm/core";
 import { formatText, sortSessions } from "./format.js";
+import { formatSummary } from "./summary.js";
 import { createLauncher, openBrowser, type Launcher } from "./open.js";
 import { startServer } from "./server.js";
 
@@ -12,14 +13,17 @@ const VERSION = "0.0.0";
 
 const HELP = `lgtm-review ${VERSION}
 
-Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--list | --json] [--no-open] [--port <n>]
+Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--list | --json | --summary [--session <id-prefix>] [--no-titles]] [--no-open] [--port <n>]
 
-Without --list/--json, starts a local web UI on 127.0.0.1 and prints its URL.
+Without --list/--json/--summary, starts a local web UI on 127.0.0.1 and prints its URL.
 
   --dir <path>           repository to inspect (default: current directory)
   --projects-dir <path>  Claude Code projects dir (default: ~/.claude/projects)
   --list                 print the sessions in the terminal instead of starting the UI
   --json                 print the analysis as JSON (implies --list)
+  --summary              print a markdown review summary of one session (for a PR description)
+  --session <id-prefix>  session for --summary (default: the newest)
+  --no-titles            with --summary: leave prompt titles out ("Prompt N")
   --no-open              do not open the browser
   --port <n>             port for the UI (default: a free port)
   --version              print the version
@@ -67,6 +71,38 @@ async function serve(dir: string, projectsDir: string, port: number, noOpen: boo
   });
 }
 
+/** `--summary`: markdown for one session (the one matching the id prefix, else the newest) on stdout. */
+async function summary(dir: string, files: SessionFile[], prefix: string | undefined, titles: boolean): Promise<number> {
+  let pool = files;
+  if (prefix !== undefined) {
+    pool = files.filter((f) => f.id.startsWith(prefix));
+    if (pool.length === 0) {
+      console.error(`lgtm-review: no session id starts with "${prefix}"`);
+      return 1;
+    }
+    if (pool.length > 1) {
+      console.error(`lgtm-review: "${prefix}" matches ${pool.length} sessions (${pool.slice(0, 5).map((f) => f.id.slice(0, 12)).join(", ")}${pool.length > 5 ? ", …" : ""}); use a longer prefix`);
+      return 1;
+    }
+  }
+  const repo = await loadRepoScripts(dir);
+  const sessions: SessionAnalysis[] = [];
+  for (const f of pool) {
+    try {
+      sessions.push(await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` }));
+    } catch (err) {
+      console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
+    }
+  }
+  const chosen = sortSessions(sessions)[0];
+  if (!chosen) {
+    console.error("lgtm-review: no readable session");
+    return 1;
+  }
+  process.stdout.write(formatSummary(chosen, { titles, root: dir }));
+  return 0;
+}
+
 async function main(): Promise<number> {
   let values;
   try {
@@ -76,6 +112,9 @@ async function main(): Promise<number> {
         "projects-dir": { type: "string" },
         json: { type: "boolean" },
         list: { type: "boolean" },
+        summary: { type: "boolean" },
+        session: { type: "string" },
+        "no-titles": { type: "boolean" },
         "no-open": { type: "boolean" },
         port: { type: "string" },
         version: { type: "boolean" },
@@ -105,8 +144,21 @@ async function main(): Promise<number> {
     }
   }
 
+  if (values.summary && (values.list || values.json)) {
+    console.error("lgtm-review: --summary cannot be combined with --list or --json");
+    return 1;
+  }
+  if (!values.summary && (values.session !== undefined || values["no-titles"])) {
+    console.error("lgtm-review: --session and --no-titles only work with --summary");
+    return 1;
+  }
+  if (values.session !== undefined && !/^[A-Za-z0-9_-]+$/.test(values.session)) {
+    console.error(`lgtm-review: invalid --session "${values.session}" (expected the start of a session id)`);
+    return 1;
+  }
+
   const dir = resolve(values.dir ?? process.cwd());
-  if (!values.list && !values.json) return serve(dir, values["projects-dir"] ?? defaultProjectsDir(), port, values["no-open"] === true);
+  if (!values.list && !values.json && !values.summary) return serve(dir, values["projects-dir"] ?? defaultProjectsDir(), port, values["no-open"] === true);
 
   const projectDir = projectDirFor(dir, values["projects-dir"] ?? defaultProjectsDir());
   const discoveryWarnings: string[] = [];
@@ -124,10 +176,16 @@ async function main(): Promise<number> {
   for (const w of discoveryWarnings) console.error(`warning: ${w}`);
 
   if (files.length === 0) {
+    if (values.summary) {
+      console.error(`lgtm-review: no Claude Code sessions found for ${dir}`);
+      return 1;
+    }
     if (values.json) console.log(JSON.stringify({ dir, sessions: [] } satisfies Analysis, null, 2));
     else console.log(`No Claude Code sessions found for ${dir}`);
     return 0;
   }
+
+  if (values.summary) return summary(dir, files, values.session, values["no-titles"] !== true);
 
   const repo = await loadRepoScripts(dir);
   const sessions: SessionAnalysis[] = [];
