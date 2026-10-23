@@ -1,4 +1,4 @@
-import type { PromptAnalysis, SessionSummary, Status, TimeSplit } from "@lgtm/core";
+import type { PromptAnalysis, SessionSummary, Status, Step, StepCheck, TimeSplit } from "@lgtm/core";
 
 export const PROMPT_PAGE = 500;
 
@@ -118,20 +118,87 @@ export function nextLimit(limit: number, total: number): number {
   return Math.min(total, limit + PROMPT_PAGE);
 }
 
-export type Route = { kind: "list" } | { kind: "session"; id: string };
+export type Route =
+  | { kind: "list" }
+  | { kind: "session"; id: string }
+  | { kind: "steps"; id: string; index: number }
+  | { kind: "diff"; id: string; index: number; path: string };
 
-export function parseRoute(hash: string): Route {
-  const m = /^#\/session\/([^/]+)$/.exec(hash);
-  if (m) {
-    try {
-      return { kind: "session", id: decodeURIComponent(m[1]!) };
-    } catch {
-      /* fall through */
-    }
+const INDEX_RE = /^(?:0|[1-9]\d{0,8})$/;
+
+function decode(s: string): string | null {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return null;
   }
-  return { kind: "list" };
+}
+
+/** Hash routes: `#/session/<id>`, `#/session/<id>/prompt/<index>`, `#/session/<id>/prompt/<index>/diff?path=<file>`. Anything else is the list. */
+export function parseRoute(hash: string): Route {
+  const m = /^#\/session\/([^/?]+)(?:\/prompt\/([^/?]+)(?:(\/diff)\?path=([^&]*))?)?$/.exec(hash);
+  if (!m) return { kind: "list" };
+  const id = decode(m[1]!);
+  if (id === null) return { kind: "list" };
+  if (m[2] === undefined) return { kind: "session", id };
+  if (!INDEX_RE.test(m[2])) return { kind: "list" };
+  const index = Number(m[2]);
+  if (m[3] === undefined) return { kind: "steps", id, index };
+  const path = decode(m[4] ?? "");
+  if (!path) return { kind: "list" };
+  return { kind: "diff", id, index, path };
 }
 
 export function routeHref(r: Route): string {
-  return r.kind === "session" ? `#/session/${encodeURIComponent(r.id)}` : "#/";
+  switch (r.kind) {
+    case "list":
+      return "#/";
+    case "session":
+      return `#/session/${encodeURIComponent(r.id)}`;
+    case "steps":
+      return `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}`;
+    case "diff":
+      return `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}/diff?path=${encodeURIComponent(r.path)}`;
+  }
+}
+
+export function phaseLabel(p: Phase): string {
+  return PHASES.find((x) => x.phase === p)!.label;
+}
+
+/** Step duration; sub-second steps read "<1s" so they are not mistaken for missing data. */
+export function formatStepDuration(ms: number): string {
+  return ms < 500 ? "<1s" : formatDuration(ms);
+}
+
+/** Local `HH:MM:SS`, or an empty string when unknown/invalid. */
+export function formatClock(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/** Mechanical title from the server; a generic one when it is empty, so a card never has a blank heading. */
+export function stepTitle(s: Pick<Step, "n" | "phase" | "title">): string {
+  const t = s.title.trim();
+  return t || `${phaseLabel(s.phase)} step ${s.n}`;
+}
+
+/** Outcome of a check: "passed", "exit N" (failed) or "did not run" when there is no usable result. */
+export function checkOutcome(c: Pick<StepCheck, "exitCode" | "passed">): { text: string; tone: "pass" | "fail" | "none" } {
+  if (c.passed === true) return { text: "passed", tone: "pass" };
+  if (c.exitCode !== null) return { text: `exit ${c.exitCode}`, tone: "fail" };
+  if (c.passed === false) return { text: "failed", tone: "fail" };
+  return { text: "did not run", tone: "none" };
+}
+
+/** Label of the actions disclosure, e.g. "1 action" / "12 actions". */
+export function actionsLabel(n: number): string {
+  return plural(n, "action");
+}
+
+/** Heading of a prompt: 1-based number as the CLI shows it, plus the text (or a placeholder). */
+export function promptHeading(index: number, text: string): string {
+  return `Prompt ${index + 1}: ${text.trim() || "(empty prompt)"}`;
 }

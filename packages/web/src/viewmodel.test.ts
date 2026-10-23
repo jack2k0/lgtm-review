@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { PromptAnalysis } from "@lgtm/core";
 import {
-  PROMPT_PAGE, fileTotals, filesText, formatDuration, formatStarted, incompleteMarkers, nextLimit, parseRoute,
-  routeHref, statusCountItems, statusLabel, timeBarText, timeSegments, visiblePrompts,
+  PROMPT_PAGE, actionsLabel, checkOutcome, fileTotals, filesText, formatClock, formatDuration, formatStarted, formatStepDuration,
+  incompleteMarkers, nextLimit, parseRoute, phaseLabel, promptHeading, routeHref, statusCountItems, statusLabel, stepTitle,
+  timeBarText, timeSegments, visiblePrompts,
 } from "./viewmodel";
 
 const file = (added: number, removed: number, maybeIncomplete = false) => ({ path: "a", kind: "M" as const, added, removed, maybeIncomplete });
@@ -86,5 +87,59 @@ describe("routing", () => {
     expect(parseRoute("#/session/a/b")).toEqual({ kind: "list" });
     expect(routeHref({ kind: "session", id: "a/b" })).toBe("#/session/a%2Fb");
     expect(parseRoute(routeHref({ kind: "session", id: "x y" }))).toEqual({ kind: "session", id: "x y" });
+  });
+});
+
+describe("steps routing", () => {
+  test("steps and diff routes round-trip", () => {
+    expect(parseRoute("#/session/abc/prompt/0")).toEqual({ kind: "steps", id: "abc", index: 0 });
+    expect(parseRoute("#/session/a%2Fb/prompt/12")).toEqual({ kind: "steps", id: "a/b", index: 12 });
+    expect(parseRoute("#/session/abc/prompt/3/diff?path=src%2Fa%20b.ts")).toEqual({ kind: "diff", id: "abc", index: 3, path: "src/a b.ts" });
+    for (const r of [
+      { kind: "steps", id: "x y", index: 7 },
+      { kind: "diff", id: "x/y", index: 0, path: "dir/ü & ?.ts" },
+    ] as const) expect(parseRoute(routeHref(r))).toEqual(r);
+  });
+  test("bad input falls back to the list", () => {
+    for (const h of [
+      "#/session/abc/prompt/-1", "#/session/abc/prompt/1e3", "#/session/abc/prompt/NaN", "#/session/abc/prompt/01",
+      "#/session/abc/prompt/", "#/session/abc/prompt/1/other", "#/session/abc/prompt/1/diff", "#/session/abc/prompt/1/diff?path=",
+      "#/session/abc/prompt/1/diff?path=%E0%A4%A", "#/session/abc/prompt/1234567890123", "#/session/abc/prompt/1/diff?path=a&x=1",
+    ]) expect(parseRoute(h), h).toEqual({ kind: "list" });
+  });
+});
+
+describe("step formatting", () => {
+  test("formatStepDuration", () => {
+    expect(formatStepDuration(0)).toBe("<1s");
+    expect(formatStepDuration(499)).toBe("<1s");
+    expect(formatStepDuration(1_000)).toBe("1s");
+    expect(formatStepDuration(95_000)).toBe("1m 35s");
+  });
+  test("formatClock", () => {
+    expect(formatClock(null)).toBe("");
+    expect(formatClock("nonsense")).toBe("");
+    expect(formatClock("2026-01-02T03:04:05")).toBe("03:04:05");
+  });
+  test("phaseLabel", () => {
+    expect(phaseLabel("read")).toBe("Read");
+    expect(phaseLabel("fix")).toBe("Fix");
+  });
+  test("stepTitle falls back to phase and number", () => {
+    expect(stepTitle({ n: 2, phase: "check", title: "Run pnpm test -> passed" })).toBe("Run pnpm test -> passed");
+    expect(stepTitle({ n: 4, phase: "write", title: "" })).toBe("Write step 4");
+    expect(stepTitle({ n: 1, phase: "read", title: "   " })).toBe("Read step 1");
+  });
+  test("checkOutcome", () => {
+    expect(checkOutcome({ exitCode: 0, passed: true })).toEqual({ text: "passed", tone: "pass" });
+    expect(checkOutcome({ exitCode: 1, passed: false })).toEqual({ text: "exit 1", tone: "fail" });
+    expect(checkOutcome({ exitCode: null, passed: false })).toEqual({ text: "failed", tone: "fail" });
+    expect(checkOutcome({ exitCode: null, passed: null })).toEqual({ text: "did not run", tone: "none" });
+  });
+  test("labels", () => {
+    expect(actionsLabel(1)).toBe("1 action");
+    expect(actionsLabel(12)).toBe("12 actions");
+    expect(promptHeading(0, "Fix the bug")).toBe("Prompt 1: Fix the bug");
+    expect(promptHeading(4, "  ")).toBe("Prompt 5: (empty prompt)");
   });
 });

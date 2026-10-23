@@ -2,9 +2,9 @@ import { useState } from "react";
 import type { PromptAnalysis, SessionAnalysis } from "@lgtm/core";
 import { StatusTag } from "./StatusDot";
 import { TimeBar, TimeLegend } from "./TimeBar";
-import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, plural, visiblePrompts } from "./viewmodel";
+import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, plural, routeHref, visiblePrompts } from "./viewmodel";
 
-function Row({ p, open, onToggle }: { p: PromptAnalysis; open: boolean; onToggle: () => void }) {
+function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: PromptAnalysis; open: boolean; onToggle: () => void }) {
   const totals = fileTotals(p);
   const markers = incompleteMarkers(p);
   const detailId = `detail-${p.index}`;
@@ -26,11 +26,14 @@ function Row({ p, open, onToggle }: { p: PromptAnalysis; open: boolean; onToggle
             <span key={m} className="marker">{m}</span>
           ))}
         </td>
+        <td className="nowrap">
+          <a href={routeHref({ kind: "steps", id: sessionId, index: p.index })} aria-label={`Steps of prompt ${p.index + 1}`}>Steps</a>
+        </td>
       </tr>
       {open ? (
         <tr className="detail" id={detailId}>
           <td />
-          <td colSpan={4}>
+          <td colSpan={5}>
             <p className="full-reason"><strong>Reason:</strong> {p.reason}</p>
             {p.files.length === 0 ? (
               <p className="muted">No changed files.</p>
@@ -97,11 +100,12 @@ export function PromptTable({ session }: { session: SessionAnalysis }) {
                 <th scope="col">Reason</th>
                 <th scope="col">Time (approx.)</th>
                 <th scope="col">Files</th>
+                <th scope="col">Detail</th>
               </tr>
             </thead>
             <tbody>
               {shown.map((p) => (
-                <Row key={p.index} p={p} open={openIdx.has(p.index)} onToggle={() => toggle(p.index)} />
+                <Row key={p.index} sessionId={session.sessionId} p={p} open={openIdx.has(p.index)} onToggle={() => toggle(p.index)} />
               ))}
             </tbody>
           </table>

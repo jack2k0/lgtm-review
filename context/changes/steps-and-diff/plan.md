@@ -190,7 +190,7 @@ Detail analysis on demand only; caps on retained text; LRU cache of 3 sessions.
 
 #### Automated
 
-- [ ] 4.1 `pnpm check` green; innerHTML scan and contrast tests pass
+- [x] 4.1 `pnpm check` green; innerHTML scan and contrast tests pass
 
 #### Manual
 

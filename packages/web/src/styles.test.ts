@@ -32,6 +32,9 @@ const pairs: [string, string, number][] = [
   ["error", "bg", 4.5], ["focus", "bg", 3],
   ["marker-text", "marker-bg", 4.5],
   ["dot-checked", "bg", 3], ["dot-unchecked", "bg", 3], ["dot-failing", "bg", 3], ["dot-no-changes", "bg", 3],
+  ["pass", "bg", 4.5], ["pass", "surface", 4.5], ["error", "surface", 4.5],
+  ["badge-read", "bg", 4.5], ["badge-write", "bg", 4.5], ["badge-check", "bg", 4.5], ["badge-fix", "bg", 4.5],
+  ["badge-read", "surface", 4.5], ["badge-write", "surface", 4.5], ["badge-check", "surface", 4.5], ["badge-fix", "surface", 4.5],
   ["seg-read", "surface", 3], ["seg-write", "surface", 3], ["seg-check", "surface", 3], ["seg-fix", "surface", 3],
 ];
 

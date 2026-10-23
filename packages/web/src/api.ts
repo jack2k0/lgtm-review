@@ -1,4 +1,4 @@
-import { SessionAnalysis, SessionsResponse } from "@lgtm/core";
+import { PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
 
 /** Structural subset of a zod schema, so the web package needs no direct zod dependency. */
 interface Schema<T> {
@@ -19,13 +19,13 @@ export function errorMessage(e: unknown): string {
       case "forbidden":
         return "Open the URL printed by lgtm-review";
       case "not-found":
-        return "Session not found";
+        return "Not found";
       case "network":
         return "Cannot reach the lgtm-review server. Is it still running?";
       case "invalid":
         return "Unexpected response from the server";
       case "server":
-        return "The server failed to read the sessions";
+        return "The server failed to read the session data";
     }
   }
   return "Something went wrong";
@@ -59,3 +59,6 @@ export const fetchSessions = (token: string | null, signal?: AbortSignal): Promi
 
 export const fetchSession = (token: string | null, id: string, signal?: AbortSignal): Promise<SessionAnalysis> =>
   getJson(`api/sessions/${encodeURIComponent(id)}`, token, SessionAnalysis, signal);
+
+export const fetchPromptDetail = (token: string | null, id: string, index: number, signal?: AbortSignal): Promise<PromptDetail> =>
+  getJson(`api/sessions/${encodeURIComponent(id)}/prompts/${index}`, token, PromptDetail, signal);

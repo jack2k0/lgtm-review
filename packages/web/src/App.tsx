@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import type { SessionAnalysis, SessionsResponse } from "@lgtm/core";
-import { errorMessage, fetchSession, fetchSessions } from "./api";
+import type { PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
+import { errorMessage, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
 import { PromptTable } from "./PromptTable";
 import { SessionList } from "./SessionList";
+import { StepsView } from "./StepsView";
 import { parseRoute, routeHref, type Route } from "./viewmodel";
 
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ok"; data: T };
@@ -44,6 +45,38 @@ function SessionView({ token, id }: { token: string | null; id: string }) {
   );
 }
 
+function StepsRoute({ token, id, index }: { token: string | null; id: string; index: number }) {
+  const res = useLoad<PromptDetail>((s) => fetchPromptDetail(token, id, index, s), `p:${id}:${index}`);
+  return (
+    <Status res={res}>
+      {(d) => <StepsView sessionId={id} detail={d} />}
+    </Status>
+  );
+}
+
+/** Reserved for the diff view; `#/session/<id>/prompt/<n>/diff?path=` already parses. */
+function DiffRoute({ id, index }: { id: string; index: number }) {
+  return (
+    <>
+      <p><a href={routeHref({ kind: "steps", id, index })}>&larr; Back to steps</a></p>
+      <p className="empty">The diff view is not available yet.</p>
+    </>
+  );
+}
+
+function Routed({ token, route }: { token: string | null; route: Route }) {
+  switch (route.kind) {
+    case "session":
+      return <SessionView token={token} id={route.id} />;
+    case "steps":
+      return <StepsRoute token={token} id={route.id} index={route.index} />;
+    case "diff":
+      return <DiffRoute id={route.id} index={route.index} />;
+    case "list":
+      return <ListView token={token} />;
+  }
+}
+
 export function App({ token }: { token: string | null }) {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
   useEffect(() => {
@@ -56,7 +89,7 @@ export function App({ token }: { token: string | null }) {
       <header className="top">
         <h1><a href={routeHref({ kind: "list" })}>lgtm-review</a></h1>
       </header>
-      <main>{route.kind === "session" ? <SessionView token={token} id={route.id} /> : <ListView token={token} />}</main>
+      <main><Routed token={token} route={route} /></main>
     </>
   );
 }
