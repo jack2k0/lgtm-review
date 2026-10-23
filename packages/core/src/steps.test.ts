@@ -424,6 +424,12 @@ describe("background check steps", () => {
     expect(s[0]!.title).toBe("Run pnpm test -> stopped");
   });
 
+  test("status-less without exit code: not terminal, still no result", () => {
+    const s = bgSteps({ taskId: "t1", summary: "monitor progress" });
+    expect(s[0]!.check).toEqual({ command: "pnpm test", exitCode: null, passed: null, excerpt: "" });
+    expect(s[0]!.title).toBe("Run pnpm test -> no result");
+  });
+
   test("the notification may arrive in a later prompt", () => {
     const d = run([prompt("p"), ...bgBash("b", "t1", "pnpm test"), prompt("q"), ...read("r1"), taskNotification({ taskId: "t1", status: "completed", summary: "exit code 0" })]);
     expect(d[0]!.steps[0]!.title).toBe("Run pnpm test -> passed");

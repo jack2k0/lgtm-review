@@ -332,6 +332,8 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
     const c = entry.check;
     // Only an unresolved background check can be resolved, and only once: the first terminal notification wins.
     if (!c.background || c.completed || c.stopped) return;
+    // A notification with no status and no exit code is a progress event (e.g. a monitor): not terminal, ignored.
+    if (ev.status === "" && ev.exitCode === null) return;
     const finished = ev.status === "completed" || ev.status === "failed" || (ev.status === "" && ev.exitCode !== null);
     let exit: number | null = null;
     if (finished) {

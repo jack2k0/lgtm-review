@@ -469,11 +469,34 @@ describe("background checks resolved by task notifications", () => {
     expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { summary: "exit code: 2" })]).reason).toBe("pnpm test failed (exit 2)");
   });
 
-  test("killed, unknown and missing status: stopped => unchecked, check stopped", () => {
+  test("killed, unknown status: stopped => unchecked, check stopped", () => {
     for (const status of ["killed", "stopped", "weird"]) {
       expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { status, summary: "was stopped" })])).toMatchObject({ status: "unchecked", reason: "check stopped" });
     }
-    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), taskNotification({ taskId: "t1" })]).reason).toBe("check stopped");
+  });
+
+  test("status-less notification without exit code is not terminal: ignored", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), taskNotification({ taskId: "t1", summary: "monitor event" })]).reason).toBe("check did not complete");
+  });
+
+  test("(a) status-less notification then a later completed exit 0 notification => passed", () => {
+    const lines = [prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), taskNotification({ taskId: "t1", summary: "progress" }), done("t1")];
+    expect(one(lines).status).toBe("checked");
+  });
+
+  test("(b) status-less notification with exit code 1 in summary => failed", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), taskNotification({ taskId: "t1", summary: "finished (exit code 1)" })])).toMatchObject({
+      status: "failing",
+      reason: "pnpm test failed (exit 1)",
+    });
+  });
+
+  test("(c) status-less only => check stays unresolved, same as no notification", () => {
+    const withNote = one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), taskNotification({ taskId: "t1", summary: "progress" })]);
+    const without = one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test")]);
+    expect(withNote.status).toBe(without.status);
+    expect(withNote.reason).toBe(without.reason);
+    expect(withNote).toMatchObject({ status: "unchecked", reason: "check did not complete" });
   });
 
   test("a stopped check does not hide an older passing foreground check that covers the edit", () => {
