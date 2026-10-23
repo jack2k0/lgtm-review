@@ -143,7 +143,7 @@ export function buildBeats(input: BuildBeatsInput): BuildBeatsResult {
         }
 
         // Emit import-added beats for each new edge whose `from` is that path, sorted by `to`
-        const newEdges = [...(newEdgesByFrom.get(path) ?? [])].sort((a, b) => a.to.localeCompare(b.to));
+        const newEdges = [...(newEdgesByFrom.get(path) ?? [])].sort((a, b) => (a.to < b.to ? -1 : a.to > b.to ? 1 : 0));
         for (const e of newEdges) {
           const fromName = basename(e.from) === basename(e.to) ? e.from : basename(e.from);
           const toName = basename(e.from) === basename(e.to) ? e.to : basename(e.to);
