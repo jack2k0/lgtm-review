@@ -10,6 +10,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "smoke": "turbo run smoke",
+    "demo": "node scripts/build-demo.mjs",
     "check": "turbo run typecheck test build smoke && turbo run test:perf --concurrency=1"
   },
   "devDependencies": { "turbo": "^2.5.0", "typescript": "^5.8.0" }

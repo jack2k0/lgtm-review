@@ -133,3 +133,7 @@ Known gaps (these can stay in the file):
 - Prompt text, file contents in diffs, company and project names, and anything a person would call confidential but that does not look like a secret.
 
 Limits: diffs are included up to 5 MB of text in total (later diffs are left out and the file says so), each step lists at most 200 actions, and a session log larger than 10 MB prints a warning because the export can be large and slow.
+
+## Demo
+
+A static demo built from a synthetic session (no real logs or personal paths) is committed at `docs/demo/index.html`. Rebuild it with `pnpm build && pnpm demo`.
