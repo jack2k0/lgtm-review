@@ -1,0 +1,112 @@
+[
+  {
+    "index": 0,
+    "text": "Refactor the greeter and drop the old helper.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 14000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit 6 files (+6 -6)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 14000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/greet.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "src/greet.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          },
+          {
+            "tool": "Write",
+            "summary": "src/new.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:06.000Z"
+          },
+          {
+            "tool": "Write",
+            "summary": "src/empty.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.000Z"
+          },
+          {
+            "tool": "Bash",
+            "summary": "sed -i 's/foo/bar/' src/shell.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:10.000Z"
+          },
+          {
+            "tool": "Bash",
+            "summary": "rm src/old.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:12.000Z"
+          },
+          {
+            "tool": "Bash",
+            "summary": "mv src/a.js src/b.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/greet.js",
+          "/home/user/project/src/new.js",
+          "/home/user/project/src/empty.js",
+          "/home/user/project/src/shell.js",
+          "/home/user/project/src/old.js",
+          "/home/user/project/src/a.js"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Regenerate the big file.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:20.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Create data/big.txt (+2500), create data/wide.txt (+2)",
+        "startedAt": "2026-01-01T00:00:21.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Write",
+            "summary": "data/big.txt",
+            "ok": true,
+            "ts": "2026-01-01T00:00:21.000Z"
+          },
+          {
+            "tool": "Write",
+            "summary": "data/wide.txt",
+            "ok": true,
+            "ts": "2026-01-01T00:00:23.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/data/big.txt",
+          "/home/user/project/data/wide.txt"
+        ]
+      }
+    ]
+  }
+]

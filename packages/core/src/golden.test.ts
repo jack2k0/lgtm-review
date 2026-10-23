@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { analyzeSession, createAnalyzer } from "./analyze.js";
-import { PromptDetail, SessionAnalysis } from "./schema.js";
+import { FileDiff, PromptDetail, SessionAnalysis } from "./schema.js";
 import { listFixtures, listLabelFiles, readFixtureLines, readLabels, sessionsDir } from "./testing/fixtures.js";
 
 const fixtures = listFixtures();
@@ -58,6 +58,21 @@ describe("golden: steps and diffs (detail mode)", () => {
     expect(JSON.stringify(again)).toBe(JSON.stringify(details));
     for (const d of details) expect(PromptDetail.safeParse(d).success).toBe(true);
     await expect(JSON.stringify(details, null, 2) + "\n").toMatchFileSnapshot(join(sessionsDir, "__golden__", `${name}.steps.json`));
+  });
+
+  test.each(fixtures)("diffs: %s", async (name) => {
+    const { a, analysis } = detailOf(name);
+    const diffs: Record<string, FileDiff> = {};
+    for (const p of analysis.prompts) {
+      for (const f of p.files) {
+        const d = a.diffFor(p.index, f.path);
+        expect(d, `${p.index}:${f.path}`).not.toBeNull();
+        expect(FileDiff.safeParse(d).success).toBe(true);
+        expect(d?.kind).toBe(f.kind);
+        diffs[`${p.index}:${f.path}`] = d!;
+      }
+    }
+    await expect(JSON.stringify(diffs, null, 2) + "\n").toMatchFileSnapshot(join(sessionsDir, "__golden__", `${name}.diffs.json`));
   });
 });
 

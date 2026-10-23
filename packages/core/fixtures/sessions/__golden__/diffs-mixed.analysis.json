@@ -1,0 +1,101 @@
+{
+  "sessionId": "diffs-mixed",
+  "title": "Refactor the greeter and drop the old helper.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Refactor the greeter and drop the old helper.",
+      "status": "unchecked",
+      "reason": "no checks ran",
+      "files": [
+        {
+          "path": "/home/user/project/src/a.js",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        },
+        {
+          "path": "/home/user/project/src/empty.js",
+          "kind": "M",
+          "added": 0,
+          "removed": 2,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/greet.js",
+          "kind": "M",
+          "added": 2,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/new.js",
+          "kind": "A",
+          "added": 3,
+          "removed": 0,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/old.js",
+          "kind": "D",
+          "added": 0,
+          "removed": 2,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/shell.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 14000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 14000,
+      "headline": "Mostly writing (100%), 0 checks"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000016",
+      "text": "Regenerate the big file.",
+      "status": "unchecked",
+      "reason": "no checks ran",
+      "files": [
+        {
+          "path": "/home/user/project/data/big.txt",
+          "kind": "A",
+          "added": 2500,
+          "removed": 0,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/data/wide.txt",
+          "kind": "A",
+          "added": 2,
+          "removed": 0,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (100%), 0 checks"
+    }
+  ],
+  "warnings": []
+}

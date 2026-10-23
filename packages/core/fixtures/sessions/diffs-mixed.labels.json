@@ -1,0 +1,16 @@
+{
+  "fixture": "diffs-mixed",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "note": "multi-edit, create, emptied file, shell edit, removal, move without hunks"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "note": "truncated create and wide line"
+    }
+  ]
+}

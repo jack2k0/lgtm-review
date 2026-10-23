@@ -172,8 +172,8 @@ Detail analysis on demand only; caps on retained text; LRU cache of 3 sessions.
 
 #### Automated
 
-- [ ] 2.1 `pnpm check` green; golden diffs and truncation tests
-- [ ] 2.2 node-free grep empty
+- [x] 2.1 `pnpm check` green; golden diffs and truncation tests
+- [x] 2.2 node-free grep empty
 
 #### Manual
 

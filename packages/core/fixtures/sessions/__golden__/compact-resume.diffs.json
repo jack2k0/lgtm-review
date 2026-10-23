@@ -1,0 +1,44 @@
+{
+  "0:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a + b"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/src/sub.js": {
+    "path": "/home/user/project/src/sub.js",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -0,0 +1,2 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "export const sub = (a, b) => a - b;"
+          },
+          {
+            "t": "+",
+            "s": "export default sub;"
+          }
+        ]
+      }
+    ]
+  }
+}

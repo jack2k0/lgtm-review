@@ -1,0 +1,65 @@
+{
+  "0:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,3 +1,3 @@",
+        "lines": [
+          {
+            "t": " ",
+            "s": "function add(a, b) {"
+          },
+          {
+            "t": "-",
+            "s": "  return a - b;"
+          },
+          {
+            "t": "+",
+            "s": "  return a * b;"
+          },
+          {
+            "t": " ",
+            "s": "}"
+          }
+        ]
+      },
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "function add(a, b) {"
+          },
+          {
+            "t": "+",
+            "s": "export function add(a, b) {"
+          }
+        ]
+      }
+    ]
+  },
+  "0:/home/user/project/src/add.test.js": {
+    "path": "/home/user/project/src/add.test.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -3,1 +3,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "expect(add(2, 3)).toBe(5);"
+          },
+          {
+            "t": "+",
+            "s": "expect(add(2, 3)).toBe(6);"
+          }
+        ]
+      }
+    ]
+  }
+}

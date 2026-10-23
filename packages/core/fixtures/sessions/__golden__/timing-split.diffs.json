@@ -1,0 +1,120 @@
+{
+  "0:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a * b"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a * b"
+          }
+        ]
+      },
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a * b"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a * b"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a * b"
+          }
+        ]
+      }
+    ]
+  },
+  "4:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a * b"
+          }
+        ]
+      }
+    ]
+  }
+}
