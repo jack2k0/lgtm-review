@@ -74,6 +74,12 @@ Statuses are heuristics read from the session log, not verdicts. Known limits:
 
 To measure how these limits affect your own sessions, run `pnpm build` and then `node scripts/audit-status.mjs [--dir <repo>] [--projects-dir <dir>]` from a checkout of the repository. It runs the built CLI with `--list --json` and prints aggregate counts only: sessions and prompts, the status distribution, the share of partial prompts, the share of prompts with heuristic shell edits and the share of checks with an unverified exit code. It never prints prompt text, paths, commands or reasons; add `--json` for machine-readable output.
 
+## Resumed and forked sessions
+
+Resuming or forking a Claude Code session copies the earlier prompts (same prompt `uuid`) into a new file. lgtm-review analyses all sessions of the project together: the session that started first owns a prompt, and the copies in later sessions are marked `inheritedFrom: <session id>`. Inherited prompts are not counted: `promptCount` and `statusCounts` cover the session's own prompts, `inheritedCount` the rest, and `forkOf` names the session most of them came from.
+
+`--list` marks them `(inherited from <id8>)`; `--json` and the API keep them, with `inheritedFrom`. `--summary` and `--export` leave them out and say so ("N prompts inherited from <id8> omitted"); a session with no prompts of its own prints "All N prompts inherited from <id8>. No prompts to review." Only equal prompt `uuid`s count; the timelines are not merged.
+
 ## Summary
 
 ```

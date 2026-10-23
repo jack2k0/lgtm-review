@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { SessionFile } from "@lgtm/core/node";
 import { discoverSessions, loadRepoScripts, projectDirFor, analyzeFile, defaultProjectsDir } from "@lgtm/core/node";
+import { markInherited } from "@lgtm/core";
 import type { Analysis, SessionAnalysis } from "@lgtm/core";
 import { runExport } from "./export.js";
 import { formatText, sortSessions } from "./format.js";
@@ -92,14 +93,16 @@ async function summary(dir: string, files: SessionFile[], prefix: string | undef
   }
   const repo = await loadRepoScripts(dir);
   const sessions: SessionAnalysis[] = [];
-  for (const f of pool) {
+  for (const f of files) {
     try {
       sessions.push(await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` }));
     } catch (err) {
-      console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
+      if (pool.includes(f)) console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
     }
   }
-  const chosen = sortSessions(sessions)[0];
+  // Inheritance depends on all sessions of the project, so all are analysed and only then narrowed to the prefix.
+  const wanted = new Set(pool.map((f) => f.id));
+  const chosen = sortSessions(markInherited(sessions).filter((x) => wanted.has(x.sessionId)))[0];
   if (!chosen) {
     console.error("lgtm-review: no readable session");
     return 1;
@@ -225,15 +228,15 @@ async function main(): Promise<number> {
   if (values.summary) return summary(dir, files, values.session, values["no-titles"] !== true);
 
   const repo = await loadRepoScripts(dir);
-  const sessions: SessionAnalysis[] = [];
+  const analysed: SessionAnalysis[] = [];
   for (const f of files) {
     try {
-      sessions.push(await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` }));
+      analysed.push(await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` }));
     } catch (err) {
       console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
     }
   }
-
+  const sessions = markInherited(analysed);
   if (values.json) {
     console.log(JSON.stringify({ dir, sessions: sortSessions(sessions) } satisfies Analysis, null, 2));
   } else {

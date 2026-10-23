@@ -1,3 +1,4 @@
+import { inheritedInfo } from "./format.js";
 import type { Hint, PromptAnalysis, Recommendation, SessionAnalysis, Status } from "@lgtm/core";
 
 export interface SummaryOptions {
@@ -147,21 +148,28 @@ export function formatSummary(s: SessionAnalysis, opts: SummaryOptions): string 
   const date = s.startedAt && /^\d{4}-\d{2}-\d{2}/.test(s.startedAt) ? s.startedAt.slice(0, 10) : "unknown date";
   out.push(`Branch: ${mdCode(s.branch)} · Date: ${date} · Session: ${mdCode(s.sessionId.slice(0, 8))}`, "");
 
-  const counts = STATUS_ORDER.map((st) => [st, s.prompts.filter((p) => p.status === st).length] as const)
+  const prompts = s.prompts.filter((p) => p.inheritedFrom === undefined);
+  const inh = inheritedInfo(s.prompts);
+  const counts = STATUS_ORDER.map((st) => [st, prompts.filter((p) => p.status === st).length] as const)
     .filter(([, n]) => n > 0)
     .map(([st, n]) => `${n} ${st}`)
     .join(", ");
-  if (s.prompts.length === 0) {
+  if (inh && prompts.length === 0) {
+    out.push(`All ${inh.count} ${inh.count === 1 ? "prompt" : "prompts"} inherited from ${mdText(inh.from.slice(0, 8))}. No prompts to review.`, "");
+    return out.join("\n");
+  }
+  if (prompts.length === 0) {
     out.push("This session has no prompts.", "");
   } else {
-    out.push(`${s.prompts.length} ${s.prompts.length === 1 ? "prompt" : "prompts"}: ${counts}.`, "");
+    out.push(`${prompts.length} ${prompts.length === 1 ? "prompt" : "prompts"}: ${counts}.`, "");
+    if (inh) out.push(`${inh.count} ${inh.count === 1 ? "prompt" : "prompts"} inherited from ${mdText(inh.from.slice(0, 8))} omitted`, "");
     out.push("| # | Status | Review | Prompt | Files | +/- |", "| ---: | --- | --- | --- | ---: | --- |");
-    for (const p of s.prompts) {
+    for (const p of prompts) {
       const t = totals(p);
       out.push(`| ${p.index + 1} | ${p.status} | ${REC_LABEL[p.recommendation]} | ${summaryTitle(p.text, p.index, opts.titles)} | ${p.files.length} | +${t.added} -${t.removed} |`);
     }
     out.push("");
-    const attention = s.prompts.filter(needsAttention);
+    const attention = prompts.filter(needsAttention);
     if (attention.length > 0) {
       out.push("## Needs attention", "");
       for (const p of attention) {

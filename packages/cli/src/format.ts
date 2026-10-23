@@ -1,4 +1,4 @@
-import type { FileChange, SessionAnalysis, Status } from "@lgtm/core";
+import type { FileChange, PromptAnalysis, SessionAnalysis, Status } from "@lgtm/core";
 
 export interface FormatOptions {
   color: boolean;
@@ -23,6 +23,22 @@ function fileLine(f: FileChange): string {
   return `${f.kind} ${f.path} +${f.added} -${f.removed}${f.maybeIncomplete ? " (incomplete)" : ""}`;
 }
 
+/** Inherited prompts of a session (resumed or forked copies) and the session most of them came from (ties: smallest id); null when none. */
+export function inheritedInfo(prompts: readonly PromptAnalysis[]): { count: number; from: string } | null {
+  const tally = new Map<string, number>();
+  let count = 0;
+  for (const p of prompts) {
+    if (p.inheritedFrom === undefined) continue;
+    count++;
+    tally.set(p.inheritedFrom, (tally.get(p.inheritedFrom) ?? 0) + 1);
+  }
+  if (count === 0) return null;
+  let from = "";
+  let max = 0;
+  for (const [id, n] of tally) if (n > max || (n === max && id < from)) [from, max] = [id, n];
+  return { count, from };
+}
+
 /** Newest first by start time (missing last), then by id. */
 export function sortSessions(sessions: SessionAnalysis[]): SessionAnalysis[] {
   return [...sessions].sort((a, b) => {
@@ -39,16 +55,19 @@ export function formatText(sessions: SessionAnalysis[], opts: FormatOptions): st
   const out: string[] = [];
   const warnings: string[] = [];
   for (const s of sortSessions(sessions)) {
-    const counts = STATUS_ORDER.map((st) => [st, s.prompts.filter((p) => p.status === st).length] as const)
+    const own = s.prompts.filter((p) => p.inheritedFrom === undefined);
+    const inh = inheritedInfo(s.prompts);
+    const counts = STATUS_ORDER.map((st) => [st, own.filter((p) => p.status === st).length] as const)
       .filter(([, n]) => n > 0)
       .map(([st, n]) => `${n} ${st}`)
       .join(", ");
     out.push(
       `${paint(opts, "1", s.sessionId.slice(0, 8))}  ${oneLine(s.title, 60)}  [${s.branch}]  ${s.startedAt ?? "unknown start"}`,
     );
-    out.push(`  ${s.prompts.length} prompt(s)${counts ? `: ${counts}` : ""}`);
+    out.push(`  ${own.length} prompt(s)${counts ? `: ${counts}` : ""}${inh ? ` (+${inh.count} inherited from ${inh.from.slice(0, 8)})` : ""}`);
     for (const p of s.prompts) {
-      out.push(`  ${p.index + 1}. ${paint(opts, CODES[p.status], p.status.padEnd(10))} ${oneLine(p.text, 200)}`);
+      const mark = p.inheritedFrom === undefined ? "" : ` (inherited from ${p.inheritedFrom.slice(0, 8)})`;
+      out.push(`  ${p.index + 1}. ${paint(opts, CODES[p.status], p.status.padEnd(10))} ${oneLine(p.text, 200)}${mark}`);
       out.push(`       ${p.reason}`);
       for (const f of p.files) out.push(`       ${fileLine(f)}`);
     }
