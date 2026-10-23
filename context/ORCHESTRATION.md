@@ -39,7 +39,7 @@ brak
 - chore perf-split (2026-10-23, OpenCode pQ Big Pickle, 0 poprawek): perf testy osobno, sekwencyjnie w `pnpm check`.
 
 ## Notatki
-- Repo ma teraz remote `origin` (github.com/jack2k0/lgtm-review); push nadal tylko za zgodą właściciela.
+- Repo ma remote `origin` (github.com/jack2k0/lgtm-review). Push main 426a7f4 za zgodą właściciela (2026-10-23); kolejne pushe tylko na polecenie.
 - Repo lokalne, bez remote. Nie pushować. Branch startowy `master`, docelowy `main` (do zmiany przy commicie fundamentu).
 - Env: node 22 + pnpm przez PATH=/tmp/claude-1000/shim:$HOME/.local/opt/node22/bin. git user nie ustawiony: commity z GIT_AUTHOR_*/GIT_COMMITTER_* (jack / bogatyszejksponsor2@gmail.com). Narzędzia quoty niesprawdzone.
 
