@@ -87,3 +87,14 @@ Three phases: (1) core hints + recommendation with goldens, (2) web display, (3)
 
 - [ ] 3.1 `pnpm check` green incl. smoke
 - [ ] 3.2 Summary reviewed on a real local session (not committed)
+
+## Plan-review amendments (accepted by orchestrator, 2026-10-23)
+
+- D1 (blocking): recommendation also considers prompt status: `failing` or `unchecked` => at least `read-flagged`; `read-all` when >= 3 distinct high RULES (not instances), or status `failing` with any high hint.
+- D2: `assertions-removed` counts only `\b(expect|assert[A-Za-z0-9_]*)\s*\(`, `self\.assert[A-Za-z0-9_]*\s*\(`, `\.\s*should\b`, `\brequire\.(equal|ok)`; plain `should` in test titles is NOT counted.
+- D3: `sensitive-path` matches whole path segments or file names (not substrings): segments `auth`, `authentication`, `authorization`, `login`, `secrets`, `secret`, `credentials`, `tokens`, `token`, `migrations`, `migrate`, `permissions`, `security`, files `.env*`, `Dockerfile*`, path prefix `.github/workflows/`; explicit exclusions: `design-tokens`, `tokenizer`, `author*`, `*.css`; test files get `sensitive-path` only for the non-test part rules (a test named `auth.test.ts` still counts because it touches auth: keep it, severity high only when the path is NOT a test file, otherwise warn).
+- D4: evidence collection streams lines and keeps only counters; add a perf regression check: the existing 20 MB perf tests (list + detail) must stay under their limits and the S-01 20 MB analyze test must not exceed 1.5x its current logged time (record the before/after times in the report).
+- D5: `--summary` redacts title text: tokens/keys patterns (`sk-ant-`, `sk-...`, `ghp_`, `github_pat_`, `AKIA...`, `Bearer <x>`, long hex/base64-like strings >= 32 chars, `password=...`) replaced by `[redacted]`; flag `--no-titles` omits titles entirely (prompts shown as "Prompt N"). Test both.
+- D6: threshold wording: see D1.
+- D7 (rejected): no backward compatibility needed, analysis JSON is not persisted; fields stay required.
+- D8: Phase 2 adds RTL-free render tests asserting the recommendation label text and `aria` attributes; Phase 3 adds a golden markdown test (`fixtures/.../*.summary.md`) for the synthetic scenarios, byte-exact. Manual items 2.2 and 3.2 are performed by the orchestrator in addition.
