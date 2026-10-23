@@ -61,6 +61,11 @@ describe("formatText", () => {
     expect(t.match(/inherited from/g)).toHaveLength(2);
   });
 
+  test("appends (archived) to the session header when archived: true", () => {
+    const t = formatText([session("arch11111", "2026-01-01T00:00:00Z", { archived: true })], { color: false, dir: "/x" });
+    expect(t).toContain("arch1111  A title  [main]  2026-01-01T00:00:00Z (archived)");
+  });
+
   test("warnings capped at 20", () => {
     const warnings = Array.from({ length: 25 }, (_, i) => ({ file: "f.jsonl", line: i + 1, reason: "bad" }));
     const t = formatText([session("a", null, { warnings })], { color: false, dir: "/x" });

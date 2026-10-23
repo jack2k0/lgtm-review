@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { analyzeFile, analyzeFileDetail, discoverSessions, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile } from "@lgtm/core/node";
+import { analyzeFile, analyzeFileDetail, discoverAllSessions, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile } from "@lgtm/core/node";
 import { buildBeats, markInherited } from "@lgtm/core";
 import type { Analyzer, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
 import { planImportMap, toRepoRelative } from "./map.js";
@@ -53,6 +53,7 @@ export function summarize(s: SessionAnalysis, all: readonly SessionAnalysis[] = 
     warningCount: s.warnings.length,
     inheritedCount,
     ...(forkOf !== undefined ? { forkOf } : {}),
+    ...(s.archived ? { archived: true } : {}),
   };
 }
 
@@ -95,7 +96,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
 
   async function discover(): Promise<SessionFile[]> {
     try {
-      return await discoverSessions(projectDir);
+      return await discoverAllSessions(projectDir, opts.archiveDir ?? null);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;
@@ -131,6 +132,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
     } else {
       const entry = loadRepoScripts(opts.dir).then(async (repo): Promise<DetailEntry> => {
         const { analysis, analyzer } = await analyzeFileDetail(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
+        if (f.archived) analysis.archived = true;
         const details = analyzer.details();
         return { analysis, analyzer, details, bytes: analyzer.detailBytes() };
       });
@@ -164,7 +166,11 @@ export function createApi(opts: ServerOptions): ApiHandler {
     const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}`;
     let entry = cache.get(f.path);
     if (!entry || entry.key !== key) {
-      const analysis = loadRepoScripts(opts.dir).then((repo) => analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` }));
+      const analysis = loadRepoScripts(opts.dir).then(async (repo) => {
+        const a = await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
+        if (f.archived) a.archived = true;
+        return a;
+      });
       entry = { key, analysis };
       cache.set(f.path, entry);
       analysis.catch(() => {

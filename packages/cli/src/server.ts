@@ -12,6 +12,8 @@ export interface ServerOptions {
   dir: string;
   /** Claude Code projects directory. */
   projectsDir: string;
+  /** Local session archive directory (if any). */
+  archiveDir?: string;
   /** Directory with the built web app; may not exist. */
   webRoot: string;
   /** 0 (default) picks a free port. */

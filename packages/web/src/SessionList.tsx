@@ -24,6 +24,14 @@ export function SessionList({ data }: { data: SessionsResponse }) {
             <tr key={s.id}>
               <td className="title">
                 <a href={routeHref({ kind: "session", id: s.id })}>{s.title || s.id}</a>
+                {s.archived ? (
+                  <>
+                    {" "}
+                    <span className="badge muted" title="Original log deleted by Claude Code; read from the lgtm-review archive">
+                      archived
+                    </span>
+                  </>
+                ) : null}
                 {s.warningCount > 0 ? <span className="muted"> ({plural(s.warningCount, "warning")})</span> : null}
               </td>
               <td className="mono">{s.branch || "—"}</td>

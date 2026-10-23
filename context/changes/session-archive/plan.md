@@ -67,8 +67,8 @@ D7. Security: archive dir path comes only from flag/env/default (never from log 
 - [x] 1.2 discovery merge + `archived` marker with tests
 
 ### Phase 2: CLI + web + docs
-- [ ] 2.1 `--archive` / `--archive-dir` flags, readers use the merge
-- [ ] 2.2 list/API/web marker, README "Archive"
+- [x] 2.1 `--archive` / `--archive-dir` flags, readers use the merge
+- [x] 2.2 list/API/web marker, README "Archive"
 
 ### Phase 3: Docs
 - [ ] 3.1 roadmap, PRD

@@ -4,7 +4,7 @@ import { userInfo } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { markInherited } from "@lgtm/core";
 import type { Analyzer, FileDiff, SessionAnalysis } from "@lgtm/core";
-import { analyzeFile, analyzeFileDetail, discoverSessions, loadRepoScripts, projectDirFor, type SessionFile } from "@lgtm/core/node";
+import { analyzeFile, analyzeFileDetail, discoverAllSessions, loadRepoScripts, projectDirFor, type SessionFile } from "@lgtm/core/node";
 import { renderExport, type ExportInput } from "./export-html.js";
 
 /** Total diff text (characters) put into one export; further diffs are left out. */
@@ -67,6 +67,7 @@ export function osUsernames(env: NodeJS.ProcessEnv = process.env): string[] {
 export interface ExportCommand {
   dir: string;
   projectsDir: string;
+  archiveDir?: string;
   prefix: string;
   /** Output file; default `lgtm-review-<8 chars of the id>.html` in the current directory. */
   out?: string;
@@ -103,7 +104,7 @@ export async function runExport(cmd: ExportCommand): Promise<number> {
   const projectDir = projectDirFor(cmd.dir, cmd.projectsDir);
   let files: SessionFile[];
   try {
-    files = await discoverSessions(projectDir);
+    files = await discoverAllSessions(projectDir, cmd.archiveDir ?? null);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
       console.error(`lgtm-review: cannot read ${projectDir}: ${err instanceof Error ? err.message : err}`);
@@ -147,13 +148,16 @@ export async function runExport(cmd: ExportCommand): Promise<number> {
   try {
     const repo = await loadRepoScripts(cmd.dir);
     const detail = await analyzeFileDetail(file.path, { repo, sessionId: file.id, file: `${file.id}.jsonl` });
+    if (file.archived) detail.analysis.archived = true;
     const { analyzer } = detail;
     // Inheritance depends on the other sessions of the project; unreadable ones are skipped.
     const all: SessionAnalysis[] = [detail.analysis];
     for (const f of files) {
       if (f === file) continue;
       try {
-        all.push(await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` }));
+        const a = await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
+        if (f.archived) a.archived = true;
+        all.push(a);
       } catch {
         // skipped, like the list does
       }
