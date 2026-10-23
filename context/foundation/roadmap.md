@@ -145,7 +145,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** status-accuracy
 - **PRD refs:** Success Criterion "status matches manual verification in >= 95% of turns"; NFR reproducible statuses
 - **Prerequisites:** S-03
-- **Status:** in progress (planned 2026-10-23, orchestrator decision)
+- **Status:** done (real-log audit: status 97.1%, reason 97.1% without subagent prompts; 94.5% / 87.4% overall)
 - Deferred from the audit to later slices: subagent transcripts merged into prompts (S-12), fork/resume dedupe across files (S-13), background-task completion mapping (S-14).
 
 ## Backlog Handoff
