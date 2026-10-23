@@ -63,8 +63,8 @@ D7. Security: archive dir path comes only from flag/env/default (never from log 
 ## Progress
 
 ### Phase 1: Core node
-- [ ] 1.1 `archive.ts` copy with tests
-- [ ] 1.2 discovery merge + `archived` marker with tests
+- [x] 1.1 `archive.ts` copy with tests
+- [x] 1.2 discovery merge + `archived` marker with tests
 
 ### Phase 2: CLI + web + docs
 - [ ] 2.1 `--archive` / `--archive-dir` flags, readers use the merge
