@@ -35,9 +35,9 @@ function get(s: RunningServer, path: string, headers: Record<string, string> = {
 }
 
 describe("CLI flag validation for archive", () => {
-  test("empty --archive-dir errors with exit 2", () => {
+  test("empty --archive-dir errors with exit 1", () => {
     const r = run(["--archive-dir", ""]);
-    expect(r.status).toBe(2);
+    expect(r.status).toBe(1);
     expect(r.stderr).toContain("lgtm-review: --archive-dir needs a directory path");
   });
 

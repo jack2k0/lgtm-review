@@ -164,7 +164,7 @@ async function main(): Promise<number> {
 
   if (values["archive-dir"] === "") {
     console.error("lgtm-review: --archive-dir needs a directory path");
-    return 2;
+    return 1;
   }
 
   let port = 0;
