@@ -35,6 +35,18 @@ export interface TsconfigAlias {
 /** Extensions tried in the plan's resolution order (M7). */
 export const IMPORT_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"] as const;
 
+const TS_SOURCE_RE = /\.(?:m|c)?[jt]sx?$/;
+const TS_DECL_RE = /\.d\.(?:m|c)?ts$/;
+
+/** Identifies language of a source path for the import map (plan D3). */
+export function mapLanguageOf(path: string): "ts" | "py" | null {
+  if (typeof path !== "string" || path === "") return null;
+  if (path.endsWith(".pyi") || TS_DECL_RE.test(path)) return null;
+  if (path.endsWith(".py")) return "py";
+  if (TS_SOURCE_RE.test(path)) return "ts";
+  return null;
+}
+
 const FROM_IMPORT_RE = /\bimport\s+(type\s+)?([^;'"`]*?)\bfrom\s*(["'])([^"'`\n]+)\3/g;
 const SIDE_EFFECT_RE = /\bimport\s*(["'])([^"'`\n]+)\1/g;
 const EXPORT_FROM_RE = /\bexport\s+(type\s+)?(?:[^;'"`]*?)\bfrom\s*(["'])([^"'`\n]+)\2/g;

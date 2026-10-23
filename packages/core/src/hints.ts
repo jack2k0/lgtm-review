@@ -89,12 +89,12 @@ function split(rel: string): { dirs: string[]; name: string } {
 
 const TEST_DIRS = new Set(["test", "tests", "__tests__", "spec"]);
 
-/** Test file: a `test`/`tests`/`__tests__`/`spec` directory, `*.test.*`, `*.spec.*`, `test_*.py` or `*_test.go`. */
+/** Test file: a `test`/`tests`/`__tests__`/`spec` directory, `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.py`, `tests.py`, `conftest.py` or `*_test.go`. */
 export function isTestPath(rel: string): boolean {
   const { dirs, name } = split(rel);
   if (dirs.some((d) => TEST_DIRS.has(d.toLowerCase()))) return true;
   const n = name.toLowerCase();
-  return /\.(?:test|spec)\.[^./]+$/.test(n) || /^test_.*\.py$/.test(n) || /_test\.go$/.test(n);
+  return /\.(?:test|spec)\.[^./]+$/.test(n) || /^(?:test_.*|.*_test|tests?|conftest)\.py$/i.test(n) || /_test\.go$/.test(n);
 }
 
 const SENSITIVE_WORDS = new Set([
@@ -150,7 +150,7 @@ export function sensitiveMatch(rel: string): string | null {
 }
 
 const MANIFEST_RE =
-  /^(?:package\.json|pnpm-lock\.yaml|package-lock\.json|yarn\.lock|requirements[^/]*\.txt|pyproject\.toml|go\.mod|go\.sum|cargo\.toml|cargo\.lock|pom\.xml|build\.gradle[^/]*)$/;
+  /^(?:package\.json|pnpm-lock\.yaml|package-lock\.json|yarn\.lock|requirements[^/]*\.txt|pyproject\.toml|poetry\.lock|uv\.lock|pipfile(?:\.lock)?|setup\.(?:py|cfg)|go\.mod|go\.sum|cargo\.toml|cargo\.lock|pom\.xml|build\.gradle[^/]*)$/;
 
 /** Dependency manifest or lockfile (path-based; the dependencies section is not parsed). */
 export function isManifestPath(rel: string): boolean {
@@ -167,22 +167,35 @@ export function publicSurfaceKind(rel: string): string | null {
   if (ENTRY_RE.test(lowName) && (lowDirs.length === 0 || lowDirs[lowDirs.length - 1] === "src" || lowDirs[lowDirs.length - 1] === "lib")) {
     return "package entry point";
   }
-  if (lowDirs.includes("routes") || lowDirs.includes("api")) return "routes or API";
+  if (
+    lowDirs.includes("routes") ||
+    lowDirs.includes("api") ||
+    lowName === "urls.py" ||
+    lowName === "views.py" ||
+    lowName === "serializers.py" ||
+    lowName === "api.py" ||
+    (lowName.endsWith(".py") && (lowDirs.includes("views") || lowDirs.includes("urls")))
+  ) {
+    return "routes or API";
+  }
   if ([...lowDirs, lowName].some((s) => s.includes("openapi") || s.includes("schema"))) return "schema or OpenAPI";
   return null;
 }
 
 const CONFIG_NAME_RE =
-  /^(?:tsconfig(?:\..+)?\.json|\.?eslintrc(?:\..+)?|eslint\.config\.[a-z]+|biome\.jsonc?|\.prettierrc(?:\..+)?|prettier\.config\.[a-z]+|(?:vite|vitest|webpack|rollup|tsup)\.config\.[a-z.]+|\.gitlab-ci\.ya?ml|\.travis\.ya?ml|azure-pipelines\.ya?ml|jenkinsfile)$/;
+  /^(?:tsconfig(?:\..+)?\.json|\.?eslintrc(?:\..+)?|eslint\.config\.[a-z]+|biome\.jsonc?|\.prettierrc(?:\..+)?|prettier\.config\.[a-z]+|(?:vite|vitest|webpack|rollup|tsup)\.config\.[a-z.]+|\.gitlab-ci\.ya?ml|\.travis\.ya?ml|azure-pipelines\.ya?ml|jenkinsfile|tox\.ini|pytest\.ini|mypy\.ini|\.flake8|\.?ruff\.toml|\.pre-commit-config\.ya?ml|noxfile\.py)$/;
 
-/** Build, lint, formatter, TypeScript or CI configuration. */
+/** Build, lint, formatter, TypeScript, Python or CI configuration. */
 export function isConfigPath(rel: string): boolean {
   const { dirs, name } = split(rel);
-  if (CONFIG_NAME_RE.test(name.toLowerCase())) return true;
+  const lowName = name.toLowerCase();
+  if (CONFIG_NAME_RE.test(lowName)) return true;
   for (let i = 0; i < dirs.length; i++) {
     if (dirs[i] === ".circleci") return true;
     if (dirs[i] === ".github" && dirs[i + 1] === "workflows") return true;
   }
+  if (lowName === "settings.py" || lowName === "wsgi.py" || lowName === "asgi.py") return true;
+  if (lowName.endsWith(".py") && dirs.some((d) => d.toLowerCase() === "settings")) return true;
   return false;
 }
 

@@ -56,9 +56,12 @@ export {
   stripJsonComments,
   loadTsconfigAliases,
   createResolver,
+  mapLanguageOf,
   IMPORT_EXTENSIONS,
 } from "./map-extract.js";
 export type { ImportSyntax, ExtractedImport, MapHost, TsconfigAlias, Resolver, ResolverOptions } from "./map-extract.js";
+export { extractPythonImports, createPythonResolver } from "./map-extract-py.js";
+export type { PythonImport, PythonResolverOptions, PythonResolver } from "./map-extract-py.js";
 export {
   layerOf,
   selectMapNodes,
@@ -72,4 +75,4 @@ export {
   MAP_LAYER_GAP,
   MAP_PAD,
 } from "./map-layout.js";
-export type { MapNodeInput, MapEdgeInput, MapLayout, NeighbourRank, SelectedMapNodes } from "./map-layout.js";
+export type { MapNodeInput, MapEdgeInput, MapLayout, NeighbourRank, SelectedMapNodes, LayoutImportMapOptions } from "./map-layout.js";

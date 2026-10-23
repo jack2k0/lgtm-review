@@ -6,6 +6,7 @@ import {
   extractImports,
   IMPORT_EXTENSIONS,
   loadTsconfigAliases,
+  mapLanguageOf,
   normalizePath,
   stripJsonComments,
   type MapHost,
@@ -197,5 +198,29 @@ describe("loadTsconfigAliases", () => {
 
   test("stripJsonComments keeps comment-like text inside strings", () => {
     expect(stripJsonComments('{"a":"// x","b":"/* y */"} // z')).toBe('{"a":"// x","b":"/* y */"} ');
+  });
+});
+
+describe("mapLanguageOf", () => {
+  test.each<[string, "ts" | "py" | null]>([
+    ["src/main.ts", "ts"],
+    ["src/app.tsx", "ts"],
+    ["lib/index.js", "ts"],
+    ["lib/component.jsx", "ts"],
+    ["src/module.mts", "ts"],
+    ["src/module.cts", "ts"],
+    ["src/module.mjs", "ts"],
+    ["src/module.cjs", "ts"],
+    ["backend/manage.py", "py"],
+    ["backend/shop/models.py", "py"],
+    ["src/types.d.ts", null],
+    ["src/types.d.mts", null],
+    ["src/types.d.cts", null],
+    ["backend/stub.pyi", null],
+    ["README.md", null],
+    ["package.json", null],
+    ["", null],
+  ])("%s => %s", (path, expected) => {
+    expect(mapLanguageOf(path)).toBe(expected);
   });
 });

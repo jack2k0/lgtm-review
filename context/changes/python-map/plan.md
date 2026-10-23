@@ -96,9 +96,9 @@ D8. Web: empty state text -> "No supported source files changed (TS/JS, Python)"
 ## Progress
 
 ### Phase 1: Core
-- [ ] 1.1 Python extractor + resolver (`map-extract-py.ts`) with tests
-- [ ] 1.2 `mapLanguageOf`, `layerOf`/`layoutImportMap` `layerRoots` option with tests
-- [ ] 1.3 Python/Django hint paths with tests
+- [x] 1.1 Python extractor + resolver (`map-extract-py.ts`) with tests
+- [x] 1.2 `mapLanguageOf`, `layerOf`/`layoutImportMap` `layerRoots` option with tests
+- [x] 1.3 Python/Django hint paths with tests
 
 ### Phase 2: CLI + web
 - [ ] 2.1 Language dispatch, Python roots, layer roots, skip dirs in `map.ts`
