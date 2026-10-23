@@ -15,12 +15,7 @@ Branch: `main` · Date: 2026-01-01 · Session: `diffs-mi`
 
 - Status: unchecked (no checks ran)
 - Review: Read flagged
-- **warn** `unchecked-edit`: `src/a.js`
-- **warn** `unchecked-edit`: `src/empty.js`
-- **warn** `unchecked-edit`: `src/greet.js`
-- **warn** `unchecked-edit`: `src/new.js`
-- **warn** `unchecked-edit`: `src/old.js`
-- **warn** `unchecked-edit`: `src/shell.js`
+- **warn** `unchecked-edit`: 6 files (first: `src/a.js`, `src/empty.js`, `src/greet.js`, …)
 
 ### Prompt 2: Regenerate the big file.
 

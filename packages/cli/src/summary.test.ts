@@ -88,6 +88,18 @@ describe("summary content", () => {
     expect(md).toContain("`/elsewhere/x.ts`");
     expect(md).toContain("`large-change`: (whole prompt)");
   });
+  test("collapses more than 3 hints of one warn rule; 3 stay separate; high is never collapsed", () => {
+    const w = (n: number) => Array.from({ length: n }, (_, i) => hint({ rule: "unchecked-edit", severity: "warn", path: `${ROOT}/src/f${i}.ts` }));
+    const three = formatSummary(session([prompt({ hints: w(3) })]), { titles: true, root: ROOT });
+    expect(three).toContain("`src/f2.ts`");
+    expect(three).not.toContain("files (first:");
+    const four = formatSummary(session([prompt({ hints: w(4) })]), { titles: true, root: ROOT });
+    expect(four).toContain("- **warn** `unchecked-edit`: 4 files (first: `src/f0.ts`, `src/f1.ts`, `src/f2.ts`, …)");
+    expect(four).not.toContain("src/f3.ts");
+    const high = formatSummary(session([prompt({ hints: Array.from({ length: 5 }, (_, i) => hint({ path: `${ROOT}/src/h${i}.ts` })) })]), { titles: true, root: ROOT });
+    expect(high).toContain("src/h4.ts");
+    expect(high).not.toContain("files (first:");
+  });
   test("a session without prompts", () => {
     const md = formatSummary(session([]), { titles: true });
     expect(md).toContain("This session has no prompts.");

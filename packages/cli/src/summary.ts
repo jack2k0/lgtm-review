@@ -100,6 +100,34 @@ function hintLine(h: Hint, root: string | undefined): string {
   return `- **${h.severity}** ${mdCode(h.rule)}: ${where}`;
 }
 
+/** More hints than this of one warn/info rule are collapsed into a single line. */
+export const COLLAPSE_OVER = 3;
+
+/** Hint lines of a prompt: repeated warn/info hints of one rule collapse into one line; high ones are always listed. */
+function hintLines(hints: Hint[], root: string | undefined): string[] {
+  const groups = new Map<string, Hint[]>();
+  for (const h of hints) {
+    if (h.severity === "high") continue;
+    const k = `${h.severity}\u0000${h.rule}`;
+    groups.set(k, [...(groups.get(k) ?? []), h]);
+  }
+  const done = new Set<string>();
+  const out: string[] = [];
+  for (const h of hints) {
+    const k = `${h.severity}\u0000${h.rule}`;
+    const g = h.severity === "high" ? undefined : groups.get(k);
+    if (!g || g.length <= COLLAPSE_OVER) {
+      out.push(hintLine(h, root));
+      continue;
+    }
+    if (done.has(k)) continue;
+    done.add(k);
+    const first = g.slice(0, 3).map((x) => (x.path === null ? "(whole prompt)" : mdCode(relPath(x.path, root))));
+    out.push(`- **${h.severity}** ${mdCode(h.rule)}: ${g.length} files (first: ${first.join(", ")}, …)`);
+  }
+  return out;
+}
+
 function needsAttention(p: PromptAnalysis): boolean {
   return p.hints.length > 0 || p.status === "unchecked" || p.status === "failing";
 }
@@ -139,7 +167,7 @@ export function formatSummary(s: SessionAnalysis, opts: SummaryOptions): string 
         out.push(`### ${promptHeading(p, opts.titles)}`, "");
         out.push(`- Status: ${p.status} (${mdText(summaryReason(p))})`);
         out.push(`- Review: ${REC_LABEL[p.recommendation]}`);
-        for (const h of p.hints) out.push(hintLine(h, opts.root));
+        out.push(...hintLines(p.hints, opts.root));
         out.push("");
       }
     }
