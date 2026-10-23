@@ -72,3 +72,13 @@ D7. Security: archive dir path comes only from flag/env/default (never from log 
 
 ### Phase 3: Docs
 - [ ] 3.1 roadmap, PRD
+
+## Orchestrator review amendments (Opus, 2026-10-23, from Agy plan-review F1-F7) — override the sections above
+
+- C1 (F1, blocker) Copy EVERY regular file directly under `<id>/subagents/` (covers `agent-*.jsonl` and `agent-*.meta.json`); the subagent loader drops transcripts without meta. Test: an archived session with a subagent still merges the subagent after the live copy is deleted.
+- C2 (F2) `archived: z.boolean().optional()` on BOTH `SessionAnalysis` and `SessionSummary`; `SessionFile.archived` -> `SessionAnalysis.archived` where callers analyze files (cli.ts, api.ts, export.ts) -> `summarize()` copies it. `--list` text (`formatText`) appends ` (archived)`; `--list --json` and `GET /api/sessions/:id` carry it.
+- C3 (F3) `ServerOptions.archiveDir?: string`; `cli.ts` serve passes `archiveDirFor(projectDir, archiveRoot)`.
+- C4 (F4) `utimes(dest, new Date(src.atimeMs), new Date(src.mtimeMs))` (never raw ms numbers); skip when `dest.size === src.size && dest.mtimeMs >= src.mtimeMs - 1000`.
+- C5 (F5) temp name `${dest}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`, unlinked in `finally` on failure; stale `*.tmp-*` files are ignored by discovery (they do not end in `.jsonl`).
+- C6 (F6) Readers using `discoverAllSessions`: `cli.ts` (list/json/summary/serve), `api.ts`, `export.ts` (`ExportCommand.archiveDir`).
+- C7 (F7) `--archive` excludes `--list --json --summary --export --session --out --force --no-diffs --no-titles --port --no-open`; empty `--archive-dir` -> `lgtm-review: --archive-dir needs a directory path`, exit 2 (same style as other flag errors).
