@@ -81,7 +81,8 @@ export function summaryReason(p: Pick<PromptAnalysis, "status" | "reason">): str
     const label = m ? shorten(redact(flat(m[1]!)), 60) : "";
     return label === "" ? "check failed" : `${label} failed`;
   }
-  const r = p.reason.replace(/;\s*subagent activity not analysed$/, "");
+  // The "not analysed" hedge is dropped (as before); "transcript truncated" and "by subagent" stay in the reason.
+  const r = p.reason.replace(/;\s*subagent activity not analysed(?: \(depth > 3\))?/g, "");
   return shorten(redact(flat(r)), 120);
 }
 

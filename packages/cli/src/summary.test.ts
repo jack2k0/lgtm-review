@@ -1,8 +1,8 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import { analyzeSession } from "@lgtm/core";
+import { analyzeFile } from "@lgtm/core/node";
 import type { Hint, PromptAnalysis, SessionAnalysis } from "@lgtm/core";
 import { formatSummary, mdCode, mdText, redact, summaryReason, summaryTitle } from "./summary.js";
 
@@ -10,9 +10,9 @@ const sessionsDir = join(dirname(fileURLToPath(import.meta.url)), "../../core/fi
 const fixtures = readdirSync(sessionsDir).filter((f) => f.endsWith(".jsonl")).map((f) => f.slice(0, -6)).sort();
 const ROOT = "/home/user/project";
 
-function analyze(name: string): SessionAnalysis {
-  const lines = readFileSync(join(sessionsDir, `${name}.jsonl`), "utf8").split("\n").filter((l) => l !== "");
-  return analyzeSession(lines, { sessionId: `${name}-0000`, file: `${name}.jsonl` });
+/** Through the node IO, so subagent transcripts (`<name>/subagents/`) are discovered like in a real session dir. */
+function analyze(name: string): Promise<SessionAnalysis> {
+  return analyzeFile(join(sessionsDir, `${name}.jsonl`), { sessionId: `${name}-0000`, file: `${name}.jsonl` });
 }
 
 const prompt = (over: Partial<PromptAnalysis> = {}): PromptAnalysis => ({
@@ -43,12 +43,12 @@ const hint = (over: Partial<Hint> = {}): Hint => ({ rule: "test-skipped", severi
 
 describe("golden summaries (byte-exact)", () => {
   test.each(fixtures)("%s", async (name) => {
-    const md = formatSummary(analyze(name), { titles: true, root: ROOT });
-    expect(md).toBe(formatSummary(analyze(name), { titles: true, root: ROOT }));
+    const md = formatSummary(await analyze(name), { titles: true, root: ROOT });
+    expect(md).toBe(formatSummary(await analyze(name), { titles: true, root: ROOT }));
     await expect(md).toMatchFileSnapshot(join(sessionsDir, "__golden__", `${name}.summary.md`));
   });
   test("without titles: hints-test-edits", async () => {
-    await expect(formatSummary(analyze("hints-test-edits"), { titles: false, root: ROOT })).toMatchFileSnapshot(join(sessionsDir, "__golden__", "hints-test-edits.summary-no-titles.md"));
+    await expect(formatSummary(await analyze("hints-test-edits"), { titles: false, root: ROOT })).toMatchFileSnapshot(join(sessionsDir, "__golden__", "hints-test-edits.summary-no-titles.md"));
   });
 });
 
@@ -66,13 +66,13 @@ describe("summary content", () => {
     expect(md).toMatch(/heuristic/);
     expect(md.endsWith("\n")).toBe(true);
   });
-  test("never contains command output, hint reasons or excerpts", () => {
+  test("never contains command output, hint reasons or excerpts", async () => {
     const md = formatSummary(session([prompt({ hints: [hint()] })]), { titles: true, root: ROOT });
     expect(md).not.toContain("SECRET-OUTPUT-LINE");
     expect(md).not.toContain("COMMAND-OUTPUT-IN-REASON");
     expect(md.toLowerCase()).not.toContain("excerpt");
     for (const name of fixtures) {
-      const out = formatSummary(analyze(name), { titles: true, root: ROOT });
+      const out = formatSummary(await analyze(name), { titles: true, root: ROOT });
       expect(out.toLowerCase(), name).not.toContain("excerpt");
       expect(out, name).not.toContain("Tests: 1 failed");
     }
@@ -82,6 +82,9 @@ describe("summary content", () => {
     expect(summaryReason({ status: "failing", reason: "pnpm test failed: Tests: 1 failed" })).toBe("pnpm test failed");
     expect(summaryReason({ status: "failing", reason: "weird" })).toBe("check failed");
     expect(summaryReason({ status: "unchecked", reason: "2 edits after last check" })).toBe("2 edits after last check");
+    expect(summaryReason({ status: "unchecked", reason: "no checks ran; subagent activity not analysed" })).toBe("no checks ran");
+    expect(summaryReason({ status: "unchecked", reason: "no checks ran; subagent activity not analysed (depth > 3)" })).toBe("no checks ran");
+    expect(summaryReason({ status: "unchecked", reason: "1 edit after last check (by subagent Fix); subagent transcript truncated (event cap)" })).toBe("1 edit after last check (by subagent Fix); subagent transcript truncated (event cap)");
   });
   test("paths under the repo dir are relative, others stay as they are; prompt-level hints say so", () => {
     const md = formatSummary(session([prompt({ hints: [hint({ path: "/elsewhere/x.ts" }), hint({ rule: "large-change", path: null, severity: "info" })] })]), { titles: true, root: ROOT });

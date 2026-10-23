@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import type { PromptDetail } from "@lgtm/core";
+import { StepCard } from "./StepCard";
 import { StepsView } from "./StepsView";
 
 const evil = `<img src=x onerror=alert(1)> & "quoted" <script>boom()</script>`;
@@ -49,6 +50,19 @@ describe("StepsView markup", () => {
     expect(html).toContain("Prompt 3: Do it");
     expect(html).toContain("large");
     expect(renderToStaticMarkup(<StepsView sessionId="s" detail={detail()} />)).not.toContain("large");
+  });
+  test("subagent actions get a marker; the title prefix is shown; log content stays escaped", () => {
+    const d = detail();
+    d.steps[0] = { ...d.steps[0]!, title: `Subagent: ${evil}`, actions: [{ tool: evil, summary: evil, ok: true, ts: null, via: "subagent" }, { tool: "Read", summary: "x", ok: true, ts: null }] };
+    const html = renderToStaticMarkup(<StepsView sessionId="s" detail={d} />);
+    expect(html).toContain("Subagent: &lt;img");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("<script");
+    // Actions are collapsed by default: open the card to render them.
+    const open = renderToStaticMarkup(<StepCard step={d.steps[0]!} open={true} onToggle={() => {}} />);
+    expect(open.match(/title="Made by a subagent">subagent<\/span>/g)).toHaveLength(1);
+    expect(open).not.toContain("<img");
+    expect(open).not.toContain("<script");
   });
   test("empty steps show an empty state", () => {
     expect(renderToStaticMarkup(<StepsView sessionId="s" detail={detail({ steps: [] })} />)).toContain("No steps were recorded");

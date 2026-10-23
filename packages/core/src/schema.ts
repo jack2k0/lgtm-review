@@ -65,7 +65,7 @@ export const PromptAnalysis = z.object({
   status: Status,
   reason: z.string(),
   files: z.array(FileChange),
-  /** True when the prompt spawned subagents whose activity is not analysed. */
+  /** True when the prompt spawned subagents whose activity could not be analysed (no transcript, or deeper than 3 levels). */
   partial: z.boolean(),
   timeSplit: TimeSplit,
   /** Union of all phase intervals; phases that overlap in time can make the four values sum to more. */

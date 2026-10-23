@@ -61,6 +61,11 @@ describe("files", () => {
     expect(incompleteMarkers(p([file(1, 0)], false))).toEqual([]);
     expect(incompleteMarkers(p([file(1, 0, true)], false))).toEqual(["may be incomplete"]);
     expect(incompleteMarkers(p([], true))).toEqual(["partial (subagents not analysed)"]);
+    const r = (reason: string, partial = false) => ({ files: [], partial, reason });
+    expect(incompleteMarkers(r("pnpm test passed after last edit (by subagent X)"))).toEqual([]);
+    expect(incompleteMarkers(r("no checks ran; subagent transcript truncated (event cap)"))).toEqual(["subagent transcript truncated (event cap)"]);
+    expect(incompleteMarkers(r("no checks ran; subagent transcript truncated (text cap)"))).toEqual(["subagent transcript truncated (text cap)"]);
+    expect(incompleteMarkers(r("no checks ran; subagent activity not analysed (depth > 3)", true))).toEqual(["partial (subagents not analysed)"]);
   });
 });
 

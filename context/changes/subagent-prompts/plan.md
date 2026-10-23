@@ -70,7 +70,7 @@ Three phases: (1) sidechain-aware parser and merge machinery in core with synthe
 
 ### Phase 2: Node IO and consumers
 
-- [ ] 2.1 `pnpm check` green incl. perf, API ETag and smoke
+- [x] 2.1 `pnpm check` green incl. perf, API ETag and smoke
 
 ### Phase 3: Real-log audit and docs
 

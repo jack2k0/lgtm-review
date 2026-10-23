@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { analyzeFile, analyzeFileDetail, discoverSessions, loadRepoScripts, projectDirFor, type SessionFile } from "@lgtm/core/node";
+import { analyzeFile, analyzeFileDetail, discoverSessions, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile } from "@lgtm/core/node";
 import type { Analyzer, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
 import { sortSessions } from "./format.js";
 import { etagFor, ifNoneMatch, sendJson, sendNotModified, type ApiHandler } from "./http.js";
@@ -52,7 +52,7 @@ function pathParam(rawUrl: string): PathParam {
   return { ok: true, value: found.replaceAll("\\", "/") };
 }
 
-/** JSON API over the analysis of the repo's sessions. Analysis is cached per `path + mtime + size`. */
+/** JSON API over the analysis of the repo's sessions. Analysis is cached per `path + mtime + size` of the session file and of its subagent files. */
 export function createApi(opts: ServerOptions): ApiHandler {
   const projectDir = projectDirFor(opts.dir, opts.projectsDir);
   const cache = new Map<string, { key: string; analysis: Promise<SessionAnalysis> }>();
@@ -87,7 +87,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
     } catch {
       return null;
     }
-    const key = `${f.mtimeMs}:${size}`;
+    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}`;
     let hit = detailCache.get(f.path);
     if (hit && hit.key === key) {
       detailCache.delete(f.path); // refresh recency
@@ -125,7 +125,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
     } catch {
       return null;
     }
-    const key = `${f.mtimeMs}:${size}`;
+    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}`;
     let entry = cache.get(f.path);
     if (!entry || entry.key !== key) {
       const analysis = loadRepoScripts(opts.dir).then((repo) => analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` }));
@@ -146,7 +146,8 @@ export function createApi(opts: ServerOptions): ApiHandler {
   async function versionOf(f: SessionFile): Promise<string | null> {
     try {
       const st = await stat(f.path);
-      return `${f.path}:${st.mtimeMs}:${st.size}`;
+      const sub = await subagentStamp(f.path); // subagent progress must change the tag too
+      return `${f.path}:${st.mtimeMs}:${st.size}${sub === "" ? "" : `:${sub}`}`;
     } catch {
       return null;
     }

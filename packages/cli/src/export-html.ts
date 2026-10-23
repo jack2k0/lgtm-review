@@ -160,7 +160,7 @@ export function renderExport(input: ExportInput, opts: ExportOptions): ExportRes
       out.push(`<p class="muted">${plural(s.actions.length, "action")}</p><ol class="actions">`);
       for (const a of shown) {
         const ts = clock(a.ts);
-        out.push(`<li><span class="tool">${t(a.tool)}</span><code>${t(a.summary)}</code>${a.ok ? "" : ` <span class="marker">failed</span>`}${ts === "" ? "" : ` <span class="muted">${ts}</span>`}</li>`);
+        out.push(`<li><span class="tool">${t(a.tool)}</span>${a.via === "subagent" ? `<span class="marker">subagent</span>` : ""}<code>${t(a.summary)}</code>${a.ok ? "" : ` <span class="marker">failed</span>`}${ts === "" ? "" : ` <span class="muted">${ts}</span>`}</li>`);
       }
       out.push("</ol>");
       if (s.actions.length > shown.length) out.push(`<p class="note">${s.actions.length - shown.length} more actions not shown.</p>`);

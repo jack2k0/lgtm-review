@@ -102,10 +102,13 @@ export function filesText(t: FileTotals): string {
 }
 
 /** Incompleteness markers shown next to the file counts. */
-export function incompleteMarkers(p: Pick<PromptAnalysis, "files" | "partial">): string[] {
+export function incompleteMarkers(p: Pick<PromptAnalysis, "files" | "partial"> & { reason?: string }): string[] {
   const out: string[] = [];
   if (fileTotals(p).maybeIncomplete) out.push("may be incomplete");
   if (p.partial) out.push("partial (subagents not analysed)");
+  // The reason (clamped in the table) carries why a subagent transcript was cut; surface it next to the counts.
+  const cut = /subagent transcript truncated \((event|text) cap\)/.exec(p.reason ?? "");
+  if (cut) out.push(`subagent transcript truncated (${cut[1]} cap)`);
   return out;
 }
 

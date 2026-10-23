@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,10 @@ beforeAll(() => {
   const pdir = join(projects, "-home-user-project");
   mkdirSync(pdir, { recursive: true });
   for (const f of readdirSync(fixtures).filter((f) => f.endsWith(".jsonl"))) copyFileSync(join(fixtures, f), join(pdir, f));
+  // Subagent transcripts live next to their session: `<id>/subagents/agent-*.jsonl` + `.meta.json`.
+  for (const d of readdirSync(fixtures, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== "__golden__")) {
+    cpSync(join(fixtures, d.name), join(pdir, d.name), { recursive: true });
+  }
 });
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
@@ -53,6 +57,29 @@ describe("built CLI", () => {
     expect(r.status).toBe(0);
     const parsed = Analysis.parse(JSON.parse(r.stdout));
     expect(parsed.sessions.length).toBe(readdirSync(fixtures).filter((f) => f.endsWith(".jsonl")).length);
+  });
+
+  test("sessions with subagents: --list, --json and --summary show the merged result", () => {
+    const list = run(["--list", "--projects-dir", projects, "--dir", PROJECT], { NO_COLOR: "1" });
+    expect(list.status).toBe(0);
+    const row = list.stdout.split("\n").find((l) => l.includes("Fix add and verify it."));
+    expect(row, list.stdout).toBeDefined();
+    const json = Analysis.parse(JSON.parse(run(["--list", "--projects-dir", projects, "--dir", PROJECT, "--json"]).stdout));
+    const sub = json.sessions.find((x) => x.sessionId === "subagent-check");
+    expect(sub?.prompts[0]?.status).toBe("checked");
+    expect(sub?.prompts[0]?.partial).toBe(false);
+    expect(sub?.prompts[0]?.reason).toContain("by subagent Run the test suite");
+    const edits = json.sessions.find((x) => x.sessionId === "subagent-edits");
+    expect(edits?.prompts[0]?.status).toBe("unchecked");
+    expect(edits?.prompts[0]?.files.length).toBe(2);
+    const missing = json.sessions.find((x) => x.sessionId === "subagent-missing");
+    expect(missing?.prompts[0]?.partial).toBe(true);
+    const sum = run(["--summary", "--session", "subagent-check", "--projects-dir", projects, "--dir", PROJECT]);
+    expect(sum.status).toBe(0);
+    expect(sum.stdout).toContain("1 prompt: 1 checked.");
+    expect(sum.stdout).toContain("| 1 | checked | Skim | Fix add and verify it. | 1 | +1 -1 |");
+    const sumEdits = run(["--summary", "--session", "subagent-edits", "--projects-dir", projects, "--dir", PROJECT]);
+    expect(sumEdits.stdout).toContain("1 edit after last check (by subagent Implement multiply helper)");
   });
 
   test("no sessions => message, exit 0", () => {
@@ -238,6 +265,19 @@ describe("built CLI, --export", () => {
     expect(html).not.toContain("/home/user/project");
     expect(statSync(out).mode & 0o777).toBe(0o644);
     expect(readdirSync(work).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
+  test("--export of a session with a subagent shows the merged result and subagent steps", () => {
+    const out = join(work, "sub.html");
+    const r = run(["--export", "subagent-check", "--out", out, ...base()]);
+    expect(r.status).toBe(0);
+    const html = readFileSync(out, "utf8");
+    expect(html).toContain("Checked");
+    expect(html).toContain("by subagent Run the test suite");
+    expect(html).toContain("Subagent: ");
+    expect(html).toContain('<span class="marker">subagent</span>');
+    expect(html).not.toMatch(/<script/i);
+    expect(html).not.toContain("partial: subagent activity not analysed");
   });
 
   test("does not overwrite without --force, overwrites with it", () => {

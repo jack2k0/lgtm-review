@@ -61,6 +61,7 @@ export function StepCard({ step, open, onToggle, onOpenFile, pathLabel }: { step
                 {shown.map((a, i) => (
                   <li key={i}>
                     <span className="mono action-tool">{a.tool}</span>
+                    {a.via === "subagent" ? <span className="marker" title="Made by a subagent">subagent</span> : null}
                     <span className="mono action-summary">{a.summary}</span>
                     {a.ok ? null : <span className="marker">failed</span>}
                     {a.ts ? <span className="muted action-ts">{formatClock(a.ts)}</span> : null}

@@ -2,11 +2,11 @@
 
 Branch: `main` · Date: 2026-01-01 · Session: `subagent`
 
-1 prompt: 1 no-changes.
+1 prompt: 1 checked.
 
 | # | Status | Review | Prompt | Files | +/- |
 | ---: | --- | --- | --- | ---: | --- |
-| 1 | no-changes | Skim | Rewrite add and make sure it works. | 0 | +0 -0 |
+| 1 | checked | Skim | Rewrite add and make sure it works. | 1 | +1 -1 |
 
 ---
 

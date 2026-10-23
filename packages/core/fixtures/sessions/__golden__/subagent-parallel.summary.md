@@ -2,19 +2,11 @@
 
 Branch: `main` · Date: 2026-01-01 · Session: `subagent`
 
-1 prompt: 1 unchecked.
+1 prompt: 1 checked.
 
 | # | Status | Review | Prompt | Files | +/- |
 | ---: | --- | --- | --- | ---: | --- |
-| 1 | unchecked | Read flagged | Implement sub and mul in parallel. | 1 | +1 -1 |
-
-## Needs attention
-
-### Prompt 1: Implement sub and mul in parallel.
-
-- Status: unchecked (no checks ran)
-- Review: Read flagged
-- **warn** `unchecked-edit`: `src/add.js`
+| 1 | checked | Skim | Implement sub and mul in parallel. | 3 | +4 -4 |
 
 ---
 

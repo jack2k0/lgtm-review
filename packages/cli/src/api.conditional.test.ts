@@ -1,5 +1,5 @@
 import { request } from "node:http";
-import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -258,5 +258,54 @@ describe("other responses are unchanged", () => {
     const e = await get("/api/sessions/diffy/prompts/x");
     expect(e.status).toBe(400);
     expect(e.headers["cache-control"]).toBe("no-store");
+  });
+});
+
+describe("subagent files are part of the ETag and the cache key", () => {
+  const agentFile = () => join(pdir, "withsub", "subagents", "agent-a2222222.jsonl");
+  const routesOf = ["/api/sessions", "/api/sessions/withsub", "/api/sessions/withsub/prompts/0"];
+
+  test("the merged result is served; the ETag is stable until a subagent file changes", async () => {
+    addSession("withsub", "subagent-check");
+    cpSync(join(fixtures, "subagent-check"), join(pdir, "withsub"), { recursive: true });
+    try {
+      const body = JSON.parse((await get("/api/sessions/withsub")).body) as { prompts: { status: string; partial: boolean; reason: string }[] };
+      expect(body.prompts[0]).toMatchObject({ status: "checked", partial: false });
+      expect(body.prompts[0]!.reason).toContain("by subagent Run the test suite");
+      const detail = JSON.parse((await get("/api/sessions/withsub/prompts/0")).body) as { steps: { title: string; actions: { via?: string }[] }[] };
+      expect(detail.steps.some((st) => st.title.startsWith("Subagent: "))).toBe(true);
+
+      const tags = new Map<string, string>();
+      for (const r of routesOf) tags.set(r, etagOf(await get(r)));
+
+      // Nothing changed: same tags, 304, and no analysis behind it.
+      calls.analyze = 0;
+      calls.detail = 0;
+      for (const r of routesOf) {
+        const again = await get(r, inm(tags.get(r)!));
+        expect(again.status, r).toBe(304);
+        expect(etagOf(again), r).toBe(tags.get(r));
+      }
+      expect(calls.analyze + calls.detail).toBe(0);
+
+      // The subagent transcript grows (real new data): every tag changes, and the analysis is recomputed.
+      appendFileSync(agentFile(), `${JSON.stringify({ type: "system", note: "more" })}\n`);
+      utimesSync(agentFile(), 1_700_001_000, 1_700_001_000);
+      for (const r of routesOf) {
+        const after = await get(r, inm(tags.get(r)!));
+        expect(after.status, r).toBe(200);
+        expect(etagOf(after), r).not.toBe(tags.get(r));
+      }
+      expect(calls.analyze).toBeGreaterThan(0);
+      expect(calls.detail).toBeGreaterThan(0);
+
+      // A new subagent file shows up in the tag too.
+      const tagNow = etagOf(await get("/api/sessions/withsub"));
+      writeFileSync(join(pdir, "withsub", "subagents", "agent-a8888888.jsonl"), "");
+      expect(etagOf(await get("/api/sessions/withsub"))).not.toBe(tagNow);
+    } finally {
+      rmSync(join(pdir, "withsub.jsonl"), { force: true });
+      rmSync(join(pdir, "withsub"), { recursive: true, force: true });
+    }
   });
 });

@@ -1,6 +1,6 @@
 // Pack packages/cli, verify tarball contents, run it via npx in isolation.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,6 +97,21 @@ try {
   const conflict = spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review", "--summary", "--json"], { cwd: runDir, encoding: "utf8" });
   if (conflict.status !== 1 || !/cannot be combined/.test(conflict.stderr)) fail(`--summary --json: expected exit 1, got ${conflict.status}`);
   console.log("smoke ok: --summary");
+
+  // A session with a subagent (copy of the fixture layout `<id>.jsonl` + `<id>/subagents/`): the merged result is reported.
+  const subProjects = join(runDir, "sub-projects");
+  const subDir = join(subProjects, runDir.replace(/[/.]/g, "-"));
+  mkdirSync(subDir, { recursive: true });
+  copyFileSync(join(fixturesDir, "subagent-check.jsonl"), join(subDir, "subagent-check.jsonl"));
+  cpSync(join(fixturesDir, "subagent-check"), join(subDir, "subagent-check"), { recursive: true });
+  const runSub = (args) => spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review", ...args, "--projects-dir", subProjects, "--dir", runDir], { cwd: runDir, encoding: "utf8" });
+  const subSum = runSub(["--summary"]);
+  if (subSum.status !== 0 || !subSum.stdout.includes("1 prompt: 1 checked.")) fail(`--summary of a session with a subagent: ${subSum.status} ${subSum.stdout}${subSum.stderr}`);
+  const subJson = runSub(["--list", "--json"]);
+  if (subJson.status !== 0) fail(`--list --json of a session with a subagent exited ${subJson.status}`);
+  const subPrompt = JSON.parse(subJson.stdout).sessions[0].prompts[0];
+  if (subPrompt.status !== "checked" || subPrompt.partial !== false || !subPrompt.reason.includes("by subagent Run the test suite")) fail(`subagent session not merged: ${JSON.stringify(subPrompt)}`);
+  console.log("smoke ok: session with a subagent (merged status)");
 
   // --export: self-contained HTML, no script, injected secret redacted, no overwrite without --force.
   const expProjects = join(runDir, "exp-projects");
