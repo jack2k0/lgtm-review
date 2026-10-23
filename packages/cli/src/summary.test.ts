@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { analyzeFile } from "@lgtm/core/node";
+import { markInherited } from "@lgtm/core";
 import type { Hint, PromptAnalysis, SessionAnalysis } from "@lgtm/core";
 import { formatSummary, mdCode, mdText, redact, summaryReason, summaryTitle } from "./summary.js";
 
@@ -40,6 +41,32 @@ const session = (prompts: PromptAnalysis[], over: Partial<SessionAnalysis> = {})
   ...over,
 });
 const hint = (over: Partial<Hint> = {}): Hint => ({ rule: "test-skipped", severity: "high", path: "/home/user/project/src/a.test.ts", reason: "COMMAND-OUTPUT-IN-REASON", ...over });
+
+describe("fork/resume dedupe in the summary", () => {
+  test("golden: the fork omits inherited rows and says so", async () => {
+    const [, b] = markInherited([await analyze("fork-resume-a"), await analyze("fork-resume-b")]);
+    const md = formatSummary(b!, { titles: true, root: ROOT });
+    expect(md).toContain("2 prompts: 2 checked.");
+    expect(md).toContain("3 prompts inherited from fork-res omitted");
+    expect(md).not.toContain("Fix prompt two.");
+    await expect(md).toMatchFileSnapshot(join(sessionsDir, "__golden__", "fork-resume-b.inherited.summary.md"));
+  });
+  test("the owner of the prompts is unchanged", async () => {
+    const [a] = markInherited([await analyze("fork-resume-a"), await analyze("fork-resume-b")]);
+    expect(formatSummary(a!, { titles: true, root: ROOT })).not.toContain("inherited");
+  });
+  test("all prompts inherited: heading plus one sentence, no table", () => {
+    const s = session([prompt({ inheritedFrom: "0123456789abcdef" }), prompt({ index: 1, inheritedFrom: "0123456789abcdef" })]);
+    const md = formatSummary(s, { titles: true, root: ROOT });
+    expect(md).toContain("All 2 prompts inherited from 01234567. No prompts to review.");
+    expect(md).not.toContain("| # |");
+    expect(md).not.toContain("Needs attention");
+  });
+  test("singular wording", () => {
+    const md = formatSummary(session([prompt(), prompt({ index: 1, inheritedFrom: "0123456789abcdef" })]), { titles: true });
+    expect(md).toContain("1 prompt inherited from 01234567 omitted");
+  });
+});
 
 describe("golden summaries (byte-exact)", () => {
   test.each(fixtures)("%s", async (name) => {

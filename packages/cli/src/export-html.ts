@@ -1,5 +1,6 @@
 import { isEnvFilePath, redact } from "@lgtm/core";
 import type { FileDiff, Hint, PromptAnalysis, PromptDetail, RedactOptions, Recommendation, SessionAnalysis, Severity, Status, Step, TimeSplit } from "@lgtm/core";
+import { inheritedInfo } from "./format.js";
 import { EXPORT_CSS } from "./export-css.js";
 
 export { EXPORT_CSS };
@@ -109,7 +110,10 @@ export function renderExport(input: ExportInput, opts: ExportOptions): ExportRes
     return escapeHtml(r.text);
   };
 
-  const { analysis } = input;
+  // Inherited prompts (resumed or forked copies of another session) are left out; a note says how many.
+  const inh = inheritedInfo(input.analysis.prompts);
+  const analysis: SessionAnalysis = inh ? { ...input.analysis, prompts: input.analysis.prompts.filter((p) => p.inheritedFrom === undefined) } : input.analysis;
+  const inhNote = !inh ? "" : analysis.prompts.length === 0 ? `All ${plural(inh.count, "prompt")} inherited from ${escapeHtml(inh.from.slice(0, 8))}. No prompts to review.` : `${plural(inh.count, "prompt")} inherited from ${escapeHtml(inh.from.slice(0, 8))} omitted.`;
   const detailByIndex = new Map(input.details.map((d) => [d.index, d]));
   const titles = opts.titles;
   const promptTitle = (p: { index: number; text: string }): string => (titles && p.text.trim() !== "" ? t(p.text) : "");
@@ -263,8 +267,9 @@ export function renderExport(input: ExportInput, opts: ExportOptions): ExportRes
     `<dt>Prompts</dt><dd>${analysis.prompts.length === 0 ? "none" : `${analysis.prompts.length}: ${counts}`}</dd></dl>`;
 
   const body: string[] = [];
-  if (analysis.prompts.length === 0) body.push(`<p class="muted">This session has no prompts.</p>`);
+  if (analysis.prompts.length === 0) body.push(inh ? `<p class="note">${inhNote}</p>` : `<p class="muted">This session has no prompts.</p>`);
   else {
+    if (inh) body.push(`<p class="note">${inhNote}</p>`);
     body.push(`<h2>Prompts</h2><table class="prompts"><thead><tr><th class="num">#</th><th>Status</th><th>Review</th><th>Prompt</th><th>Time (approx.)</th><th class="num">Files</th></tr></thead><tbody>${analysis.prompts.map(tableRow).join("")}</tbody></table>`);
     body.push(`<p class="muted">Time bar: <span class="badge badge-read">Read</span><span class="badge badge-write">Write</span><span class="badge badge-check">Check</span><span class="badge badge-fix">Fix</span> shares of approximate active time.</p>`);
     body.push(`<h2>Details</h2>`);

@@ -75,8 +75,8 @@ try {
   const sumProjects = join(runDir, "sum-projects");
   const sumDir = join(sumProjects, runDir.replace(/[/.]/g, "-"));
   mkdirSync(sumDir, { recursive: true });
-  copyFileSync(join(fixturesDir, "hints-test-edits.jsonl"), join(sumDir, "hints-test-edits.jsonl"));
-  copyFileSync(join(fixturesDir, "failing-check.jsonl"), join(sumDir, "failing-check.jsonl"));
+  // The fixtures reuse prompt uuids; make them unique so these two unrelated sessions do not inherit from each other.
+  for (const n of ["hints-test-edits", "failing-check"]) writeFileSync(join(sumDir, `${n}.jsonl`), readFileSync(join(fixturesDir, `${n}.jsonl`), "utf8").replaceAll('"uuid":"', `"uuid":"${n}-`));
   const runSummary = (args) => spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review", "--summary", "--projects-dir", sumProjects, "--dir", runDir, ...args], { cwd: runDir, encoding: "utf8" });
   const sum = runSummary(["--session", "hints-test"]);
   if (sum.status !== 0) fail(`--summary exited ${sum.status}: ${(sum.stderr || "").trim()}`);
@@ -97,6 +97,22 @@ try {
   const conflict = spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review", "--summary", "--json"], { cwd: runDir, encoding: "utf8" });
   if (conflict.status !== 1 || !/cannot be combined/.test(conflict.stderr)) fail(`--summary --json: expected exit 1, got ${conflict.status}`);
   console.log("smoke ok: --summary");
+
+  // Forked sessions (same prompt uuids): the fork's inherited prompts are marked and not counted twice.
+  const forkProjects = join(runDir, "fork-projects");
+  const forkDir = join(forkProjects, runDir.replace(/[/.]/g, "-"));
+  mkdirSync(forkDir, { recursive: true });
+  for (const n of ["fork-resume-a", "fork-resume-b"]) copyFileSync(join(fixturesDir, `${n}.jsonl`), join(forkDir, `${n}.jsonl`));
+  const runFork = (args) => spawnSync("npx", ["--yes", `--package=${tarball}`, "lgtm-review", ...args, "--projects-dir", forkProjects, "--dir", runDir], { cwd: runDir, encoding: "utf8" });
+  const forkList = runFork(["--list"]);
+  if (forkList.status !== 0) fail(`--list of forked sessions exited ${forkList.status}: ${forkList.stderr}`);
+  if (!forkList.stdout.includes("3 prompt(s): 3 checked") || !forkList.stdout.includes("2 prompt(s): 2 checked (+3 inherited from fork-res)")) fail(`forked sessions: counts doubled or not marked:\n${forkList.stdout}`);
+  const forkJson = JSON.parse(runFork(["--list", "--json"]).stdout);
+  const forkB = forkJson.sessions.find((x) => x.sessionId === "fork-resume-b");
+  if (forkJson.sessions.length !== 2 || forkB.prompts.filter((p) => p.inheritedFrom === "fork-resume-a").length !== 3) fail("forked sessions: --json does not mark the 3 inherited prompts");
+  const forkSum = runFork(["--summary", "--session", "fork-resume-b"]);
+  if (!forkSum.stdout.includes("2 prompts: 2 checked.") || !forkSum.stdout.includes("3 prompts inherited from fork-res omitted")) fail(`forked --summary: ${forkSum.stdout}`);
+  console.log("smoke ok: forked sessions (inherited prompts not double counted)");
 
   // A session with a subagent (copy of the fixture layout `<id>.jsonl` + `<id>/subagents/`): the merged result is reported.
   const subProjects = join(runDir, "sub-projects");

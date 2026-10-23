@@ -335,3 +335,28 @@ export function retainKeys<K>(set: ReadonlySet<K>, existing: Iterable<K>): Reado
   for (const k of set) if (have.has(k)) kept.add(k);
   return kept.size === set.size ? set : kept;
 }
+
+/** Split prompts into own (non-inherited) and inherited groups.
+ *  Returns {own, inherited, from} where:
+ *   - own: prompts without inheritedFrom
+ *   - inherited: prompts with inheritedFrom
+ *   - from: the sessionId the inherited prompts came from (first one, or empty string)
+ */
+export function splitInherited(prompts: readonly PromptAnalysis[]): {
+  own: readonly PromptAnalysis[];
+  inherited: readonly PromptAnalysis[];
+  from: string;
+} {
+  const own: PromptAnalysis[] = [];
+  const inherited: PromptAnalysis[] = [];
+  let from: string = "";
+  for (const p of prompts) {
+    if (p.inheritedFrom) {
+      inherited.push(p);
+      if (!from) from = p.inheritedFrom;
+    } else {
+      own.push(p);
+    }
+  }
+  return { own, inherited, from: from };
+}

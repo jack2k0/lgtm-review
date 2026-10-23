@@ -34,6 +34,28 @@ describe("golden exports (synthetic fixtures)", () => {
   });
 });
 
+describe("inherited prompts", () => {
+  const marked = (from: number[], to = "0123456789abcdef") => {
+    const input = fixtureInput("steps-mixed");
+    const prompts = input.analysis.prompts.map((p, i) => (from.includes(i) ? { ...p, inheritedFrom: to } : p));
+    return { ...input, analysis: { ...input.analysis, prompts } };
+  };
+  test("rows are left out, a note says how many", () => {
+    const n = fixtureInput("steps-mixed").analysis.prompts.length;
+    const html = renderExport(marked([0]), BASE).html;
+    expect(html).toContain("1 prompt inherited from 01234567 omitted.");
+    expect(html).not.toContain('id="p1"');
+    expect(html).toContain(`id="p${n}"`);
+  });
+  test("all inherited: only the note, no table", () => {
+    const n = fixtureInput("steps-mixed").analysis.prompts.length;
+    const html = renderExport(marked([...Array(n).keys()]), BASE).html;
+    expect(html).toContain(`All ${n} prompts inherited from 01234567. No prompts to review.`);
+    expect(html).not.toContain("<table");
+    expect(html).not.toContain('class="prompt"');
+  });
+});
+
 // ------------------------------------------------------------------ structure helpers
 
 const ALLOWED_TAGS = new Set(["html", "head", "meta", "title", "style", "body", "header", "main", "h1", "h2", "h3", "h4", "dl", "dt", "dd", "p", "code", "table", "thead", "tbody", "tr", "th", "td", "a", "span", "div", "section", "ul", "ol", "li", "details", "summary", "pre", "blockquote", "br"]);

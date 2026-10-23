@@ -61,7 +61,8 @@ describe("GET /api/sessions", () => {
     expect(r.json.dir).toBe(PROJECT);
     expect(r.json.sessions.map((s: { id: string }) => s.id).sort()).toEqual([...ids].sort());
     for (const s of r.json.sessions) {
-      expect(Object.keys(s).sort()).toEqual(["branch", "id", "promptCount", "startedAt", "statusCounts", "title", "warningCount"]);
+      const keys = ["branch", "id", "inheritedCount", "promptCount", "startedAt", "statusCounts", "title", "warningCount"];
+      expect(Object.keys(s).sort()).toEqual((s.inheritedCount > 0 ? [...keys, "forkOf"] : keys).sort());
       expect(Object.keys(s.statusCounts).sort()).toEqual(["checked", "failing", "no-changes", "unchecked"]);
       const total = Object.values(s.statusCounts as Record<string, number>).reduce((a, b) => a + b, 0);
       expect(total).toBe(s.promptCount);
@@ -70,10 +71,9 @@ describe("GET /api/sessions", () => {
 
   test("summary matches the full analysis; newest first", async () => {
     const list = (await get(srv, "/api/sessions")).json.sessions as { id: string; startedAt: string | null }[];
-    for (const s of list) {
-      const full = SessionAnalysis.parse((await get(srv, `/api/sessions/${s.id}`)).json);
-      expect(summarize(full)).toEqual(s);
-    }
+    const fulls = [];
+    for (const s of list) fulls.push(SessionAnalysis.parse((await get(srv, `/api/sessions/${s.id}`)).json));
+    for (const s of list) expect(summarize(fulls.find((f) => f.sessionId === s.id)!, fulls)).toEqual(s);
     const dated = list.map((s) => s.startedAt).filter((x): x is string => x !== null);
     expect(dated).toEqual([...dated].sort().reverse());
   });
@@ -86,6 +86,34 @@ describe("GET /api/sessions", () => {
 
   test("trailing slash is accepted", async () => {
     expect((await get(srv, "/api/sessions/")).status).toBe(200);
+  });
+});
+
+describe("fork/resume dedupe", () => {
+  test("list: counts are not doubled, the later session is marked as a fork of the earlier one", async () => {
+    const list = (await get(srv, "/api/sessions")).json.sessions as { id: string; promptCount: number; inheritedCount: number; forkOf?: string }[];
+    const a = list.find((s) => s.id === "fork-resume-a")!;
+    const b = list.find((s) => s.id === "fork-resume-b")!;
+    expect([a.promptCount, a.inheritedCount, a.forkOf]).toEqual([3, 0, undefined]);
+    expect([b.promptCount, b.inheritedCount, b.forkOf]).toEqual([2, 3, "fork-resume-a"]);
+    expect(Object.values((list.find((s) => s.id === "fork-resume-b") as any).statusCounts).reduce((x: any, y: any) => x + y, 0)).toBe(2);
+  });
+
+  test("detail keeps the inherited prompts, marked with inheritedFrom", async () => {
+    const b = SessionAnalysis.parse((await get(srv, "/api/sessions/fork-resume-b")).json);
+    expect(b.prompts.map((p) => p.inheritedFrom)).toEqual(["fork-resume-a", "fork-resume-a", "fork-resume-a", undefined, undefined]);
+    const a = SessionAnalysis.parse((await get(srv, "/api/sessions/fork-resume-a")).json);
+    expect(a.prompts.every((p) => p.inheritedFrom === undefined)).toBe(true);
+  });
+
+  test("summarize breaks forkOf ties by ownership order, not by prompt order", () => {
+    const mk = (sessionId: string, startedAt: string | null, uuids: string[], from: string[]) =>
+      ({ sessionId, startedAt, title: "", branch: "", warnings: [], prompts: uuids.map((uuid, i) => ({ uuid, index: i, status: "checked", ...(from[i] ? { inheritedFrom: from[i] } : {}) })) }) as any;
+    const early = mk("zzz", "2026-01-01T00:00:00Z", [], []);
+    const late = mk("aaa", "2026-01-02T00:00:00Z", [], []);
+    const child = mk("child", "2026-01-03T00:00:00Z", ["1", "2"], ["aaa", "zzz"]);
+    expect(summarize(child, [early, late, child]).forkOf).toBe("zzz");
+    expect(summarize(child).forkOf).toBe("aaa");
   });
 });
 

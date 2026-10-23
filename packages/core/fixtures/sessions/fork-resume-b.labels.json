@@ -1,0 +1,11 @@
+{
+  "fixture": "fork-resume-b",
+  "source": "synthetic",
+  "prompts": [
+    { "index": 0, "expectedStatus": "checked", "note": "copied from session A (same uuid); edit + passing test" },
+    { "index": 1, "expectedStatus": "checked", "note": "copied from session A (same uuid); edit + passing test" },
+    { "index": 2, "expectedStatus": "checked", "note": "copied from session A (same uuid); edit + passing test" },
+    { "index": 3, "expectedStatus": "checked", "note": "new prompt in fork B; edit + passing test" },
+    { "index": 4, "expectedStatus": "checked", "note": "new prompt in fork B; edit + passing test" }
+  ]
+}

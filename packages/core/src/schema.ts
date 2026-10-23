@@ -75,6 +75,8 @@ export const PromptAnalysis = z.object({
   /** Deduplicated per (rule, path), sorted by severity (high, warn, info), then rule, then path. */
   hints: z.array(Hint),
   recommendation: Recommendation,
+  /** Session id of the session that owns this prompt; set by markInherited when the uuid was seen first in another session. Absent when not inherited. */
+  inheritedFrom: z.string().optional(),
 });
 export type PromptAnalysis = z.infer<typeof PromptAnalysis>;
 
@@ -110,6 +112,10 @@ export const SessionSummary = z.object({
     "no-changes": z.number().int().nonnegative(),
   }),
   warningCount: z.number().int().nonnegative(),
+  /** Number of inherited prompts (excluded from promptCount and statusCounts). */
+  inheritedCount: z.number().int().nonnegative().default(0),
+  /** Session id that contributed the most inherited prompts (ties broken by ownership order: earliest startedAt, then smallest sessionId). Absent when inheritedCount is 0. */
+  forkOf: z.string().optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummary>;
 

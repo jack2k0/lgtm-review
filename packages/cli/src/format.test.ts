@@ -52,6 +52,15 @@ describe("formatText", () => {
     expect(t.indexOf("new22222")).toBeLessThan(t.indexOf("old11111"));
   });
 
+  test("inherited prompts are marked and left out of the counts", () => {
+    const base = session("abcdef123456", "2026-01-01T00:00:00Z").prompts[0]!;
+    const s = session("abcdef123456", "2026-01-01T00:00:00Z", { prompts: [{ ...base, inheritedFrom: "01234567-aaaa" }, { ...base, index: 1, uuid: "v", status: "checked" }] });
+    const t = formatText([s], { color: false, dir: "/x" });
+    expect(t).toContain("1 prompt(s): 1 checked (+1 inherited from 01234567)");
+    expect(t).toContain("fix the bug (inherited from 01234567)");
+    expect(t.match(/inherited from/g)).toHaveLength(2);
+  });
+
   test("warnings capped at 20", () => {
     const warnings = Array.from({ length: 25 }, (_, i) => ({ file: "f.jsonl", line: i + 1, reason: "bad" }));
     const t = formatText([session("a", null, { warnings })], { color: false, dir: "/x" });

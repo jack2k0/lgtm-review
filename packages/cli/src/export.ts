@@ -2,8 +2,9 @@ import { randomBytes } from "node:crypto";
 import { chmod, link, lstat, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { markInherited } from "@lgtm/core";
 import type { Analyzer, FileDiff, SessionAnalysis } from "@lgtm/core";
-import { analyzeFileDetail, discoverSessions, loadRepoScripts, projectDirFor, type SessionFile } from "@lgtm/core/node";
+import { analyzeFile, analyzeFileDetail, discoverSessions, loadRepoScripts, projectDirFor, type SessionFile } from "@lgtm/core/node";
 import { renderExport, type ExportInput } from "./export-html.js";
 
 /** Total diff text (characters) put into one export; further diffs are left out. */
@@ -145,7 +146,19 @@ export async function runExport(cmd: ExportCommand): Promise<number> {
   let result;
   try {
     const repo = await loadRepoScripts(cmd.dir);
-    const { analysis, analyzer } = await analyzeFileDetail(file.path, { repo, sessionId: file.id, file: `${file.id}.jsonl` });
+    const detail = await analyzeFileDetail(file.path, { repo, sessionId: file.id, file: `${file.id}.jsonl` });
+    const { analyzer } = detail;
+    // Inheritance depends on the other sessions of the project; unreadable ones are skipped.
+    const all: SessionAnalysis[] = [detail.analysis];
+    for (const f of files) {
+      if (f === file) continue;
+      try {
+        all.push(await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` }));
+      } catch {
+        // skipped, like the list does
+      }
+    }
+    const analysis = markInherited(all)[0]!;
     const { input, capped } = buildExportInput(analysis, analyzer, { diffs: cmd.diffs });
     if (capped) console.error("warning: diffs omitted (size cap)");
     result = renderExport(input, {

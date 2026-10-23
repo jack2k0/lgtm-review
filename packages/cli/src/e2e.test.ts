@@ -23,7 +23,11 @@ beforeAll(() => {
   projects = join(tmp, "projects");
   const pdir = join(projects, "-home-user-project");
   mkdirSync(pdir, { recursive: true });
-  for (const f of readdirSync(fixtures).filter((f) => f.endsWith(".jsonl"))) copyFileSync(join(fixtures, f), join(pdir, f));
+  // The fixtures reuse the same prompt uuids; make them unique per session (except the fork pair) so only the fork fixtures inherit.
+  for (const f of readdirSync(fixtures).filter((f) => f.endsWith(".jsonl"))) {
+    if (f.startsWith("fork-resume-")) copyFileSync(join(fixtures, f), join(pdir, f));
+    else writeFileSync(join(pdir, f), readFileSync(join(fixtures, f), "utf8").replaceAll('"uuid":"', `"uuid":"${f}-`));
+  }
   // Subagent transcripts live next to their session: `<id>/subagents/agent-*.jsonl` + `.meta.json`.
   for (const d of readdirSync(fixtures, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== "__golden__")) {
     cpSync(join(fixtures, d.name), join(pdir, d.name), { recursive: true });
@@ -238,6 +242,48 @@ describe("performance", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30000);
+});
+
+describe("built CLI, forked sessions", () => {
+  let fprojects: string;
+  beforeAll(() => {
+    fprojects = join(tmp, "fork-projects");
+    const d = join(fprojects, "-home-user-project");
+    mkdirSync(d, { recursive: true });
+    for (const n of ["fork-resume-a", "fork-resume-b"]) copyFileSync(join(fixtures, `${n}.jsonl`), join(d, `${n}.jsonl`));
+  });
+  const fbase = () => ["--projects-dir", fprojects, "--dir", PROJECT];
+
+  test("--json marks inherited prompts, counts are not doubled", () => {
+    const json = Analysis.parse(JSON.parse(run(["--list", "--json", ...fbase()]).stdout));
+    const b = json.sessions.find((x) => x.sessionId === "fork-resume-b")!;
+    expect(b.prompts).toHaveLength(5);
+    expect(b.prompts.filter((p) => p.inheritedFrom === "fork-resume-a")).toHaveLength(3);
+    expect(json.sessions.find((x) => x.sessionId === "fork-resume-a")!.prompts.some((p) => p.inheritedFrom !== undefined)).toBe(false);
+  });
+
+  test("--list marks inherited prompts and counts only the new ones", () => {
+    const r = run(["--list", ...fbase()], { NO_COLOR: "1" });
+    expect(r.stdout).toContain("2 prompt(s): 2 checked (+3 inherited from fork-res)");
+    expect(r.stdout.match(/\(inherited from fork-res\)/g)).toHaveLength(3);
+  });
+
+  test("--summary omits inherited rows", () => {
+    const r = run(["--summary", "--session", "fork-resume-b", ...fbase()]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("2 prompts: 2 checked.");
+    expect(r.stdout).toContain("3 prompts inherited from fork-res omitted");
+    expect(r.stdout).not.toContain("Fix prompt two.");
+  });
+
+  test("--export leaves inherited prompts out and adds a note", () => {
+    const out = join(tmp, "fork-b.html");
+    expect(run(["--export", "fork-resume-b", "--out", out, ...fbase()]).status).toBe(0);
+    const html = readFileSync(out, "utf8");
+    expect(html).toContain("3 prompts inherited from fork-res omitted.");
+    expect(html).not.toContain('id="p2"');
+    expect(html).toContain('id="p4"');
+  });
 });
 
 describe("built CLI, --export", () => {

@@ -205,6 +205,20 @@ describe("changes invalidate the ETag", () => {
     expect(etagOf(r3)).toBe(t0);
   });
 
+  test("session and prompt tags depend on the whole project: a sibling change flips them, unchanged state still gives 304", async () => {
+    const paths = ["/api/sessions/diffy", "/api/sessions/diffy/prompts/0", `/api/sessions/diffy/prompts/0/diff?path=${enc(DIFF_PATH)}`];
+    const before = await Promise.all(paths.map(async (p) => etagOf(await get(p))));
+    for (const [i, p] of paths.entries()) expect((await get(p, inm(before[i]!))).status, p).toBe(304);
+    const sib = addSession("sibling");
+    for (const [i, p] of paths.entries()) {
+      const r = await get(p, inm(before[i]!));
+      expect(r.status, p).toBe(200);
+      expect(etagOf(r), p).not.toBe(before[i]);
+      expect((await get(p, inm(etagOf(r)))).status, p).toBe(304);
+    }
+    rmSync(sib);
+  });
+
   test("tags of different routes and prompts differ", async () => {
     const a = etagOf(await get("/api/sessions/diffy/prompts/0"));
     const b = etagOf(await get("/api/sessions/diffy/prompts/1"));

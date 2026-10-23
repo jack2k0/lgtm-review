@@ -54,11 +54,11 @@ Two phases: (1) core `markInherited`, schemas, summary computation, with unit te
 
 ### Phase 1: Core
 
-- [ ] 1.1 `pnpm check` green, node-free grep empty, determinism
+- [x] 1.1 `pnpm check` green, node-free grep empty, determinism
 
 ### Phase 2: Consumers
 
-- [ ] 2.1 `pnpm check` green incl. smoke
+- [x] 2.1 `pnpm check` green incl. smoke
 
 ## Plan-review amendments (accepted by orchestrator, 2026-10-23)
 
