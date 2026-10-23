@@ -71,7 +71,7 @@ Three phases: (1) core redaction module with corpus tests; (2) renderer + CLI fl
 
 ### Phase 2: Renderer and CLI
 
-- [ ] 2.1 `pnpm check` green incl. safety assertions and goldens
+- [x] 2.1 `pnpm check` green incl. safety assertions and goldens
 
 ### Phase 3: Docs and smoke
 

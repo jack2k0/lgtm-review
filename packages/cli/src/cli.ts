@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import type { SessionFile } from "@lgtm/core/node";
 import { discoverSessions, loadRepoScripts, projectDirFor, analyzeFile, defaultProjectsDir } from "@lgtm/core/node";
 import type { Analysis, SessionAnalysis } from "@lgtm/core";
+import { runExport } from "./export.js";
 import { formatText, sortSessions } from "./format.js";
 import { formatSummary } from "./summary.js";
 import { createLauncher, openBrowser, type Launcher } from "./open.js";
@@ -13,7 +14,7 @@ const VERSION = "0.0.0";
 
 const HELP = `lgtm-review ${VERSION}
 
-Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--list | --json | --summary [--session <id-prefix>] [--no-titles]] [--no-open] [--port <n>]
+Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>]
 
 Without --list/--json/--summary, starts a local web UI on 127.0.0.1 and prints its URL.
 
@@ -23,7 +24,11 @@ Without --list/--json/--summary, starts a local web UI on 127.0.0.1 and prints i
   --json                 print the analysis as JSON (implies --list)
   --summary              print a markdown review summary of one session (for a PR description)
   --session <id-prefix>  session for --summary (default: the newest)
-  --no-titles            with --summary: leave prompt titles out ("Prompt N")
+  --no-titles            with --summary or --export: leave prompt titles out ("Prompt N")
+  --export <id-prefix>   write one session as a self-contained HTML file (no JavaScript, secrets redacted best-effort)
+  --out <file>           with --export: output file (default: lgtm-review-<first 8 chars of the id>.html)
+  --force                with --export: overwrite an existing output file
+  --no-diffs             with --export: leave the file diffs out
   --no-open              do not open the browser
   --port <n>             port for the UI (default: a free port)
   --version              print the version
@@ -115,6 +120,10 @@ async function main(): Promise<number> {
         summary: { type: "boolean" },
         session: { type: "string" },
         "no-titles": { type: "boolean" },
+        export: { type: "string" },
+        out: { type: "string" },
+        force: { type: "boolean" },
+        "no-diffs": { type: "boolean" },
         "no-open": { type: "boolean" },
         port: { type: "string" },
         version: { type: "boolean" },
@@ -144,12 +153,29 @@ async function main(): Promise<number> {
     }
   }
 
+  const exporting = values.export !== undefined;
+  if (exporting && (values.list || values.json || values.summary || values.session !== undefined)) {
+    console.error("lgtm-review: --export cannot be combined with --list, --json, --summary or --session");
+    return 1;
+  }
+  if (!exporting && (values.out !== undefined || values.force || values["no-diffs"])) {
+    console.error("lgtm-review: --out, --force and --no-diffs only work with --export");
+    return 1;
+  }
+  if (exporting && !/^[A-Za-z0-9_-]+$/.test(values.export!)) {
+    console.error(`lgtm-review: invalid --export "${values.export}" (expected the start of a session id)`);
+    return 1;
+  }
+  if (exporting && values.out === "") {
+    console.error("lgtm-review: --out needs a file name");
+    return 1;
+  }
   if (values.summary && (values.list || values.json)) {
     console.error("lgtm-review: --summary cannot be combined with --list or --json");
     return 1;
   }
-  if (!values.summary && (values.session !== undefined || values["no-titles"])) {
-    console.error("lgtm-review: --session and --no-titles only work with --summary");
+  if (!values.summary && !exporting && (values.session !== undefined || values["no-titles"])) {
+    console.error("lgtm-review: --session and --no-titles only work with --summary (--no-titles also with --export)");
     return 1;
   }
   if (values.session !== undefined && !/^[A-Za-z0-9_-]+$/.test(values.session)) {
@@ -158,6 +184,17 @@ async function main(): Promise<number> {
   }
 
   const dir = resolve(values.dir ?? process.cwd());
+  if (exporting) {
+    return runExport({
+      dir,
+      projectsDir: values["projects-dir"] ?? defaultProjectsDir(),
+      prefix: values.export!,
+      ...(values.out !== undefined ? { out: values.out } : {}),
+      force: values.force === true,
+      diffs: values["no-diffs"] !== true,
+      titles: values["no-titles"] !== true,
+    });
+  }
   if (!values.list && !values.json && !values.summary) return serve(dir, values["projects-dir"] ?? defaultProjectsDir(), port, values["no-open"] === true);
 
   const projectDir = projectDirFor(dir, values["projects-dir"] ?? defaultProjectsDir());

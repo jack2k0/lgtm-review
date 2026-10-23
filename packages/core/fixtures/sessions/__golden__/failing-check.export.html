@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Review export: Fix the add function.</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --surface: #f3f4f6;
+  --border: #d1d5db;
+  --text: #111827;
+  --muted: #4b5563;
+  --link: #1d4ed8;
+  --error: #b91c1c;
+  --marker-bg: #fef3c7;
+  --marker-text: #78350f;
+  --focus: #1d4ed8;
+  --dot-checked: #15803d;
+  --dot-unchecked: #b45309;
+  --dot-failing: #b91c1c;
+  --dot-no-changes: #6b7280;
+  --seg-read: #2563eb;
+  --seg-write: #7c3aed;
+  --seg-check: #15803d;
+  --seg-fix: #c2410c;
+  --pass: #166534;
+  --badge-read: #1d4ed8;
+  --badge-write: #6d28d9;
+  --badge-check: #166534;
+  --badge-fix: #9a3412;
+  --add-bg: #dcfce7;
+  --add-fg: #166534;
+  --del-bg: #fee2e2;
+  --del-fg: #991b1b;
+  --hunk-bg: #e0e7ff;
+  --hint-bg: #ffedd5;
+  --hint-text: #7c2d12;
+  --sev-high: #b91c1c;
+  --sev-warn: #9a3412;
+  --sev-info: #1e40af;
+  --rec-all: #b91c1c;
+  --rec-flagged: #9a3412;
+  --rec-skim: #166534;
+}
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --surface: #1a1d24;
+    --border: #3b4150;
+    --text: #e5e7eb;
+    --muted: #a3aab8;
+    --link: #8ab4ff;
+    --error: #fca5a5;
+    --marker-bg: #3b2f0b;
+    --marker-text: #fde68a;
+    --focus: #8ab4ff;
+    --dot-checked: #4ade80;
+    --dot-unchecked: #fbbf24;
+    --dot-failing: #f87171;
+    --dot-no-changes: #9ca3af;
+    --seg-read: #60a5fa;
+    --seg-write: #c4b5fd;
+    --seg-check: #4ade80;
+    --seg-fix: #fb923c;
+    --pass: #4ade80;
+    --badge-read: #93c5fd;
+    --badge-write: #c4b5fd;
+    --badge-check: #86efac;
+    --badge-fix: #fdba74;
+    --add-bg: #12301d;
+    --add-fg: #86efac;
+    --del-bg: #3d1820;
+    --del-fg: #fca5a5;
+    --hunk-bg: #1f2744;
+    --hint-bg: #3b1d0b;
+    --hint-text: #fed7aa;
+    --sev-high: #fca5a5;
+    --sev-warn: #fdba74;
+    --sev-info: #93c5fd;
+    --rec-all: #fca5a5;
+    --rec-flagged: #fdba74;
+    --rec-skim: #86efac;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header, main { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 16px; }
+main { padding-bottom: 48px; }
+h1 { font-size: 20px; margin: 0 0 4px; overflow-wrap: anywhere; }
+h2 { font-size: 16px; margin: 24px 0 6px; }
+h3 { font-size: 15px; margin: 0; overflow-wrap: anywhere; }
+h4 { font-size: 13px; margin: 14px 0 2px; color: var(--muted); }
+a { color: var(--link); }
+a:focus-visible, summary:focus-visible, .diff:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.banner { border: 1px solid var(--border); background: var(--marker-bg); color: var(--marker-text); border-radius: 4px; padding: 8px 12px; margin: 10px 0; }
+.meta { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 8px 0; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; overflow-wrap: anywhere; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.text { overflow-wrap: anywhere; }
+.status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-weight: 600; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--dot-no-changes); }
+.dot-checked { background: var(--dot-checked); }
+.dot-unchecked { background: var(--dot-unchecked); }
+.dot-failing { background: var(--dot-failing); }
+.dot-no-changes { background: var(--dot-no-changes); }
+.timebar { display: flex; height: 10px; min-width: 120px; background: var(--surface); border: 1px solid var(--border); border-radius: 2px; overflow: hidden; }
+.seg { display: block; height: 100%; border-right: 1px solid var(--bg); }
+.seg-read { background: var(--seg-read); }
+.seg-write { background: var(--seg-write); }
+.seg-check { background: var(--seg-check); }
+.seg-fix { background: var(--seg-fix); }
+.headline { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.rec { display: inline-block; white-space: nowrap; padding: 0 7px; border: 1px solid currentColor; border-radius: 10px; font-size: 12px; font-weight: 700; background: var(--bg); }
+.rec-skim { color: var(--rec-skim); border-style: dotted; }
+.rec-read-flagged { color: var(--rec-flagged); border-style: dashed; }
+.rec-read-all { color: var(--rec-all); border-width: 2px; }
+.marker { display: inline-block; margin: 2px 4px 0 0; padding: 0 5px; border-radius: 3px; font-size: 11.5px; background: var(--hint-bg); color: var(--hint-text); }
+.prompt { border-top: 2px solid var(--border); margin-top: 28px; padding-top: 8px; }
+.prompt-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.prompt-text { margin: 6px 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.hints, .files, .actions, .steps, .chips { margin: 6px 0 0; padding: 0; }
+.hints, .files, .chips, .steps { list-style: none; }
+.hint { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 2px 0; overflow-wrap: anywhere; }
+.sev { display: inline-block; min-width: 3.6em; text-align: center; padding: 0 6px; border: 1px solid currentColor; border-radius: 3px; font-size: 11.5px; font-weight: 700; background: var(--bg); }
+.sev-high { color: var(--sev-high); border-width: 2px; }
+.sev-warn { color: var(--sev-warn); border-style: dashed; }
+.sev-info { color: var(--sev-info); border-style: dotted; }
+.files li { padding: 1px 0; overflow-wrap: anywhere; }
+.kind { font-weight: 700; }
+.kind-A { color: var(--pass); }
+.kind-D { color: var(--error); }
+details { margin: 8px 0 0; }
+details > summary { cursor: pointer; font-weight: 600; }
+.step { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 6px 10px; margin: 8px 0 0; }
+.step > summary { font-weight: 400; overflow-wrap: anywhere; }
+.badge { display: inline-block; min-width: 4.5em; text-align: center; padding: 0 8px; border: 1px solid currentColor; border-radius: 10px; font-size: 12px; font-weight: 700; background: var(--bg); margin-right: 6px; }
+.badge-read { color: var(--badge-read); }
+.badge-write { color: var(--badge-write); }
+.badge-check { color: var(--badge-check); }
+.badge-fix { color: var(--badge-fix); }
+.quote { margin: 8px 0 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--border); color: var(--muted); font-style: italic; white-space: pre-wrap; overflow-wrap: anywhere; }
+.check { margin: 8px 0 0; overflow-wrap: anywhere; }
+.outcome { font-weight: 700; margin-left: 8px; }
+.outcome-pass { color: var(--pass); }
+.outcome-fail { color: var(--error); }
+.outcome-none { color: var(--muted); }
+.excerpt { margin: 4px 0 0; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font: 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 8px; overflow-wrap: anywhere; }
+.actions { padding-left: 28px; }
+.actions li { padding: 1px 0; overflow-wrap: anywhere; }
+.tool { display: inline-block; min-width: 5em; font-weight: 600; margin-right: 6px; }
+.note { border: 1px solid var(--border); background: var(--surface); border-radius: 4px; padding: 4px 10px; margin: 8px 0 0; }
+.diff { margin: 8px 0 0; padding: 0; border: 1px solid var(--border); border-radius: 4px; overflow-x: auto; background: var(--bg); font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; tab-size: 4; }
+.diff-body { display: inline-block; min-width: 100%; }
+.dl { display: block; padding: 0 8px; }
+.dl-add { background: var(--add-bg); color: var(--text); }
+.dl-del { background: var(--del-bg); color: var(--text); }
+.dp { font-weight: 700; }
+.dl-add .dp { color: var(--add-fg); }
+.dl-del .dp { color: var(--del-fg); }
+.dl-hunk { background: var(--hunk-bg); color: var(--muted); font-weight: 600; }
+@media (max-width: 800px) { .meta { grid-template-columns: 1fr; } }
+@media print {
+  body { font-size: 11px; }
+  details::details-content { content-visibility: visible; display: block; }
+  .diff, .excerpt, .quote { white-space: pre-wrap; overflow: visible; }
+  .prompt { break-inside: auto; }
+  .step, tr { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<header><h1>Review export: Fix the add function.</h1><dl class="meta"><dt>Session</dt><dd><code>failing-check-0000</code></dd><dt>Branch</dt><dd><code>main</code></dd><dt>Started</dt><dd>2026-01-01 00:00 UTC</dd><dt>Prompts</dt><dd>1: 1 failing</dd></dl><p class="banner" role="note">Exported from a local Claude Code session log on 2026-10-23. Statuses and hints are heuristic: they come from the agent's own log (edits and shell commands it ran), not from git or from rerunning anything. Secrets and personal paths are redacted on a best-effort basis (4 replacements); review this file before sharing it.</p></header>
+<main>
+<h2>Prompts</h2><table class="prompts"><thead><tr><th class="num">#</th><th>Status</th><th>Review</th><th>Prompt</th><th>Time (approx.)</th><th class="num">Files</th></tr></thead><tbody><tr><td class="num"><a href="#p1">1</a></td><td><span class="status"><span class="dot dot-failing" aria-hidden="true"></span>Failing</span></td><td><span class="rec rec-read-flagged"><span aria-hidden="true">◐</span> Read flagged</span><div></div></td><td class="text"><div>Fix the add function.</div><div class="muted">pnpm test failed: Tests: 1 failed, 2 passed</div></td><td><div class="timebar" role="img" aria-label="Approximate time split"><span class="seg seg-write" style="width:50.00%"></span><span class="seg seg-check" style="width:50.00%"></span></div><div class="headline">Mostly writing (50%), 1 check</div><div class="headline">Write 2s (50%), Check 2s (50%)</div></td><td class="num">1 file<br>+1 -1</td></tr></tbody></table>
+<p class="muted">Time bar: <span class="badge badge-read">Read</span><span class="badge badge-write">Write</span><span class="badge badge-check">Check</span><span class="badge badge-fix">Fix</span> shares of approximate active time.</p>
+<h2>Details</h2>
+<section class="prompt" id="p1"><div class="prompt-head"><h3>Prompt 1</h3><span class="status"><span class="dot dot-failing" aria-hidden="true"></span>Failing</span><span class="rec rec-read-flagged"><span aria-hidden="true">◐</span> Read flagged</span></div><p class="prompt-text">Fix the add function.</p><p>pnpm test failed: Tests: 1 failed, 2 passed</p><p class="muted">Read flagged: review the files with hints.</p><div class="timebar" role="img" aria-label="Approximate time split"><span class="seg seg-write" style="width:50.00%"></span><span class="seg seg-check" style="width:50.00%"></span></div><div class="headline">Mostly writing (50%), 1 check</div><div class="headline">Write 2s (50%), Check 2s (50%)</div><h4>Hints</h4><p class="muted">No review hints.</p><h4>Files</h4><ul class="files"><li><span class="kind kind-M">Modified</span> <code>&lt;repo&gt;/src/add.js</code> <span class="muted">+1 -1</span></li></ul><h4>Diffs</h4><details class="diff-file"><summary><span class="kind kind-M">Modified</span> <code>&lt;repo&gt;/src/add.js</code> <span class="muted">1 hunk +1 -1</span></summary><p class="muted">Agent edits as recorded in the log, not the final git state.</p><pre class="diff" tabindex="0"><span class="diff-body"><span class="dl dl-hunk">@@ -1,1 +1,1 @@</span><span class="dl dl-del"><span class="dp">-</span>a - b</span><span class="dl dl-add"><span class="dp">+</span>a * b</span></span></pre></details><details class="steps-box"><summary>Steps (2)</summary><div><details class="step"><summary><span class="badge badge-write">Write</span>Edit src/add.js (+1 -1) <span class="muted">2s</span></summary><blockquote class="quote">Editing &lt;repo&gt;/src/add.js.</blockquote><ul class="chips" aria-label="Files edited in this step"><li class="chip">&lt;repo&gt;/src/add.js</li></ul><p class="muted">1 action</p><ol class="actions"><li><span class="tool">Edit</span><code>src/add.js</code> <span class="muted">00:00:02</span></li></ol></details><details class="step"><summary><span class="badge badge-check">Check</span>Run pnpm test -&gt; failed (exit 1) <span class="muted">2s</span></summary><blockquote class="quote">Running the tests.</blockquote><p class="check"><code>pnpm test</code><span class="outcome outcome-fail">exit 1</span></p><pre class="excerpt">Tests: 1 failed, 2 passed</pre><p class="muted">1 action</p><ol class="actions"><li><span class="tool">Bash</span><code>pnpm test</code> <span class="marker">failed</span> <span class="muted">00:00:04</span></li></ol></details></div></details></section>
+</main>
+</body>
+</html>

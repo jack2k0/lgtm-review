@@ -182,8 +182,23 @@ function isNonLiteral(v: string, quoted: boolean): boolean {
   return false;
 }
 
-function redactAssign(g: Groups): string | null {
-  if (!isSecretKey(g[2] as string)) return null;
+/**
+ * A value that belongs to a harmless key can itself hold an assignment (`cmd = "PASSWORD=..."`); the outer match has
+ * consumed it, so the inner text is scanned again here (values are at most 300 characters, so this stays cheap).
+ */
+function redactInner(g: Groups, st: State): string | null {
+  const q = g[4] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
+  const v = (g[4] ?? g[5] ?? g[6]) as string;
+  if (!v.includes("=") && !v.includes(":")) return null;
+  const inner: State = { count: 0 };
+  const r = pass(v, inner, ASSIGN, [":", "="], false, (h) => redactAssign(h, inner));
+  if (inner.count === 0) return null;
+  st.count += inner.count - 1; // the caller counts the replacement itself once
+  return `${g[1]}${g[2]}${g[1]}${g[3]}${q}${r}${q}`;
+}
+
+function redactAssign(g: Groups, st: State): string | null {
+  if (!isSecretKey(g[2] as string)) return redactInner(g, st);
   const q = g[1] as string;
   const head = q + (g[2] as string) + q + (g[3] as string);
   if (g[4] !== undefined) return isNonLiteral(g[4], true) || g[4].length < 3 ? null : `${head}"${ph("secret")}"`;
@@ -446,7 +461,7 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
     t = redactEnvLines(t, st);
   }
 
-  t = pass(t, st, ASSIGN, [":", "="], false, redactAssign);
+  t = pass(t, st, ASSIGN, [":", "="], false, (g) => redactAssign(g, st));
   t = pass(t, st, CLI_FLAG, ["--", " -"], false, redactFlag);
 
   t = pass(t, st, EMAIL, ["@"], false, redactEmail);

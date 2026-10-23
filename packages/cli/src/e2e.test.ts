@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -211,4 +211,116 @@ describe("performance", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30000);
+});
+
+describe("built CLI, --export", () => {
+  let work: string;
+  beforeAll(() => {
+    work = mkdtempSync(join(tmpdir(), "lgtm-cli-export-"));
+  });
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
+
+  const base = () => ["--projects-dir", projects, "--dir", PROJECT];
+  const runIn = (cwd: string, args: string[], env: Record<string, string> = {}) =>
+    spawnSync("node", [cli, ...args], { encoding: "utf8", cwd, env: { ...process.env, ...env } });
+
+  test("writes the file, prints one line with the path and the redaction count", () => {
+    const out = join(work, "a.html");
+    const r = run(["--export", "hints-test", "--out", out, ...base()]);
+    expect(r.status).toBe(0);
+    const lines = r.stdout.split("\n").filter((l) => l !== "");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(new RegExp(`^${out.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}  \\(\\d+ redactions?\\)$`));
+    const html = readFileSync(out, "utf8");
+    expect(html).toContain('<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:">');
+    expect(html).not.toMatch(/<script/i);
+    for (const w of ["Checked", "Read flagged", "assertions-removed", "class=\"diff\"", "&lt;repo&gt;/"]) expect(html).toContain(w);
+    expect(html).not.toContain("/home/user/project");
+    expect(statSync(out).mode & 0o777).toBe(0o644);
+    expect(readdirSync(work).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
+  test("does not overwrite without --force, overwrites with it", () => {
+    const out = join(work, "b.html");
+    writeFileSync(out, "precious");
+    const r = run(["--export", "hints-test", "--out", out, ...base()]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("already exists");
+    expect(r.stdout).toBe("");
+    expect(readFileSync(out, "utf8")).toBe("precious");
+    expect(readdirSync(work).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+    const f = run(["--export", "hints-test", "--out", out, "--force", ...base()]);
+    expect(f.status).toBe(0);
+    expect(readFileSync(out, "utf8")).toMatch(/^<!doctype html>/);
+  });
+
+  test("default file name is lgtm-review-<first 8 characters>.html in the current directory", () => {
+    const cwd = mkdtempSync(join(work, "cwd-"));
+    const r = runIn(cwd, ["--export", "hints-test", ...base()]);
+    expect(r.status).toBe(0);
+    expect(existsSync(join(cwd, "lgtm-review-hints-te.html"))).toBe(true);
+    expect(r.stdout.startsWith(join(cwd, "lgtm-review-hints-te.html"))).toBe(true);
+  });
+
+  test("--no-diffs and --no-titles", () => {
+    const out = join(work, "c.html");
+    expect(run(["--export", "hints-test", "--out", out, "--no-diffs", "--no-titles", ...base()]).status).toBe(0);
+    const html = readFileSync(out, "utf8");
+    expect(html).not.toContain('class="diff"');
+    expect(html).not.toContain("Fix the add function");
+    expect(html).toContain("Diffs are not included");
+    expect(html).toContain("Steps (");
+  });
+
+  test.each([["--list"], ["--json"], ["--summary"], ["--session", "x"]])("--export with %s => exit 1 and nothing written", (...extra) => {
+    const out = join(work, "never.html");
+    const r = run(["--export", "hints-test", "--out", out, ...extra, ...base()]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("--export cannot be combined");
+    expect(r.stdout).toBe("");
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test.each([["--out", "x.html"], ["--force"], ["--no-diffs"]])("%s without --export => exit 1", (...flags) => {
+    const r = run([...flags, "--list", ...base()]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("only work with --export");
+  });
+
+  test("unknown, ambiguous and malformed prefixes, other directory => exit 1", () => {
+    const out = join(work, "d.html");
+    expect(run(["--export", "nope", "--out", out, ...base()]).stderr).toContain('no session id starts with "nope"');
+    const amb = run(["--export", "h", "--out", out, ...base()]);
+    expect(amb.status).toBe(1);
+    expect(amb.stderr).toContain("matches");
+    expect(run(["--export", "../x", "--out", out, ...base()]).status).toBe(1);
+    expect(run(["--export", "hints-test", "--out", out, "--projects-dir", projects, "--dir", "/home/user/other"]).status).toBe(1);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test("secrets, user names and home paths of a session never reach the file", () => {
+    const pdir = join(work, "projects2", "-home-user-project");
+    mkdirSync(pdir, { recursive: true });
+    const secret = "gh" + "p_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
+    const pass = "hunter" + "2pass&word99";
+    const sid = "11111111-1111-4111-8111-111111111111";
+    const rec = (type: string, n: number, message: unknown, extra: Record<string, unknown> = {}) =>
+      JSON.stringify({ ...extra, type, uuid: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`, sessionId: sid, timestamp: `2026-01-01T00:00:0${n}.000Z`, cwd: PROJECT, gitBranch: "main", version: "2.1.0", message });
+    const lines = [
+      rec("user", 1, { role: "user", content: `deploy with token ${secret} as zed-e2e-user from /home/zed-e2e-user/work` }),
+      rec("assistant", 2, { role: "assistant", content: [{ type: "text", text: `Using ${secret}` }, { type: "tool_use", id: "t1", name: "Edit", input: { file_path: `${PROJECT}/.env`, old_string: "A=1", new_string: `API_URL=https://example.test\nDB_PASSWORD=${pass}\n` } }] }),
+      rec("user", 3, { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] }, {
+        toolUseResult: { type: "update", filePath: `${PROJECT}/.env`, structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-A=1", "+API_URL=https://example.test", `+DB_PASSWORD=${pass}`] }] },
+      }),
+    ];
+    writeFileSync(join(pdir, `${sid}.jsonl`), lines.join("\n") + "\n");
+    const out = join(work, "secret.html");
+    const r = run(["--export", "11111111", "--out", out, "--projects-dir", join(work, "projects2"), "--dir", PROJECT], { USER: "zed-e2e-user" });
+    expect(r.status).toBe(0);
+    const html = readFileSync(out, "utf8");
+    expect(html).toContain("class=\"diff\"");
+    for (const leak of [secret, pass, "zed-e2e-user", "hunter", "example.test"]) expect(html, leak).not.toContain(leak);
+    expect(html).toContain("~/work");
+    expect(r.stdout).toMatch(/\((?:[3-9]|\d\d+) redactions\)$/m);
+  });
 });
