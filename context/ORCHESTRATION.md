@@ -43,6 +43,9 @@ brak
 
 - S-10 demo ZMERGOWANE (678814d): OpenCode pP Big Pickle, 0 poprawek; `pnpm demo` deterministyczne, prywatność sprawdzona (Opus). Hosting (Pages) czeka na właściciela.
 
+- map-304 (OpenCode pQ, 0 poprawek): 304 mapy/play bez analizy szczegółowej. ZMERGOWANE.
+- S-15 session-archive ZMERGOWANE (5d218f2): plan Opus, plan-review Agy (1 blocker meta.json + 6 -> C1-C7), fazy 1-2 Agy (0 poprawek), Opus: exit code 1. Test na prawdziwych logach (43 MB, archiwum w scratchpadzie, usunięte): 84 pliki, drugi przebieg 0 kopii, lista z samego archiwum identyczna z live.
+
 ## Notatki
 - Repo ma remote `origin` (github.com/jack2k0/lgtm-review). Push main 426a7f4 za zgodą właściciela (2026-10-23); kolejne pushe tylko na polecenie.
 - Repo lokalne, bez remote. Nie pushować. Branch startowy `master`, docelowy `main` (do zmiany przy commicie fundamentu).

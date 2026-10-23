@@ -71,7 +71,7 @@ D7. Security: archive dir path comes only from flag/env/default (never from log 
 - [x] 2.2 list/API/web marker, README "Archive"
 
 ### Phase 3: Docs
-- [ ] 3.1 roadmap, PRD
+- [x] 3.1 roadmap, PRD
 
 ## Orchestrator review amendments (Opus, 2026-10-23, from Agy plan-review F1-F7) — override the sections above
 

@@ -1,10 +1,10 @@
 ---
 change_id: session-archive
 title: Local session archive that survives Claude Code's 30-day cleanup
-status: planned
+status: done
 created: 2026-10-23
 updated: 2026-10-23
-archived_at: null
+archived_at: 2026-10-23
 ---
 
 ## Notes
