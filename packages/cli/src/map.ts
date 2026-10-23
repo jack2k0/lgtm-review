@@ -79,10 +79,20 @@ interface Stat {
 export interface MapPlan {
   /** Changes whenever the response could: files read (path, mtime, size), changed set, caps. */
   fingerprint: string;
-  build(): ImportMapResponse;
+  /** Builds the body; loads detail on demand. Never called for a cache hit or a 304. */
+  build(): Promise<ImportMapResponse>;
 }
 
 export type DiffForCallback = (promptIndex: number, path: string) => FileDiff | null;
+
+/** Detail material needed only to build a body (new edges, playable); it is not part of the fingerprint/ETag. */
+export interface MapDetail {
+  diffFor: DiffForCallback;
+  steps?: readonly Step[] | null;
+}
+
+/** Loads `MapDetail` lazily; the fingerprint path never calls it. */
+export type MapDetailSource = () => Promise<MapDetail | null> | MapDetail | null;
 
 /** Repo-relative path of a session file path (absolute or already relative); null when outside the dir. */
 export function toRepoRelative(p: string, roots: readonly string[]): string | null {
@@ -118,15 +128,15 @@ function pseudoSourceFromDiff(diff: FileDiff): string {
 
 /**
  * Prepares the import map of one session (`promptIndex` null) or one prompt. Cheap part (git ls-files + stat)
- * yields the fingerprint used as the ETag; `build()` reads and parses the files. Never reads outside `dir` (M4).
+ * yields the fingerprint used as the ETag; `build()` reads and parses the files and only then asks for detail
+ * (new edges, playable). Never reads outside `dir` (M4).
  */
 export async function planImportMap(
   dir: string,
   analysis: SessionAnalysis,
   promptIndex: number | null,
   capsIn: Partial<MapCaps> = {},
-  diffFor?: DiffForCallback | null,
-  steps?: readonly Step[] | null,
+  detailSource?: MapDetailSource | null,
 ): Promise<MapPlan> {
   const caps: MapCaps = { ...MAP_CAPS, ...capsIn };
   let root: string;
@@ -250,7 +260,10 @@ export async function planImportMap(
 
   return {
     fingerprint: fp.digest("hex"),
-    build(): ImportMapResponse {
+    async build(): Promise<ImportMapResponse> {
+      const detail = detailSource ? await detailSource() : null;
+      const diffFor = detail?.diffFor ?? null;
+      const steps = detail?.steps ?? null;
       const buildNotes = [...notes];
       let buildTruncated = truncated;
       if (oversize > 0) {

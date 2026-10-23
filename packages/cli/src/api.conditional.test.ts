@@ -33,11 +33,11 @@ interface Res {
   body: string;
 }
 
-function get(path: string, extra: Record<string, string> = {}, auth = true, method = "GET"): Promise<Res> {
+function get(path: string, extra: Record<string, string> = {}, auth = true, method = "GET", s: RunningServer = srv): Promise<Res> {
   return new Promise((resolve, reject) => {
-    const headers: Record<string, string> = { Host: `127.0.0.1:${srv.port}`, ...extra };
-    if (auth) headers["X-Lgtm-Token"] = srv.token;
-    request({ host: "127.0.0.1", port: srv.port, path, method, headers }, (res) => {
+    const headers: Record<string, string> = { Host: `127.0.0.1:${s.port}`, ...extra };
+    if (auth) headers["X-Lgtm-Token"] = s.token;
+    request({ host: "127.0.0.1", port: s.port, path, method, headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: Buffer.concat(chunks).toString("utf8") }));
@@ -154,6 +154,25 @@ describe.each(routes)("%s: ETag / 304", (_name, path) => {
     calls.detail = 0;
     for (let i = 0; i < 5; i++) expect((await get(path(), inm(tag))).status).toBe(304);
     expect(calls).toEqual({ analyze: 0, detail: 0 });
+  });
+});
+
+describe("map and play answer a 304 without detail analysis", () => {
+  // A fresh server has empty caches, so the tag can only be answered from the cheap plan. The old routes loaded the
+  // full detail analysis (~1 s for a large log) before checking `If-None-Match`.
+  test.each(["/api/sessions/diffy/map", "/api/sessions/diffy/prompts/0/play"])("%s", async (path) => {
+    const tag = etagOf(await get(path));
+    expect(tag).toMatch(/^"[0-9a-f]{16}"$/);
+    const cold = await startServer({ dir: PROJECT, projectsDir: join(tmp, "projects"), webRoot: join(tmp, "no-web") });
+    try {
+      calls.detail = 0;
+      const r = await get(path, inm(tag), true, "GET", cold);
+      expect(r.status).toBe(304);
+      expect(etagOf(r)).toBe(tag);
+      expect(calls.detail).toBe(0);
+    } finally {
+      await cold.close();
+    }
   });
 });
 

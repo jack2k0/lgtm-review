@@ -293,17 +293,21 @@ export function createApi(opts: ServerOptions): ApiHandler {
     const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     if (prompt !== null && !analysis.prompts[prompt]) return false;
-    const d = await detailFor(file);
-    const diffFor = d ? (idx: number, path: string) => d.analyzer.diffFor(idx, path) : null;
-    const promptSteps = prompt !== null && d ? d.details[prompt]?.steps ?? null : null;
-    const plan = await planImportMap(opts.dir, analysis, prompt, opts.mapCaps, diffFor, promptSteps);
+    const plan = await planImportMap(opts.dir, analysis, prompt, opts.mapCaps, async () => {
+      const d = await detailFor(file);
+      if (!d) return null;
+      return {
+        diffFor: (idx: number, path: string) => d.analyzer.diffFor(idx, path),
+        steps: prompt !== null ? d.details[prompt]?.steps ?? null : null,
+      };
+    });
     const key = `${stamp}\0${prompt ?? "s"}\0${plan.fingerprint}`;
     const etag = etagFor(`map\0${file.id}\0${key}`);
     if (notModifiedEarly(req, res, etag)) return true;
     const slot = `${file.id}\0${prompt ?? "s"}`;
     let hit = mapCache.get(slot);
     if (!hit || hit.key !== key) {
-      hit = { key, body: plan.build() };
+      hit = { key, body: await plan.build() };
       mapCache.delete(slot);
       mapCache.set(slot, hit);
       while (mapCache.size > MAP_CACHE_MAX) mapCache.delete(mapCache.keys().next().value!);
@@ -332,12 +336,17 @@ export function createApi(opts: ServerOptions): ApiHandler {
     if (!prompt) return false;
     if (prompt.inheritedFrom !== undefined) return false;
 
-    const d = await detailFor(file);
-    const promptDetail = d?.details[index];
-    if (!d || !promptDetail) return false;
-
-    const diffFor = (idx: number, path: string) => d.analyzer.diffFor(idx, path);
-    const plan = await planImportMap(opts.dir, analysis, index, opts.mapCaps, diffFor, promptDetail.steps);
+    let detailPromise: Promise<DetailEntry | null> | undefined;
+    const detail = (): Promise<DetailEntry | null> => (detailPromise ??= detailFor(file));
+    const plan = await planImportMap(opts.dir, analysis, index, opts.mapCaps, async () => {
+      const d = await detail();
+      const promptDetail = d?.details[index];
+      if (!d || !promptDetail) return null;
+      return {
+        diffFor: (idx: number, path: string) => d.analyzer.diffFor(idx, path),
+        steps: promptDetail.steps,
+      };
+    });
     const mapKey = `${stamp}\0${index}\0${plan.fingerprint}`;
     const playKey = `${mapKey}\0play`;
     const etag = etagFor(`play\0${file.id}\0${playKey}`);
@@ -346,9 +355,12 @@ export function createApi(opts: ServerOptions): ApiHandler {
     const slot = `${file.id}\0${index}`;
     let hit = playCache.get(slot);
     if (!hit || hit.key !== playKey) {
+      const d = await detail();
+      const promptDetail = d?.details[index];
+      if (!d || !promptDetail) return false;
       let mapHit = mapCache.get(slot);
       if (!mapHit || mapHit.key !== mapKey) {
-        mapHit = { key: mapKey, body: plan.build() };
+        mapHit = { key: mapKey, body: await plan.build() };
         mapCache.delete(slot);
         mapCache.set(slot, mapHit);
         while (mapCache.size > MAP_CACHE_MAX) mapCache.delete(mapCache.keys().next().value!);
