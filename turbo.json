@@ -5,6 +5,7 @@
     "lgtm-review#build": { "dependsOn": ["^build", "@lgtm/web#build"], "outputs": ["dist/**"] },
     "typecheck": { "dependsOn": ["^build"] },
     "test": { "dependsOn": ["^build", "build"] },
+    "test:perf": { "dependsOn": ["^build", "build"], "cache": false },
     "smoke": { "dependsOn": ["build"], "cache": false },
     "lint": {}
   }

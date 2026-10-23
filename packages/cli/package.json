@@ -10,7 +10,8 @@
     "build": "tsup && node ../../scripts/copy-web.mjs",
     "typecheck": "tsc --noEmit",
     "smoke": "node ../../scripts/smoke-pack.mjs",
-    "test": "vitest run"
+    "test": "vitest run --exclude '**/*.perf.test.ts'",
+    "test:perf": "vitest run perf.test"
   },
   "devDependencies": { "@lgtm/core": "workspace:*", "@types/node": "^22.0.0", "tsup": "^9.0.0", "typescript": "^5.8.0", "vitest": "^4.1.12" }
 }
