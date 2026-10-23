@@ -8,15 +8,35 @@ import type { ServerOptions } from "./server.js";
 
 export function summarize(s: SessionAnalysis): SessionSummary {
   const statusCounts: Record<Status, number> = { checked: 0, unchecked: 0, failing: 0, "no-changes": 0 };
-  for (const p of s.prompts) statusCounts[p.status]++;
+  const inheritedTally = new Map<string, number>();
+  let inheritedCount = 0;
+  for (const p of s.prompts) {
+    if (p.inheritedFrom !== undefined) {
+      inheritedCount++;
+      inheritedTally.set(p.inheritedFrom, (inheritedTally.get(p.inheritedFrom) ?? 0) + 1);
+    } else {
+      statusCounts[p.status]++;
+    }
+  }
+  // forkOf: session id with most inherited prompts; ties broken by map insertion order (first seen = earliest by ownership order)
+  let forkOf: string | undefined;
+  let forkOfMax = 0;
+  for (const [sid, count] of inheritedTally) {
+    if (count > forkOfMax) {
+      forkOfMax = count;
+      forkOf = sid;
+    }
+  }
   return {
     id: s.sessionId,
     title: s.title,
     branch: s.branch,
     startedAt: s.startedAt,
-    promptCount: s.prompts.length,
+    promptCount: s.prompts.length - inheritedCount,
     statusCounts,
     warningCount: s.warnings.length,
+    inheritedCount,
+    ...(forkOf !== undefined ? { forkOf } : {}),
   };
 }
 

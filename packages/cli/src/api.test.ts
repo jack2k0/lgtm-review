@@ -61,7 +61,7 @@ describe("GET /api/sessions", () => {
     expect(r.json.dir).toBe(PROJECT);
     expect(r.json.sessions.map((s: { id: string }) => s.id).sort()).toEqual([...ids].sort());
     for (const s of r.json.sessions) {
-      expect(Object.keys(s).sort()).toEqual(["branch", "id", "promptCount", "startedAt", "statusCounts", "title", "warningCount"]);
+      expect(Object.keys(s).sort()).toEqual(["branch", "id", "inheritedCount", "promptCount", "startedAt", "statusCounts", "title", "warningCount"].sort());
       expect(Object.keys(s.statusCounts).sort()).toEqual(["checked", "failing", "no-changes", "unchecked"]);
       const total = Object.values(s.statusCounts as Record<string, number>).reduce((a, b) => a + b, 0);
       expect(total).toBe(s.promptCount);

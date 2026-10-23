@@ -42,3 +42,4 @@ export type { SubagentTranscript, SubagentCollector, SubagentCollectorOptions, T
 export type { Event, ToolUseEvent, ToolResultEvent, TextEvent, PromptEvent, BoundaryEvent } from "./parse.js";
 export { redact, isEnvFilePath } from "./redact.js";
 export type { RedactOptions, RedactResult } from "./redact.js";
+export { markInherited } from "./inherit.js";

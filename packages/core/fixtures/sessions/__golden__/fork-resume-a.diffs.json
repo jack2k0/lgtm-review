@@ -1,0 +1,65 @@
+{
+  "0:/home/user/project/src/a.ts": {
+    "path": "/home/user/project/src/a.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "old1"
+          },
+          {
+            "t": "+",
+            "s": "new1"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/src/b.ts": {
+    "path": "/home/user/project/src/b.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "old2"
+          },
+          {
+            "t": "+",
+            "s": "new2"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/src/c.ts": {
+    "path": "/home/user/project/src/c.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "old3"
+          },
+          {
+            "t": "+",
+            "s": "new3"
+          }
+        ]
+      }
+    ]
+  }
+}

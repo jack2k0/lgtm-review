@@ -1,0 +1,9 @@
+{
+  "fixture": "fork-resume-a",
+  "source": "synthetic",
+  "prompts": [
+    { "index": 0, "expectedStatus": "checked", "note": "edit + passing test; first of three prompts in original session A" },
+    { "index": 1, "expectedStatus": "checked", "note": "edit + passing test; second prompt" },
+    { "index": 2, "expectedStatus": "checked", "note": "edit + passing test; third prompt" }
+  ]
+}
