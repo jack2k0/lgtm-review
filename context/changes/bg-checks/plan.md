@@ -68,7 +68,7 @@ One core phase + a small consumer phase.
 
 ### Phase 2: Consumers
 
-- [ ] 2.1 `pnpm check` green incl. smoke
+- [x] 2.1 `pnpm check` green incl. smoke
 
 ### Phase 3: Audit (orchestrator, local Claude only)
 

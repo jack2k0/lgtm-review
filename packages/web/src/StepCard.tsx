@@ -28,6 +28,7 @@ export function StepCard({ step, open, onToggle, onOpenFile, pathLabel }: { step
           <div>
             <span className="mono check-cmd">{check.command}</span>
             <span className={`outcome outcome-${outcome.tone}`}>{outcome.text}</span>
+            {check.background ? " (background)" : null}
           </div>
           {check.excerpt ? <pre className="excerpt">{check.excerpt}</pre> : null}
         </div>

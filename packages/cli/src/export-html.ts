@@ -154,8 +154,9 @@ export function renderExport(input: ExportInput, opts: ExportOptions): ExportRes
     for (const q of s.quotes) out.push(`<blockquote class="quote">${t(q)}</blockquote>`);
     if (s.check) {
       const c = s.check;
-      const outcome = c.passed === true ? ["pass", "passed"] : c.exitCode !== null ? ["fail", `exit ${c.exitCode}`] : c.passed === false ? ["fail", "failed"] : ["none", "did not run"];
-      out.push(`<p class="check"><code>${t(c.command)}</code><span class="outcome outcome-${outcome[0]}">${outcome[1]}</span></p>`);
+      const outcome = c.passed === true ? ["pass", "passed"] : c.stopped === true ? ["none", "stopped"] : c.exitCode !== null ? ["fail", `exit ${c.exitCode}`] : c.passed === false ? ["fail", "failed"] : ["none", "did not run"];
+      const bg = c.background === true ? " (background)" : "";
+      out.push(`<p class="check"><code>${t(c.command)}</code><span class="outcome outcome-${outcome[0]}">${outcome[1]}</span>${bg}</p>`);
       if (c.excerpt !== "") out.push(`<pre class="excerpt">${t(c.excerpt)}</pre>`);
     }
     if (s.files.length > 0) out.push(`<ul class="chips" aria-label="Files edited in this step">${s.files.map((f) => `<li class="chip">${t(f)}</li>`).join("")}</ul>`);
