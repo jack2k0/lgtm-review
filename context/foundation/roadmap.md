@@ -178,7 +178,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** import-map
 - **PRD refs:** FR-012
 - **Prerequisites:** S-03
-- **Status:** in progress (2026-10-23, orchestrator decision; owner delegated open question 6)
+- **Status:** done (2026-10-23; draft plan Agy/Gemini, core+web OpenCode Big Pickle, API Sonnet, merge fix Agy)
 
 ## Backlog Handoff
 
