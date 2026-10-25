@@ -15,6 +15,6 @@
     "test": "vitest run --exclude '**/*.perf.test.ts'",
     "test:perf": "vitest run perf.test"
   },
-  "dependencies": { "zod": "^3.24.0" },
+  "dependencies": { "zod": "^4.6.6" },
   "devDependencies": { "@types/node": "^22.0.0", "tsup": "^9.0.0", "vitest": "^4.1.12", "typescript": "^5.8.0" }
 }
