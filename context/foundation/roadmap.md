@@ -3,8 +3,8 @@ project: lgtm-review
 version: 1
 status: draft
 created: 2026-10-23
-updated: 2026-10-23
-prd_version: 1
+updated: 2026-10-25
+prd_version: 3
 main_goal: speed
 top_blocker: time
 ---
@@ -180,6 +180,167 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Prerequisites:** S-03
 - **Status:** done (2026-10-23; draft plan Agy/Gemini, core+web OpenCode Big Pickle, API Sonnet, merge fix Agy)
 
+## v0.3 extension (proposed 2026-10-25)
+
+> Orchestrator proposal on the owner's delegation (2026-10-25). Derived from PRD v3 (`context/foundation/prd.md`, section "v0.3 Extension": FR-015..FR-020, v3 NFRs, v3 success criterion). Every MVP and v0.2 slice is done and `pnpm check` is green on main (cfc57ff). Owner-only actions are not slices: git push, npm publish, GitHub Pages hosting of the demo, the name/trademark check and credit for the idea author.
+
+### Framing (v0.3)
+
+- **Sequencing goal: reviewer value on real sessions per hour of work.** Deterministic and local-only first; the only model call in the batch (S-08) is opt-in, loopback-only and gated on owner decisions.
+- **Evidence used.** Real-log audits of 2026-10-23 (130 own prompts after fork dedupe: 50 unchecked, 17 checked, 3 failing, 60 no-changes; status match 95.3% overall, 97.1% without subagents, 19/22 subagent prompts; the empty-`bashEditDiff` fix 66a00af was not in the audited build and was never re-measured); the owner's own agent workflow, where implementation phases end by ticking `plan.md` after the check (phase commits 2e8588a, 655e616, 576ca8b, 4555a16 all carry a `plan.md` change), which the current rule reports as `unchecked`; the PRD primary success criterion (find all unchecked/failing prompts in < 2 minutes); the persona (parallel worktrees).
+- **Order.** Cut status noise at the source (S-16), then speed up triage in the browser (S-17), then make `checked` more honest (S-18), then breadth (S-19 worktrees), accuracy follow-ups (S-20) and the git cross-check (S-21). S-08 waits for the owner.
+- **Sizes** assume agent implementation with orchestrator review: S ≈ one sitting (1–2 phases), M ≈ 3–4 phases, L ≈ 5+ phases or an open design question.
+
+### At a glance (v0.3)
+
+| ID   | Change ID         | Outcome (user can …)                                                                                                          | Size | Prerequisites              | Parallel with                | PRD refs                       | Status                  |
+| ---- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---- | -------------------------- | ---------------------------- | ------------------------------ | ----------------------- |
+| S-16 | doc-edits         | see prompts that only edited documentation as needing no check, and keep `checked` when only docs changed after the check   | S    | —                          | S-17                         | FR-015                         | proposed (plan drafted) |
+| S-17 | prompt-triage     | narrow sessions and prompts to "needs attention" and move through prompts with the keyboard                                   | M    | —                          | S-16                         | FR-016, NFR keyboard           | proposed                |
+| S-18 | scoped-checks     | see a `check-scope` hint when the check behind `checked` ran only on part of the repository                                   | M    | S-16                       | S-19 (schema-first rule)     | FR-017                         | proposed                |
+| S-19 | worktree-sessions | see the sessions of every git worktree of the repository in one list                                                          | M    | S-17                       | S-18 (schema-first rule), S-20 | FR-018, NFR read-only git    | proposed                |
+| S-20 | status-accuracy-2 | rely on >= 97% status match on real logs (in-command order, background notifications, scratch files, Python comments)         | M    | S-18                       | S-19, S-21                   | FR-002, FR-004, FR-013, SC v3  | proposed                |
+| S-21 | git-crosscheck    | compare what a session's prompts edited with what git shows for that directory                                                | M    | S-19                       | S-20                         | FR-019, NFR read-only git      | proposed                |
+| S-08 | llm-titles        | opt in to one-sentence prompt titles from a local model server (loopback only)                                                | L    | S-17 + owner decisions     | —                            | FR-020, NFR loopback LLM       | proposed (blocked)      |
+
+Waves: **1** S-16 ‖ S-17 → **2** S-18 ‖ S-19 → **3** S-20 ‖ S-21 → **gated** S-08.
+
+### Parallel work rules (v0.3)
+
+1. At most two slices in flight (one person reviews). Each runs in its own worktree `../lgtm-review-<change-id>` on branch `change/<change-id>`.
+2. **Schema-first rule.** `packages/core/src/schema.ts` is edited by at most one in-flight branch. When both slices of a wave need schema members (wave 2: S-18 adds the `HintRule` value `check-scope`; S-19 adds optional `worktree` fields to `SessionSummary` and `SessionAnalysis`), the orchestrator lands both additions on main in one small commit before either branch starts, and implementers do not touch `schema.ts` in their branches. Within one slice, schema changes land in its first phase and later phases or helper branches rebase on it and never re-add them (the S-04 merge produced duplicate keys because two branches added the same members).
+3. **Goldens.** `packages/core/fixtures/sessions/__golden__/` is regenerated by S-16, S-18 and S-20 (and `*.summary.md` by the CLI tests for every fixture); these three never run in parallel. A slice that is not supposed to change goldens fails its phase if any golden changes.
+4. **Dependencies.** Only S-17 adds a package (a dev-only DOM library for web tests); no other branch may change `package.json` or `pnpm-lock.yaml` while S-17 is in flight.
+5. **Shared docs.** `packages/cli/README.md` gets each slice's text in that slice's last phase, in its own section; `context/foundation/prd.md` and `roadmap.md` are edited only by the orchestrator on main after a merge.
+
+Files each slice is expected to touch (for the parallel check):
+
+| Slice | Core analysis (`analyze`, `hints`, `check-patterns`, `shell-edits`, `parse`) | `schema.ts` | Goldens | Core node IO | CLI (`packages/cli/src`) | Web (`packages/web/src`) | Deps |
+| ----- | ---------------------------------------------------------------------------- | ----------- | ------- | ------------ | ------------------------ | ------------------------ | ---- |
+| S-16 | `analyze.ts`, `hints.ts` | — | yes | — | `audit-status.test.ts` (+ `scripts/audit-status.mjs`) | — | — |
+| S-17 | — | — | — | — | — | `PromptTable`, `SessionList`, `App`, `viewmodel`, new `triage.ts`, `styles.css`, new DOM tests | dev: DOM library |
+| S-18 | `check-patterns.ts`, `analyze.ts`, `hints.ts` | `HintRule` | yes | — | `audit-status.test.ts` (+ script) | — | — |
+| S-19 | — | `worktree` (optional) | — | new `worktrees.ts`, `discover.ts`, `index.ts` | `cli.ts`, `api.ts`, `export.ts`, `format.ts`, `server.ts`, `map.ts` | `SessionList`, `viewmodel` | — |
+| S-20 | `analyze.ts`, `shell-edits.ts`, `parse.ts`, `map-extract-py.ts` | — | yes | `read.ts`/`subagents.ts` (cross-file notifications) | `audit-status.test.ts` (+ script) | — | — |
+| S-21 | — | new response type | — | new `git.ts` (reuses S-19's runner) | `api.ts` (new route) | new view, `App`, `viewmodel` route | — |
+| S-08 | — | new response type | — | new cache | flags, `api.ts` route | `PromptTable` | — |
+
+### S-16: Documentation-only edits need no check
+
+- **Outcome:** Developer sees a prompt that only edited documentation (Markdown, reStructuredText, AsciiDoc, and README/LICENSE/CHANGELOG-style files) as `no-changes` with the reason "no code edits (documentation only)" instead of `unchecked`, and a prompt whose passing check was followed only by documentation edits stays `checked` ("pnpm test passed after last code edit; 1 documentation edit after it"); the files stay in the file list, steps and diffs; documentation files get no verification hints (`unchecked-edit`, `sensitive-path`, `public-surface`, test rules), only `large-change`.
+- **Change ID:** doc-edits
+- **Size:** S
+- **PRD refs:** FR-015 (PRD v3), FR-002; Business Logic decision (S-16)
+- **Prerequisites:** — (all v0.2 slices done)
+- **Parallel with:** S-17 (disjoint files: core analysis + goldens vs web)
+- **Blockers:** —
+- **Unknowns:**
+  - How many of the owner's real `unchecked` prompts are documentation-only or end with documentation edits after a passing check? Measured by the PRE/POST aggregate audit in the slice's last phase (local Claude only, counts only). — Owner: orchestrator. Block: no.
+- **Risk:** low; core-only, no schema or UI change. It changes the status rule, so the decision is recorded in the PRD next to the S-11 git-operation decision; `.mdx`, `.txt` (except the named files) and unknown shell-edit targets stay code. Plan: `context/changes/doc-edits/plan.md`.
+- **Status:** proposed (plan drafted, awaiting plan-review)
+
+### S-17: Triage in the browser ("needs attention" and keyboard)
+
+- **Outcome:** Developer narrows the prompt table to prompts that need attention (unchecked, failing or with review hints, the same rule as the summary's "Needs attention" section) with one click, sees "N need attention" in the session header and per session in the list (with the same filter there), moves between prompt rows with ↑/↓, expands a row with Enter, opens Steps/Map with `s`/`m` and goes back to the list with Escape; the filter lives in the hash (`#/session/<id>?show=attention`) so reload and back keep it. The web package gets a DOM test environment and its first interaction tests, which also cover existing controls (inherited toggle, Live pause, the S-07 play keys).
+- **Change ID:** prompt-triage
+- **Size:** M
+- **PRD refs:** FR-016, NFR keyboard operability (PRD v3); primary Success Criterion (< 2 minutes to find unchecked/failing prompts)
+- **Prerequisites:** —
+- **Parallel with:** S-16
+- **Blockers:** —
+- **Unknowns:**
+  - happy-dom or jsdom: whichever installs with a clean `pnpm audit --audit-level=high` and runs React 19 `act()` under vitest 4 (per-file `@vitest-environment`); decided in phase 1. — Owner: team. Block: no.
+  - Keys must not hijack page scrolling or screen readers: arrows act only while focus is on a row button (roving focus), single-letter keys only outside inputs. — Owner: team. Block: no.
+- **Risk:** low; web-only, no schema change; the one dependency of the batch is dev-only and not shipped (web is bundled into the CLI).
+- **Status:** proposed
+
+### S-18: Scoped checks flagged ("partially checked" as a hint)
+
+- **Outcome:** Developer sees, on a `checked` prompt whose deciding check ran only on part of the repository (test-runner path arguments, `cd <dir> && …`, `pnpm -C/--dir <dir>`, path-style `--filter ./pkg`, `npm --prefix <dir>`, `go test ./pkg/...`), a `check-scope` hint (warn) on each edited code file outside that scope and the reason suffix "(scoped to <scope>)"; the status stays `checked`.
+- **Change ID:** scoped-checks
+- **Size:** M
+- **PRD refs:** FR-017 (PRD v3); FR-002 Socrates note (partial coverage deferred to v2)
+- **Prerequisites:** S-16 (same files: `analyze.ts`, `hints.ts`, goldens; reason suffixes compose with S-16's)
+- **Parallel with:** S-19 under the schema-first rule (both add schema members)
+- **Blockers:** —
+- **Unknowns:**
+  - Which runner arguments are path scopes: vitest positional arguments are file-name substring filters, jest arguments are regexes, pytest takes paths or node ids, `go test` package patterns; `cargo test` name filters and named `--filter @scope/pkg` are not resolved (no hint, no node IO). Fixed as a table with tests in the plan. — Owner: team. Block: no.
+  - How often the deciding check is scoped on real logs (new aggregate counter in `scripts/audit-status.mjs`), to confirm `warn` severity. — Owner: orchestrator. Block: no.
+- **Risk:** medium: false positives when scoped tests import the edited code; mitigated by covering rules (a scope `tests/api` also covers paths with an `api` segment; `x.test.ts` covers `x.ts`), hint only, never a status, never a `high` severity.
+- **Status:** proposed
+
+### S-19: Sessions of all worktrees in one list
+
+- **Outcome:** Developer runs `lgtm-review` in the main checkout or any linked worktree and sees the sessions of every worktree of the repository (from `git worktree list`) in one list, with a Worktree column (path relative to the main checkout) and a worktree filter; steps, diffs, map and play of a worktree session use that worktree's directory; `--list`, `--json`, `--summary`, `--export` and `--archive` cover the same set; `--no-worktrees` keeps today's single-directory behaviour.
+- **Change ID:** worktree-sessions
+- **Size:** M
+- **PRD refs:** FR-018, NFR read-only git (PRD v3); FR-001 Socrates note ("no worktree filter in MVP")
+- **Prerequisites:** S-17 (same web files `SessionList.tsx`, `viewmodel.ts`; reuses the DOM test harness)
+- **Parallel with:** S-18 (schema-first rule), S-20
+- **Blockers:** —
+- **Unknowns:**
+  - Does Claude Code record sessions started in a worktree (including `claude --worktree` and `isolation: "worktree"` agents) under the project dir named after the worktree path? One aggregate count on the owner's logs before the plan (local Claude only). — Owner: orchestrator. Block: no.
+  - Sessions of worktrees git no longer lists (removed, pruned) are not discovered, and neither are their archive copies; documented, not solved. — Owner: team. Block: no.
+- **Risk:** medium: the "one `--dir` per server" assumption in `api.ts`, map, play and export becomes per-session; worktree paths come only from `git worktree list` run in `--dir` (fixed arguments, no shell), never from log content or a request.
+- **Status:** proposed
+
+### S-20: Status accuracy, round 2 (real-log follow-ups)
+
+- **Outcome:** Overall status match on the owner's real logs reaches >= 97% (95.3% on 2026-10-23) with prompts without subagents not regressing (>= 97.1%): an edit written by a redirect before the check in the same command (`cat > f <<EOF … EOF && pnpm test`) counts as before the check; a `sed -i` inside a `( … )` group after a check counts as after it; status-less task notifications (monitor events) are pinned by fixtures to never stop a background check; notifications are matched across the parent and subagent files; Write/Edit to temporary scratch paths outside the work tree need no check; Python import extraction no longer loses imports after a `#` comment that contains `"""`.
+- **Change ID:** status-accuracy-2
+- **Size:** M
+- **PRD refs:** FR-002, FR-004, FR-013; Success Criterion v3 (>= 97% on real logs)
+- **Prerequisites:** S-18 (same core analysis files and goldens)
+- **Parallel with:** S-19, S-21
+- **Blockers:** —
+- **Unknowns:**
+  - Baseline first: re-run the audit on main, because the empty-`bashEditDiff` fix (66a00af) was not in the last audited build (493a029); drop items it already fixed. — Owner: orchestrator. Block: no.
+  - Where Claude Code puts isolated agent worktrees: if under a temp root, the scratch rule must not treat their edits as scratch (subagent edits can simply be exempted). — Owner: team. Block: no.
+  - Why 121 of 606 task notifications match no launch in the same file (other session, subagent file, or noise). — Owner: orchestrator. Block: no.
+- **Risk:** low–medium; every case gets a synthetic fixture; the real-log audit stays orchestrator-only (no external models, aggregate counts only).
+- **Status:** proposed
+
+### S-21: Git cross-check ("what landed vs what the log shows")
+
+- **Outcome:** Developer opens a session's **Git cross-check** (web view and API) and sees which files git reports for the session's directory (uncommitted changes, and files changed by commits on the session's branch between its first and last record) that no prompt edited ("not in the log": formatter, generator, a shell edit the log missed, or a person), and which edited files git shows neither as uncommitted nor in those commits ("not in git": reverted, deleted again, outside the repository). Read-only git; statuses and hints never change.
+- **Change ID:** git-crosscheck
+- **Size:** M
+- **PRD refs:** FR-019, NFR read-only git (PRD v3); FR-004 Socrates note (git reconciliation deferred)
+- **Prerequisites:** S-19 (per-session directory and the read-only git runner)
+- **Parallel with:** S-20
+- **Blockers:** —
+- **Unknowns:**
+  - Commit window: committer dates vs session timestamps (rebase and amend move dates); `--since/--until` with a margin, stated in the view. — Owner: team. Block: no.
+  - Sessions started outside a repository (cwd is a parent directory): the cross-check is unavailable and says so. — Owner: team. Block: no.
+- **Risk:** medium; kept last among the deterministic slices because git state mixes the agent's work with the user's and other sessions'; it is labelled a cross-check and never feeds statuses or hints.
+- **Status:** proposed
+
+### S-08: Local LLM titles (opt-in, loopback only)
+
+- **Outcome:** Developer who runs a local model server opts in with `--llm-url http://127.0.0.1:<port> --llm-model <name>` and sees in the web UI a one-sentence, past-tense title per prompt, generated from a condensed and redacted view of the prompt's actions, marked "generated" and shown next to the template title; titles are cached on disk by input hash; summary and export keep template titles; without the flags nothing changes and no connection is made.
+- **Change ID:** llm-titles
+- **Size:** L
+- **PRD refs:** FR-020, NFR loopback-only LLM (PRD v3); `docs/PROPOSAL.md` §10
+- **Prerequisites:** S-17; owner decisions O-1..O-3
+- **Parallel with:** — (touches CLI flags, API, the prompt table and the schema)
+- **Blockers:** owner decisions (Open Roadmap Question 7): O-1 allow an LLM layer at all; O-2 backend: loopback OpenAI-compatible server only (Ollama, llama.cpp, LM Studio) or also `claude -p` (sends session content to Anthropic, so the "no data leaves the machine" guardrail would have to change); O-3 default model, and whether generated titles may appear in `--summary`/`--export`.
+- **Unknowns:**
+  - Title quality and latency of small local models on condensed turns; the cache (`~/.lgtm-review/cache`) is a new write path. — Owner: team. Block: no.
+- **Risk:** highest of the batch relative to its value: non-reproducible text in a deterministic tool and a new data path; kept last and gated. Reuses the reserved ID S-08 because the PRD, the proposal and the owner's decisions point to it.
+- **Status:** proposed (blocked: owner decisions)
+
+### Backlog handoff (v0.3)
+
+| Roadmap ID | Change ID         | Suggested issue title                                          | Ready for plan                           | Notes                                   |
+| ---------- | ----------------- | -------------------------------------------------------------- | ---------------------------------------- | --------------------------------------- |
+| S-16       | doc-edits         | Documentation-only edits need no check                         | plan drafted; next: plan-review          | wave 1                                  |
+| S-17       | prompt-triage     | "Needs attention" filters and keyboard navigation in the UI    | yes                                      | wave 1, parallel with S-16              |
+| S-18       | scoped-checks     | Flag checks that ran on only part of the repository            | after S-16 merges                        | wave 2                                  |
+| S-19       | worktree-sessions | One session list for all git worktrees                         | after S-17 merges; worktree count first  | wave 2, schema-first with S-18          |
+| S-20       | status-accuracy-2 | Status accuracy round 2 (real-log follow-ups)                  | after S-18 merges; re-audit first        | wave 3                                  |
+| S-21       | git-crosscheck    | Git cross-check of a session's edits                           | after S-19 merges                        | wave 3                                  |
+| S-08       | llm-titles        | Opt-in local LLM titles                                        | no: owner decisions O-1..O-3             | gated                                   |
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
@@ -193,22 +354,27 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 1. **Public repository name and trademark check for `lgtm-review`** — Owner: user. Block: first public release (post-MVP).
 2. **Credit / permission for the original idea author (prototype shown at the course live)** — Owner: user. Block: publishing the README.
-3. **Default LLM model for the summarizer** — Owner: decided in the plan of slice S-08 (parked). Block: S-08 only; not MVP.
+3. **Default LLM model for the summarizer** — Owner: user. Now part of question 7 (S-08 moved into the v0.3 extension as a gated slice). Block: S-08 only.
 4. **Timeline acknowledgment** — MVP is 7 weeks at ~5 h/week after-hours (> 3-week default); owner accepted on 2026-10-23. Target: first browser view (S-02) by about week 4. Block: none.
 5. **Decisions delegated by owner to the orchestrator** (non-goals, product framing: cli / large / no deadline; this roadmap's framing) — assumptions, owner may correct at any time. Block: roadmap-wide (soft).
-6. **Should the PRD be extended with requirements for the parked post-MVP slices (S-04..S-10) before they are planned?** — Owner: user. Block: any parked slice.
+6. **Should the PRD be extended with requirements for the parked post-MVP slices (S-04..S-10) before they are planned?** — Owner: user. Block: any parked slice. Answered for v0.3 by the orchestrator on delegation (2026-10-25): PRD v3 declares FR-015..FR-020 for the v0.3 slices; the isometric map and other agents stay parked.
+7. **LLM layer decisions for S-08 (owner only)** — O-1: allow an opt-in LLM layer at all (non-reproducible text in a deterministic tool)? O-2: backend: only a model server on the loopback interface (Ollama, llama.cpp, LM Studio; keeps "no data leaves the machine"), or also `claude -p` (sends condensed session content to Anthropic; needs a guardrail change)? O-3: default model (proposal: none, the user names it), and may generated titles appear in `--summary`/`--export` (proposal: no)? — Owner: user. Block: S-08 only.
 
 ## Parked
 
 Reserved IDs follow `docs/PROPOSAL.md` §17 so existing references (S-08, S-09) stay valid. None of these are planned until the PRD declares them.
 
 - **S-04: Isometric import map** — Why parked: PRD §Non-Goals; reduced 2D version moved to active section (S-04), isometric stays parked.
-- **S-08: LLM layer (titles and captions; default model decided in its plan)** — Why parked: PRD §Non-Goals; MVP titles come from templates and prompt text.
 - **S-10 (rest): hosted demo page** — Why parked: `docs/demo/index.html` (static export of a synthetic session) shipped 2026-10-23; hosting it (GitHub Pages) needs the owner.
-- **Agents other than Claude Code** — Why parked: PRD §Non-Goals.
-- **"Partially checked" coverage detection** — Why parked: PRD §Non-Goals (v2).
-- **Worktree filter in the session list** — Why parked: FR-001 note (all sessions of the repo path in MVP).
-- **Parallel worktrees** — Why parked: the MVP chain F-01 → S-01 → S-02 → S-03 is strictly sequential; the first parallel pairs appear post-MVP (S-03 ‖ S-04, S-07 ‖ S-08 per the proposal), capped at 2 by review capacity.
+- **Agents other than Claude Code** — Why parked: PRD §Non-Goals. A first step would be a read-only format spike (Codex CLI JSONL) feeding a PRD decision, not an adapter.
+- **A `partially-checked` status value** — Why parked: a fifth status touches every surface (terminal, summary, export, web, audit); v0.3 reports partial coverage as a hint instead (S-18).
+
+Moved out of Parked on 2026-10-25 (v0.3 extension):
+
+- **S-08: LLM layer** → v0.3 S-08 (opt-in, loopback only), blocked on question 7.
+- **"Partially checked" coverage detection** → v0.3 S-18 as the `check-scope` hint (FR-017).
+- **Worktree filter in the session list** → v0.3 S-19 (FR-018).
+- **Parallel worktrees** (was: the MVP chain is strictly sequential; parallel pairs post-MVP, capped at 2 by review capacity) → superseded by "Parallel work rules (v0.3)": at most two slices in flight, schema-first rule.
 
 ## Done
 
