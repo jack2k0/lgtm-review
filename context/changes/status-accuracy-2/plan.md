@@ -250,7 +250,7 @@ Labels: `expectedStatus`, `expectedRecommendation`, `expectedHints` (paths relat
 
 ### Phase 1: Python scanner
 
-- [ ] 1.1 `blankCommentsAndStrings` + tests; `pnpm check` green
+- [x] 1.1 `blankCommentsAndStrings` + tests; `pnpm check` green
 
 ### Phase 2: Scratch classifier
 
