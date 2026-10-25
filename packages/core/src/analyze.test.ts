@@ -762,3 +762,110 @@ describe("documentation edits (FR-015)", () => {
     expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test")]).reason).toBe("pnpm test passed after last edit");
   });
 });
+
+describe("scratch files (S-20)", () => {
+  const P = "/home/user/project";
+  const S = "/tmp/claude-1000/p/s/scratchpad";
+
+  const diffBash = (id: string, command: string, path = `${P}/src/merged.js`) => [
+    toolUse(id, "Bash", { command }),
+    toolResult(id, "", {
+      toolUseResult: {
+        bashEditDiff: { files: [{ filePath: path, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-a", "+b", "+c"] }] }] },
+      },
+    }),
+  ];
+  const withCwd = (line: string, cwd: string): string => {
+    const o = JSON.parse(line) as Record<string, unknown>;
+    o.cwd = cwd;
+    return JSON.stringify(o);
+  };
+  const editFrom = (id: string, cwd: string, file: string): string[] => {
+    const lines = edit(id, file);
+    lines[0] = withCwd(lines[0]!, cwd);
+    return lines;
+  };
+  const bashFrom = (id: string, cwd: string, command: string): string[] => {
+    const lines = bash(id, command);
+    lines[0] = withCwd(lines[0]!, cwd);
+    return lines;
+  };
+
+  test("SX-1: a scratch edit alone is no-changes and gets no hints", () => {
+    const p = one([prompt("q"), ...edit("e1", `${S}/probe.py`)]);
+    expect(p).toMatchObject({ status: "no-changes", reason: "no code edits (scratch files only)" });
+    expect(p.files.map((f) => f.path)).toEqual([`${S}/probe.py`]);
+    expect(p.hints).toEqual([]);
+  });
+
+  test("SX-2: scratch and documentation edits are no-changes", () => {
+    const p = one([prompt("q"), ...edit("e1", `${S}/probe.py`), ...edit("e2", `${P}/README.md`)]);
+    expect(p).toMatchObject({ status: "no-changes", reason: "no code edits (documentation and scratch files only)" });
+  });
+
+  test("SX-3: a scratch edit after a passing check keeps it checked", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...edit("e2", `${S}/results.txt`)]);
+    expect(p).toMatchObject({ status: "checked", reason: "pnpm test passed after last code edit" });
+  });
+
+  test("SX-4: documentation after a scratch edit keeps its own tail", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...edit("e2", `${S}/results.txt`), ...edit("e3", `${P}/README.md`)]);
+    expect(p.reason).toBe("pnpm test passed after last code edit; 1 documentation edit after it");
+  });
+
+  test("SX-5: a code and a scratch edit without a check are unchecked; only the code file is hinted", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...edit("e2", `${S}/copy.js`)]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+    expect(p.hints.map((h) => [h.rule, h.path])).toEqual([["unchecked-edit", F]]);
+  });
+
+  test("SX-6: an edit outside the session that is not temp or scratch stays code", () => {
+    const p = one([prompt("q"), ...edit("e1", "/home/user/other/src/a.ts")]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("SX-7: a temp path inside the call's own working directory stays code", () => {
+    const p = one([prompt("q"), ...editFrom("e1", "/tmp/wt", "/tmp/wt/src/a.ts")]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("SX-8: shell-heuristic targets resolve against the record cwd", () => {
+    const p = one([prompt("q"), ...bashFrom("b1", `${P}/packages/web`, "sed -i 's/a/b/' src/x.js")]);
+    expect(p.files.map((f) => f.path)).toEqual([`${P}/packages/web/src/x.js`]);
+  });
+
+  test("SX-9: documentation-only and git-only reasons are unchanged", () => {
+    expect(one([prompt("q"), ...edit("e1", `${P}/README.md`)])).toMatchObject({ status: "no-changes", reason: "no code edits (documentation only)" });
+    expect(one([prompt("q"), ...diffBash("b1", "git merge main")])).toMatchObject({ status: "no-changes", reason: "no edits (git operations only)" });
+  });
+});
+
+describe("background notifications across files (pinned)", () => {
+  test("BN-1: a notification in the parent resolves a subagent's background check", () => {
+    const head = [prompt("go"), ...edit("e1"), toolUse("ag", "Agent", { description: "helper" })];
+    const sub = [prompt("task"), ...bgBash("sb", "bg1", "pnpm test")];
+    const tail = [
+      toolResult("ag", "done"),
+      taskNotification({ taskId: "bg1", status: "completed", summary: 'Background command "pnpm test" completed (exit code 0)' }),
+    ];
+    const a = createAnalyzer();
+    for (const l of head) a.push(l);
+    a.addSubagent("ag", sub, { agentId: "a1", description: "helper" });
+    for (const l of tail) a.push(l);
+    expect(a.finish().prompts[0]).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit (by subagent helper)" });
+  });
+
+  test("BN-2: a notification in a subagent resolves the parent's background check", () => {
+    const head = [prompt("go"), ...edit("e1"), ...bgBash("b1", "bg1", "pnpm test"), toolUse("ag", "Agent", { description: "helper" })];
+    const sub = [
+      prompt("wait"),
+      taskNotification({ taskId: "bg1", status: "completed", summary: 'Background command "pnpm test" completed (exit code 0)' }),
+    ];
+    const tail = [toolResult("ag", "done")];
+    const a = createAnalyzer();
+    for (const l of head) a.push(l);
+    a.addSubagent("ag", sub, { agentId: "a1", description: "helper" });
+    for (const l of tail) a.push(l);
+    expect(a.finish().prompts[0]).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit" });
+  });
+});

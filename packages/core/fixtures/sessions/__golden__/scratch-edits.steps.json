@@ -1,0 +1,209 @@
+[
+  {
+    "index": 0,
+    "text": "Probe the parser in a scratch file.",
+    "status": "no-changes",
+    "reason": "no code edits (scratch files only)",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Create /tmp/claude-1000/project/session/scratchpad/probe.py (+3)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Creating /tmp/claude-1000/project/session/scratchpad/probe.py."
+        ],
+        "actions": [
+          {
+            "tool": "Write",
+            "summary": "/tmp/claude-1000/project/session/scratchpad/probe.py",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/tmp/claude-1000/project/session/scratchpad/probe.py"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Fix add, test, then note results in scratch.",
+    "status": "checked",
+    "reason": "pnpm test passed after last code edit",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:04.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:05.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:05.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:07.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running the tests."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:07.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "write",
+        "title": "Create /tmp/claude-1000/project/session/scratchpad/results.txt (+1)",
+        "startedAt": "2026-01-01T00:00:09.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Creating /tmp/claude-1000/project/session/scratchpad/results.txt."
+        ],
+        "actions": [
+          {
+            "tool": "Write",
+            "summary": "/tmp/claude-1000/project/session/scratchpad/results.txt",
+            "ok": true,
+            "ts": "2026-01-01T00:00:09.000Z"
+          }
+        ],
+        "files": [
+          "/tmp/claude-1000/project/session/scratchpad/results.txt"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Draft in scratch and update the README.",
+    "status": "no-changes",
+    "reason": "no code edits (documentation and scratch files only)",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:11.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Create /tmp/claude-1000/project/session/scratchpad/draft.ts (+1), edit README.md (+1 -1)",
+        "startedAt": "2026-01-01T00:00:12.000Z",
+        "durationMs": 4000,
+        "quotes": [
+          "Creating /tmp/claude-1000/project/session/scratchpad/draft.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Write",
+            "summary": "/tmp/claude-1000/project/session/scratchpad/draft.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:12.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "README.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          }
+        ],
+        "files": [
+          "/tmp/claude-1000/project/session/scratchpad/draft.ts",
+          "/home/user/project/README.md"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Change sub without testing; keep a scratch copy.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:16.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/sub.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/sub.js (+1 -1), create /tmp/claude-1000/project/session/scratchpad/sub.backup.js (+1)",
+        "startedAt": "2026-01-01T00:00:17.000Z",
+        "durationMs": 4000,
+        "quotes": [
+          "Editing /home/user/project/src/sub.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/sub.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:17.000Z"
+          },
+          {
+            "tool": "Write",
+            "summary": "/tmp/claude-1000/project/session/scratchpad/sub.backup.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:19.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/sub.js",
+          "/tmp/claude-1000/project/session/scratchpad/sub.backup.js"
+        ]
+      }
+    ]
+  }
+]

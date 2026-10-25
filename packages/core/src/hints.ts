@@ -211,6 +211,28 @@ export function isDocPath(path: string): boolean {
   return DOC_EXT_RE.test(name) || DOC_NAME_RE.test(name);
 }
 
+/** Temporary directories whose files are scratch when they lie outside the session (S-20). */
+const TEMP_ROOTS = ["/tmp/", "/var/tmp/", "/private/tmp/", "/private/var/folders/", "/var/folders/", "/dev/shm/"];
+
+/**
+ * Scratch file (S-20): an absolute path outside the session root and outside the tool call's working
+ * directory, not inside a Claude Code worktree (`/.claude/worktrees/`), and under a temp root or in a
+ * directory whose name starts with "scratch". Edits to it need no check.
+ */
+export function isScratchPath(path: string, sessionRoot: string | null, callCwd: string | null): boolean {
+  const p = path.replace(/\\/g, "/");
+  if (!p.startsWith("/")) return false;
+  const inside = (root: string | null): boolean => {
+    if (root === null || root === "") return false;
+    const r = root.replace(/\\/g, "/").replace(/\/+$/, "");
+    return r !== "" && (p === r || p.startsWith(`${r}/`));
+  };
+  if (inside(sessionRoot) || inside(callCwd)) return false;
+  if (p.includes("/.claude/worktrees/")) return false;
+  if (TEMP_ROOTS.some((t) => p.startsWith(t))) return true;
+  return p.split("/").slice(0, -1).some((d) => d.toLowerCase().startsWith("scratch"));
+}
+
 // --- rules -----------------------------------------------------------------------------------
 
 /** One successful file edit with the counters collected while parsing. */

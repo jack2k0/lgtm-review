@@ -1,0 +1,36 @@
+{
+  "fixture": "scratch-edits",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "only a scratch file written outside the session: no check needed"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "passing pnpm test after the code edit; the later scratch write does not invalidate it"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "scratch and documentation edits only: no check needed"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "unchecked-edit:src/sub.js"
+      ],
+      "note": "code edit without a check; the scratch copy adds no hint"
+    }
+  ]
+}

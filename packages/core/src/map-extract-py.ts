@@ -49,6 +49,80 @@ function lineAtOffset(lineStarts: readonly number[], offset: number): number {
 }
 
 /**
+ * Blanks comments and string literals (keeping newlines and offsets) so that only code is matched.
+ *
+ * One left-to-right scan with states code / comment / string. In code, `#` starts a comment to the
+ * end of the line, `'''` or `"""` starts a triple-quoted string ending at the same three characters,
+ * and `'` or `"` starts a single-line string ending at the same unescaped quote or at an unescaped
+ * end of line. A backslash inside a string skips the next character (a backslash-newline keeps the
+ * newline). Every character of a comment or string, including its quotes, becomes a space, except
+ * `\r` and `\n`. String prefixes (`r`, `b`, `f`, `u` and combinations) stay as code before the quote.
+ */
+function blankCommentsAndStrings(src: string): string {
+  const out = src.split("");
+  const blank = (index: number): void => {
+    const ch = src[index];
+    if (ch !== "\r" && ch !== "\n") out[index] = " ";
+  };
+  const n = src.length;
+  let i = 0;
+
+  while (i < n) {
+    const ch = src[i]!;
+
+    if (ch === "#") {
+      while (i < n && src[i] !== "\r" && src[i] !== "\n") {
+        blank(i);
+        i++;
+      }
+      continue;
+    }
+
+    if (ch === "'" || ch === '"') {
+      const quote = ch;
+      const triple = src.startsWith(quote.repeat(3), i);
+      const width = triple ? 3 : 1;
+      for (let k = 0; k < width; k++) blank(i + k);
+      i += width;
+
+      while (i < n) {
+        const c = src[i]!;
+        if (c === "\\") {
+          blank(i);
+          i++;
+          if (i < n) {
+            blank(i);
+            i++;
+          }
+          continue;
+        }
+        if (triple) {
+          if (src.startsWith(quote.repeat(3), i)) {
+            for (let k = 0; k < 3; k++) blank(i + k);
+            i += 3;
+            break;
+          }
+        } else if (c === quote) {
+          blank(i);
+          i++;
+          break;
+        } else if (c === "\r" || c === "\n") {
+          // An unterminated single-line string ends at the end of its line.
+          break;
+        }
+        blank(i);
+        i++;
+      }
+      continue;
+    }
+
+    i++;
+  }
+
+  return out.join("");
+}
+
+/**
  * Extracts Python import statements (`import ...`, `from ... import ...`).
  * Ordered by position in source.
  */
@@ -58,14 +132,8 @@ export function extractPythonImports(source: string): PythonImport[] {
   const lineStarts = computeLineStarts(source);
 
   // Pre-processing (preserving character count and exact offsets):
-  // 1. Triple-quoted strings (docstrings) -> replace non-newline chars with spaces
-  const withoutDocstrings = source.replace(
-    /(?:"""(?:\\.|[\s\S])*?"""|'''(?:\\.|[\s\S])*?''')/g,
-    (m) => m.replace(/[^\r\n]/g, " "),
-  );
-
-  // 2. Comments `# ...` -> replace with spaces
-  const withoutComments = withoutDocstrings.replace(/#[^\r\n]*/g, (m) => " ".repeat(m.length));
+  // 1-2. Comments and string literals (single, double, triple quoted) -> spaces
+  const withoutComments = blankCommentsAndStrings(source);
 
   // 3. Backslash continuation `\\[ \t]*\r?\n` -> replace with spaces
   const withoutBackslashes = withoutComments.replace(/\\(?:[ \t]*\r?\n)/g, (m) => " ".repeat(m.length));

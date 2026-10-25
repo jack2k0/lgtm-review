@@ -246,25 +246,25 @@ Labels: `expectedStatus`, `expectedRecommendation`, `expectedHints` (paths relat
 
 ### Phase 0: Baseline (orchestrator)
 
-- [ ] 0.1 baseline counts recorded; amendment decided
+- [x] 0.1 baseline counts recorded; amendment decided
 
 ### Phase 1: Python scanner
 
-- [ ] 1.1 `blankCommentsAndStrings` + tests; `pnpm check` green
+- [x] 1.1 `blankCommentsAndStrings` + tests; `pnpm check` green
 
 ### Phase 2: Scratch classifier
 
-- [ ] 2.1 `isScratchPath` + table; `pnpm check` green
+- [x] 2.1 `isScratchPath` + table; `pnpm check` green
 
 ### Phase 3: Wiring and pinned cases
 
-- [ ] 3.1 classes, status rule, hints, call cwd; SX-1..SX-9, BN-1..BN-2; no golden change; `pnpm check` green
+- [x] 3.1 classes, status rule, hints, call cwd; SX-1..SX-9, BN-1..BN-2; no golden change; `pnpm check` green
 
 ### Phase 4: Fixture and goldens
 
-- [ ] 4.1 `scratch-edits` fixture + labels + four new goldens only; `pnpm check` green
+- [x] 4.1 `scratch-edits` fixture + labels + four new goldens only; `pnpm check` green
 
 ### Phase 5: Orchestrator
 
-- [ ] 5.1 after-audit recorded
-- [ ] 5.2 README, PRD, roadmap, archive
+- [x] 5.1 after-audit recorded
+- [x] 5.2 README, PRD, roadmap, archive

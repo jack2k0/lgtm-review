@@ -1,0 +1,145 @@
+{
+  "sessionId": "scratch-edits",
+  "title": "Probe the parser in a scratch file.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Probe the parser in a scratch file.",
+      "status": "no-changes",
+      "reason": "no code edits (scratch files only)",
+      "files": [
+        {
+          "path": "/tmp/claude-1000/project/session/scratchpad/probe.py",
+          "kind": "A",
+          "added": 3,
+          "removed": 0,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000004",
+      "text": "Fix add, test, then note results in scratch.",
+      "status": "checked",
+      "reason": "pnpm test passed after last code edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/tmp/claude-1000/project/session/scratchpad/results.txt",
+          "kind": "A",
+          "added": 1,
+          "removed": 0,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000011",
+      "text": "Draft in scratch and update the README.",
+      "status": "no-changes",
+      "reason": "no code edits (documentation and scratch files only)",
+      "files": [
+        {
+          "path": "/home/user/project/README.md",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/tmp/claude-1000/project/session/scratchpad/draft.ts",
+          "kind": "A",
+          "added": 1,
+          "removed": 0,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000016",
+      "text": "Change sub without testing; keep a scratch copy.",
+      "status": "unchecked",
+      "reason": "no checks ran",
+      "files": [
+        {
+          "path": "/home/user/project/src/sub.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/tmp/claude-1000/project/session/scratchpad/sub.backup.js",
+          "kind": "A",
+          "added": 1,
+          "removed": 0,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/sub.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    }
+  ],
+  "warnings": []
+}
