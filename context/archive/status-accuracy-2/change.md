@@ -1,10 +1,10 @@
 ---
 change_id: status-accuracy-2
 title: Status accuracy, round 2 — scratch files, call working directory, Python comments, pinned notification cases
-status: planned
+status: done
 created: 2026-10-25
 updated: 2026-10-25
-archived_at: null
+archived_at: 2026-10-25
 ---
 
 ## Notes

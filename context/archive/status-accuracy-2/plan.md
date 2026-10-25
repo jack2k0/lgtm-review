@@ -246,7 +246,7 @@ Labels: `expectedStatus`, `expectedRecommendation`, `expectedHints` (paths relat
 
 ### Phase 0: Baseline (orchestrator)
 
-- [ ] 0.1 baseline counts recorded; amendment decided
+- [x] 0.1 baseline counts recorded; amendment decided
 
 ### Phase 1: Python scanner
 
@@ -266,5 +266,5 @@ Labels: `expectedStatus`, `expectedRecommendation`, `expectedHints` (paths relat
 
 ### Phase 5: Orchestrator
 
-- [ ] 5.1 after-audit recorded
-- [ ] 5.2 README, PRD, roadmap, archive
+- [x] 5.1 after-audit recorded
+- [x] 5.2 README, PRD, roadmap, archive
