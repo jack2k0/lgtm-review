@@ -360,5 +360,5 @@ Keyboard in the prompt table: Tab to a prompt, then ↑/↓ move between prompts
 
 ### Phase 6: Orchestrator
 
-- [ ] 6.1 browser check recorded
-- [ ] 6.2 roadmap, PRD, archive
+- [x] 6.1 browser check recorded
+- [x] 6.2 roadmap, PRD, archive
