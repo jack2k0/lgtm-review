@@ -296,7 +296,7 @@ D7. Tests: `agg.scopedCheckPrompts` equals the number of CLI-JSON prompts whose 
 
 ### Phase 1: checkScope
 
-- [ ] 1.1 `checkScope` + table tests; `pnpm check` green
+- [x] 1.1 `checkScope` + table tests; `pnpm check` green
 
 ### Phase 2: Resolution and coverage
 

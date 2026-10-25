@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
+import { checkScope, classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
 
 const repo: RepoScripts = { packageScripts: ["verify"], makeTargets: ["ci"], scriptFiles: ["tools/run-all.sh"] };
 
@@ -273,5 +273,60 @@ describe("findMaskedFailure", () => {
 
   test("never throws", () => {
     expect(findMaskedFailure(undefined as unknown as string)).toBeNull();
+  });
+});
+
+describe("checkScope", () => {
+  const rows: [string, string[] | null][] = [
+    ["pnpm test", ["."]],
+    ["cd packages/web && pnpm test", ["packages/web"]],
+    ["cd packages/web && cd src && pnpm test", ["packages/web/src"]],
+    ["cd /abs/x && pnpm test", ["/abs/x"]],
+    ["cd $DIR && pnpm test", null],
+    ["cd && pnpm test", null],
+    ["cd - && pnpm test", null],
+    ["cd ~/x && pnpm test", null],
+    ["pushd packages/core && pnpm test", ["packages/core"]],
+    ["pnpm -C packages/web test", ["packages/web"]],
+    ["pnpm --dir=packages/web test", ["packages/web"]],
+    ["pnpm --filter ./packages/web test", ["packages/web"]],
+    ["pnpm --filter '{packages/web}' test", ["packages/web"]],
+    ["pnpm --filter ./packages/web... test", ["packages/web"]],
+    ["pnpm -F @acme/web test", null],
+    ["pnpm --filter web test", null],
+    ["pnpm -r test", ["."]],
+    ["npm --prefix packages/web test", ["packages/web"]],
+    ["npm -w packages/web test", ["packages/web"]],
+    ["npm --workspace=@acme/web test", null],
+    ["yarn workspace web test", null],
+    ["yarn --cwd packages/web test", ["packages/web"]],
+    ["pnpm exec vitest run tests/api", ["tests/api"]],
+    ["vitest run -t adds src/math", ["src/math"]],
+    ["vitest related src/a.ts", null],
+    ["npx vitest --dir packages/core", ["packages/core"]],
+    ["jest --testPathPattern api", ["api"]],
+    ["pytest tests/test_cart.py::test_total -q", ["tests/test_cart.py"]],
+    ["uv run pytest tests/test_cart.py", ["tests/test_cart.py"]],
+    ["pytest -k total", ["."]],
+    ["python -m pytest tests/unit", ["tests/unit"]],
+    ["go test ./...", ["."]],
+    ["go test -run TestX ./internal/foo/...", ["internal/foo"]],
+    ["go test github.com/x/y", null],
+    ["tsc -p packages/core/tsconfig.json", ["packages/core"]],
+    ["tsc -p packages/core", ["packages/core"]],
+    ["tsc --noEmit", ["."]],
+    ["eslint 'src/**/*.ts'", ["src"]],
+    ["ruff check app/", ["app"]],
+    ["mypy -p pkg", null],
+    ["cargo test -p core", null],
+    ["make -C backend test", ["backend"]],
+    ["bash scripts/check.sh", null],
+    ["gh run watch 1 --exit-status", null],
+    ["pnpm lint && cd packages/web && pnpm test", [".", "packages/web"]],
+    ["pnpm test && pnpm --filter @x/y test", null],
+    ["ls src", null],
+  ];
+  test.each(rows)("%s", (cmd, expected) => {
+    expect(checkScope(cmd)).toEqual(expected);
   });
 });
