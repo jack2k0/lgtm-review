@@ -127,7 +127,8 @@ export type Route =
   | { kind: "steps"; id: string; index: number }
   | { kind: "diff"; id: string; index: number; path: string }
   | { kind: "map"; id: string; index: number | null }
-  | { kind: "play"; id: string; index: number; beat: number };
+  | { kind: "play"; id: string; index: number; beat: number }
+  | { kind: "git"; id: string };
 
 const INDEX_RE = /^(?:0|[1-9]\d{0,8})$/;
 
@@ -174,7 +175,7 @@ export function parseRoute(hash: string): Route {
     const id = decode(session[1]!);
     return id === null ? { kind: "list" } : { kind: "session", id, show: "attention" };
   }
-  const m = /^#\/session\/([^/?]+)(?:\/prompt\/([^/?]+))?(?:\/(map|diff|play)(?:[?]([^#]*))?)?$/.exec(hash);
+  const m = /^#\/session\/([^/?]+)(?:\/prompt\/([^/?]+))?(?:\/(map|diff|play|git)(?:[?]([^#]*))?)?$/.exec(hash);
   if (!m) return { kind: "list" };
   const id = decode(m[1]!);
   if (id === null) return { kind: "list" };
@@ -184,6 +185,7 @@ export function parseRoute(hash: string): Route {
   if (index === undefined) {
     if (action === undefined && query === undefined) return { kind: "session", id };
     if (action === "map" && query === undefined) return { kind: "map", id, index: null };
+    if (action === "git" && query === undefined) return { kind: "git", id };
     return { kind: "list" };
   }
   if (!INDEX_RE.test(index)) return { kind: "list" };
@@ -231,6 +233,8 @@ export function routeHref(r: Route): string {
       return r.beat <= 1
         ? `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}/play`
         : `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}/play?beat=${r.beat}`;
+    case "git":
+      return `#/session/${encodeURIComponent(r.id)}/git`;
   }
 }
 

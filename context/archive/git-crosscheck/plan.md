@@ -278,17 +278,17 @@ D4. Tests:
 
 ### Phase 1: Core node
 
-- [ ] 1.1 `git.ts` runner, parsers, `gitCrosscheck` + tests; `pnpm check` green
+- [x] 1.1 `git.ts` runner, parsers, `gitCrosscheck` + tests; `pnpm check` green
 
 ### Phase 2: API
 
-- [ ] 2.1 `/api/sessions/:id/git` + tests; `pnpm check` green
+- [x] 2.1 `/api/sessions/:id/git` + tests; `pnpm check` green
 
 ### Phase 3: Web
 
-- [ ] 3.1 route, fetch, `GitView`, link, Refresh + tests; `pnpm check` green
+- [x] 3.1 route, fetch, `GitView`, link, Refresh + tests; `pnpm check` green
 
 ### Phase 4: Orchestrator
 
-- [ ] 4.1 README text, browser check recorded
-- [ ] 4.2 roadmap, PRD, archive
+- [x] 4.1 README text, browser check recorded
+- [x] 4.2 roadmap, PRD, archive
