@@ -282,7 +282,7 @@ D4. Tests:
 
 ### Phase 2: API
 
-- [ ] 2.1 `/api/sessions/:id/git` + tests; `pnpm check` green
+- [x] 2.1 `/api/sessions/:id/git` + tests; `pnpm check` green
 
 ### Phase 3: Web
 

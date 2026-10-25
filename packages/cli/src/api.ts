@@ -1,9 +1,9 @@
 import { realpathSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { analyzeFile, analyzeFileDetail, discoverRootSessions, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile, type SessionRoot } from "@lgtm/core/node";
+import { analyzeFile, analyzeFileDetail, discoverRootSessions, gitCrosscheck, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile, type SessionRoot } from "@lgtm/core/node";
 import { buildBeats, markInherited, needsAttention } from "@lgtm/core";
-import type { Analyzer, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
+import type { Analyzer, GitCrosscheckResponse, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
 import { planImportMap, toRepoRelative } from "./map.js";
 import { sortSessions } from "./format.js";
 import { etagFor, ifNoneMatch, sendJson, sendNotModified, type ApiHandler } from "./http.js";
@@ -419,9 +419,20 @@ export function createApi(opts: ServerOptions): ApiHandler {
     return true;
   }
 
+  async function gitRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, files: SessionFile[]): Promise<boolean> {
+    if (!file || (await versionOf(file)) === null) return false;
+    const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
+    if (!analysis) return false;
+    const sessionFiles = [...new Set(analysis.prompts.filter((p) => p.inheritedFrom === undefined).flatMap((p) => p.files.map((f) => f.path)))];
+    const result = await gitCrosscheck({ dir: file.root ?? opts.dir, branch: analysis.branch, startedAt: analysis.startedAt, endedAtMs: file.mtimeMs, sessionFiles });
+    const body: GitCrosscheckResponse = { sessionId: file.id, ...result };
+    reply(req, res, etagFor(`git\0${file.id}\0${JSON.stringify(body)}`), body);
+    return true;
+  }
+
   return async (req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> => {
     const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
-    const match = /^\/api\/sessions(?:\/([^/]+)(?:\/prompts\/([^/]+)(\/diff|\/play)?|(\/map))?)?$/.exec(path);
+    const match = /^\/api\/sessions(?:\/([^/]+)(?:\/prompts\/([^/]+)(\/diff|\/play)?|(\/map)|(\/git))?)?$/.exec(path);
     if (!match) return false;
     try {
       const files = await discover();
@@ -442,6 +453,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
       // The id is only ever compared against the discovered list; it never becomes a path.
       const file = files.find((f) => f.id === id);
       if (match[4] !== undefined) return await mapRoute(req, res, file, files, stamp);
+      if (match[5] !== undefined) return await gitRoute(req, res, file, files);
       if (match[3] === "/play") return await playRoute(req, res, file, files, stamp, match[2]);
       if (match[2] !== undefined) return await promptRoute(req, res, file, file ? stamp : null, match[2], match[3] === "/diff");
       if (!file || (await versionOf(file)) === null) return false;
