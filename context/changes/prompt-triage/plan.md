@@ -340,7 +340,7 @@ Keyboard in the prompt table: Tab to a prompt, then ↑/↓ move between prompts
 
 ### Phase 1: DOM test environment
 
-- [ ] 1.1 jsdom 30.1.2 (exact, dev) + `testing/dom.ts` + `testing/fixtures.ts`; C1-C5 green; audit clean; `pnpm check` green
+- [x] 1.1 jsdom 30.1.2 (exact, dev) + `testing/dom.ts` + `testing/fixtures.ts`; C1-C5 green; audit clean; `pnpm check` green
 
 ### Phase 2: Shared rule and session count
 
