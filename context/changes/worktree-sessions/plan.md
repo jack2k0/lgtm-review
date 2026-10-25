@@ -213,7 +213,7 @@ D6. Tests:
 
 ### Phase 1: Core node
 
-- [ ] 1.1 `worktrees.ts`, `SessionRoot`, `discoverRootSessions` + tests; `pnpm check` green
+- [x] 1.1 `worktrees.ts`, `SessionRoot`, `discoverRootSessions` + tests; `pnpm check` green
 
 ### Phase 2: CLI commands
 
