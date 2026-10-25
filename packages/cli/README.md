@@ -119,6 +119,10 @@ Resuming or forking a Claude Code session copies the earlier prompts (same promp
 
 Claude Code stores each session under the directory it was started in, so sessions of a linked git worktree (`git worktree add`, or `claude --worktree`, which creates worktrees under `.claude/worktrees/`) belong to that worktree. lgtm-review asks git once per run for the repository's worktrees (`git worktree list`, read-only) and shows the sessions of all of them: the terminal list marks them `[worktree ../name]`, `--json` and the API carry `worktree` (the path relative to the main checkout, `.` for the main checkout), and the web list gets a Worktree column and filter. Steps, diffs, the import map and play of a worktree session use that worktree's directory; `--export` redacts its path as `<repo>`. `--archive` mirrors every worktree's sessions. Worktrees that git no longer lists, and their archived sessions, are not shown; a worktree added while the UI runs appears after a restart. Use `--no-worktrees` for the sessions of `--dir` only.
 
+## Git cross-check
+
+Each session has a **Git cross-check** view (link next to Map; API `GET /api/sessions/<id>/git`). It runs read-only git in the session's directory (`rev-parse`, `status`, `check-ref-format`, `log --no-merges`) when you open it or press Refresh, and compares what git shows with the files the session's own prompts edited: files that are uncommitted, or changed by commits of the session's branch between its start and its log's last write (±10 minutes, by committer date), but edited by no prompt are listed as **not in the log** (your own change, a formatter or generator, or a shell edit the log does not show); files the session edited that git shows neither way are **not in git** (reverted, deleted again, or committed outside the window). Files outside the repository are only counted. The view never changes a status, a reason or a hint.
+
 ## Summary
 
 ```

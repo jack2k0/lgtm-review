@@ -290,5 +290,5 @@ D4. Tests:
 
 ### Phase 4: Orchestrator
 
-- [ ] 4.1 README text, browser check recorded
-- [ ] 4.2 roadmap, PRD, archive
+- [x] 4.1 README text, browser check recorded
+- [x] 4.2 roadmap, PRD, archive

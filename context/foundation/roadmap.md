@@ -200,7 +200,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-18 | scoped-checks     | see a `check-scope` hint when the check behind `checked` ran only on part of the repository                                   | M    | S-16                       | S-19 (schema-first rule)     | FR-017                         | done |
 | S-19 | worktree-sessions | see the sessions of every git worktree of the repository in one list                                                          | M    | S-17                       | S-18 (schema-first rule), S-20 | FR-018, NFR read-only git    | done |
 | S-20 | status-accuracy-2 | rely on >= 97% status match on real logs (in-command order, background notifications, scratch files, Python comments)         | M    | S-18                       | S-19, S-21                   | FR-002, FR-004, FR-013, SC v3  | done |
-| S-21 | git-crosscheck    | compare what a session's prompts edited with what git shows for that directory                                                | M    | S-19                       | S-20                         | FR-019, NFR read-only git      | proposed (plan drafted) |
+| S-21 | git-crosscheck    | compare what a session's prompts edited with what git shows for that directory                                                | M    | S-19                       | S-20                         | FR-019, NFR read-only git      | done |
 | S-08 | llm-titles        | opt in to one-sentence prompt titles from a local model server (loopback only)                                                | L    | S-17 + owner decisions     | —                            | FR-020, NFR loopback LLM       | proposed (blocked)      |
 
 Waves: **1** S-16 ‖ S-17 → **2** S-18 ‖ S-19 → **3** S-20 ‖ S-21 → **gated** S-08.
@@ -313,7 +313,7 @@ Files each slice is expected to touch (for the parallel check):
   - Commit window: committer dates vs session timestamps (rebase and amend move dates); `--since/--until` with a margin, stated in the view. — Owner: team. Block: no.
   - Sessions started outside a repository (cwd is a parent directory): the cross-check is unavailable and says so. — Owner: team. Block: no.
 - **Risk:** medium; kept last among the deterministic slices because git state mixes the agent's work with the user's and other sessions'; it is labelled a cross-check and never feeds statuses or hints.
-- **Status:** proposed (plan drafted: `context/changes/git-crosscheck/plan.md`, incl. the wave-3 schema pre-commit)
+- **Status:** done (2026-10-25; phases Agy (Gemini 3.8 Flash) x3, 0 fixes; browser view pending for the owner, `context/archive/git-crosscheck/reviews/check.md`)
 
 ### S-08: Local LLM titles (opt-in, loopback only)
 
@@ -338,7 +338,7 @@ Files each slice is expected to touch (for the parallel check):
 | S-18       | scoped-checks     | Flag checks that ran on only part of the repository            | done                                     | wave 2; the only wave-2 golden writer   |
 | S-19       | worktree-sessions | One session list for all git worktrees                         | done                                     | wave 2, schema-first with S-18          |
 | S-20       | status-accuracy-2 | Status accuracy round 2 (real-log follow-ups)                  | done                                     | wave 3; the only wave-3 golden writer   |
-| S-21       | git-crosscheck    | Git cross-check of a session's edits                           | plan drafted; schema pre-commit first    | wave 3                                  |
+| S-21       | git-crosscheck    | Git cross-check of a session's edits                           | done                                     | wave 3                                  |
 | S-08       | llm-titles        | Opt-in local LLM titles                                        | no: owner decisions O-1..O-3             | gated                                   |
 
 ## Backlog Handoff

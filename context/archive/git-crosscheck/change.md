@@ -1,10 +1,10 @@
 ---
 change_id: git-crosscheck
 title: Git cross-check — what git shows for a session's directory next to what its prompts edited
-status: planned
+status: done
 created: 2026-10-25
 updated: 2026-10-25
-archived_at: null
+archived_at: 2026-10-25
 ---
 
 ## Notes
