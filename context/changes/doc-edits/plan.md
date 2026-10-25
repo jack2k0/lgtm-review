@@ -219,7 +219,7 @@ Not for implementers. Real logs are read only by local Claude subagents; nothing
 
 ### Phase 3: Audit counter and README
 
-- [ ] 3.1 `docEditPrompts` in the audit script with tests; README; `pnpm check` green
+- [x] 3.1 `docEditPrompts` in the audit script with tests; README; `pnpm check` green
 
 ### Phase 4: Audit and docs (orchestrator)
 

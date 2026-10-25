@@ -38,6 +38,9 @@ describe("scripts/audit-status.mjs", () => {
     expect(agg.prompts).toBe(prompts.length);
     for (const s of ["checked", "unchecked", "failing", "no-changes"] as const) expect(agg.status[s]).toBe(prompts.filter((p) => p.status === s).length);
     expect(agg.shellEditPrompts).toBeGreaterThan(0);
+    const docRe = /^no code edits \(documentation only\)|; \d+ documentation edits? after it/;
+    expect(agg.docEditPrompts).toBe(prompts.filter((p) => docRe.test(p.reason)).length);
+    expect(agg.docEditPrompts).toBeGreaterThan(0);
     expect(agg.partial).toBe(prompts.filter((p) => p.partial).length);
     // Only numbers (and null percentages): no strings anywhere in the output.
     const strings: string[] = [];
@@ -52,6 +55,7 @@ describe("scripts/audit-status.mjs", () => {
     expect(r.stdout).toMatch(/^prompts: \d+$/m);
     expect(r.stdout).toMatch(/partial .*: \d+ \(\d/);
     expect(r.stdout).toMatch(/heuristic shell edits: \d+ \(/);
+    expect(r.stdout).toMatch(/^prompts with documentation edits not counted: \d+ \(/m);
     expect(r.stdout).not.toContain("/home/user");
     expect(r.stdout).not.toContain("Port the tests");
     expect(r.stdout.trim().split("\n").length).toBeLessThanOrEqual(10);
