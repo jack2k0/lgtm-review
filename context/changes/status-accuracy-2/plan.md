@@ -254,7 +254,7 @@ Labels: `expectedStatus`, `expectedRecommendation`, `expectedHints` (paths relat
 
 ### Phase 2: Scratch classifier
 
-- [ ] 2.1 `isScratchPath` + table; `pnpm check` green
+- [x] 2.1 `isScratchPath` + table; `pnpm check` green
 
 ### Phase 3: Wiring and pinned cases
 

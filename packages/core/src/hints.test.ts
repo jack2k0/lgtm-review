@@ -6,6 +6,7 @@ import {
   isConfigPath,
   isDocPath,
   isManifestPath,
+  isScratchPath,
   isTestPath,
   publicSurfaceKind,
   recommend,
@@ -211,6 +212,29 @@ describe("isDocPath", () => {
     ["history.py", false],
   ])("%s => %s", (path, expected) => {
     expect(isDocPath(path)).toBe(expected);
+  });
+});
+
+describe("isScratchPath", () => {
+  test.each<[string, string | null, string | null, boolean]>([
+    ["/tmp/claude-1000/x/scratchpad/a.py", "/home/u/repo", "/home/u/repo", true],
+    ["/tmp/notes.ts", "/home/u/repo", null, true],
+    ["/var/tmp/a.js", "/home/u/repo", null, true],
+    ["/private/var/folders/ab/T/x.ts", "/Users/u/repo", null, true],
+    ["/home/u/scratch/a.py", "/home/u/repo", null, true],
+    ["/home/u/work/scratchpad/b.go", "/home/u/repo", null, true],
+    ["/home/u/repo/src/a.ts", "/home/u/repo", null, false],
+    ["/home/u/repo/scratch/a.ts", "/home/u/repo", null, false],
+    ["/tmp/repo/src/a.ts", "/tmp/repo", null, false],
+    ["/tmp/wt/src/a.ts", "/home/u/repo", "/tmp/wt", false],
+    ["/tmp/x/.claude/worktrees/w/a.ts", "/home/u/repo", null, false],
+    ["/home/u/other-repo/src/a.ts", "/home/u/repo", null, false],
+    ["src/a.ts", "/home/u/repo", null, false],
+    ["(shell edit)", "/home/u/repo", null, false],
+    ["/tmp/a.ts", null, null, true],
+    ["C:\\tmp\\a.ts", null, null, false],
+  ])("%s (%s, %s) => %s", (path, sessionRoot, callCwd, expected) => {
+    expect(isScratchPath(path, sessionRoot, callCwd)).toBe(expected);
   });
 });
 
