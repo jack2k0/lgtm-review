@@ -214,8 +214,8 @@ Not for implementers. Real logs are read only by local Claude subagents; nothing
 
 ### Phase 2: Status rule, fixture and goldens
 
-- [ ] 2.1 `EditRec.doc` + `judge()` with DOC-1..DOC-13
-- [ ] 2.2 fixture `doc-edits` + labels, `shell-edits` label, exactly the D7 goldens; `pnpm check` green
+- [x] 2.1 `EditRec.doc` + `judge()` with DOC-1..DOC-13
+- [x] 2.2 fixture `doc-edits` + labels, `shell-edits` label, exactly the D7 goldens; `pnpm check` green
 
 ### Phase 3: Audit counter and README
 

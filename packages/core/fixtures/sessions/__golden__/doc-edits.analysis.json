@@ -1,0 +1,186 @@
+{
+  "sessionId": "doc-edits",
+  "title": "Fix add, run the tests, then note it in the changelog.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Fix add, run the tests, then note it in the changelog.",
+      "status": "checked",
+      "reason": "pnpm test passed after last code edit; 1 documentation edit after it",
+      "files": [
+        {
+          "path": "/home/user/project/CHANGELOG.md",
+          "kind": "M",
+          "added": 2,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000008",
+      "text": "Update the guide and the README.",
+      "status": "no-changes",
+      "reason": "no code edits (documentation only)",
+      "files": [
+        {
+          "path": "/home/user/project/README.md",
+          "kind": "A",
+          "added": 1,
+          "removed": 0,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/docs/guide.md",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000013",
+      "text": "Add sub and document it, no need to test.",
+      "status": "unchecked",
+      "reason": "no checks ran",
+      "files": [
+        {
+          "path": "/home/user/project/README.md",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/sub.js",
+          "kind": "A",
+          "added": 1,
+          "removed": 0,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/sub.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000018",
+      "text": "Fix the parser and note what still fails.",
+      "status": "failing",
+      "reason": "pnpm test failed: Tests: 1 failed, 2 passed",
+      "files": [
+        {
+          "path": "/home/user/project/docs/notes.md",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/parser.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 2000
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (33%), 1 check",
+      "hints": [],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 4,
+      "uuid": "00000000-0000-4000-8000-000000000025",
+      "text": "Tighten the security policy and the auth docs.",
+      "status": "no-changes",
+      "reason": "no code edits (documentation only)",
+      "files": [
+        {
+          "path": "/home/user/project/SECURITY.md",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/docs/auth/login.md",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    }
+  ],
+  "warnings": []
+}

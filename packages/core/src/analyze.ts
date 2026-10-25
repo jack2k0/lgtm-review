@@ -1,7 +1,7 @@
 import { classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
 import { classifyShellMutation, resolveTarget } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
-import { computeHints, emptyStats, recommend, type EditEvidence, type EditStats } from "./hints.js";
+import { computeHints, emptyStats, isDocPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
 import { createParser, type Event, type TaskNotificationEvent, type ToolInput, type ToolResultEvent } from "./parse.js";
 import { ACTIONS_MAX, buildSteps, failureExcerpt, kindOf, oneLine, QUOTES_PER_STEP, type ActionRec } from "./steps.js";
 import { actionPhase, createTimingTracker, parseTs, type TimingTracker } from "./timing.js";
@@ -75,6 +75,8 @@ interface EditRec {
   files: FileTouch[];
   /** Produced by a command whose only mutating segments are git operations: never changes the status. */
   gitOp: boolean;
+  /** Every file of the edit is documentation: listed, never changes the status (FR-015). */
+  doc: boolean;
   /** Agent id of the subagent that made the edit; `""` for the parent thread. */
   thread: string;
 }
@@ -220,9 +222,13 @@ function plural(n: number, word: string): string {
 function judge(p: PromptState, by: (thread: string) => string): { status: Status; reason: string } {
   const via = (thread: string): string => (thread === "" ? "" : ` (by subagent ${by(thread)})`);
   if (p.edits.length === 0) return { status: "no-changes", reason: "no edits" };
-  // Git operations (merge, rebase, checkout, ...) bring in other people's changes: they never move the status.
-  const edits = p.edits.filter((e) => !e.gitOp);
-  if (edits.length === 0) return { status: "no-changes", reason: "no edits (git operations only)" };
+  // Git operations bring in other people's changes and documentation needs no check (FR-015): neither moves the status.
+  const edits = p.edits.filter((e) => !e.gitOp && !e.doc);
+  if (edits.length === 0) {
+    return p.edits.some((e) => !e.gitOp)
+      ? { status: "no-changes", reason: "no code edits (documentation only)" }
+      : { status: "no-changes", reason: "no edits (git operations only)" };
+  }
   const lastEdit = edits.reduce((m, e) => Math.max(m, e.seq), -1);
   const real = p.checks.filter((c) => !c.ignored);
   const completed = real.filter((c) => c.completed);
@@ -245,6 +251,13 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
     }
     if (lastCompleted.exit === 0) {
       const note = lastCompleted.probe ? " (edits may have been reverted)" : lastCompleted.unreliable ? " (exit code not verified)" : "";
+      const docsAfter = p.edits.filter((e) => e.doc && !e.gitOp && e.seq > lastCompleted.coveredSeq).length;
+      if (docsAfter > 0) {
+        return {
+          status: "checked",
+          reason: `${lastCompleted.label} passed after last code edit${note}${via(lastCompleted.thread)}; ${plural(docsAfter, "documentation edit")} after it`,
+        };
+      }
       return { status: "checked", reason: `${lastCompleted.label} passed after last edit${note}${via(lastCompleted.thread)}` };
     }
     const out = failureOutput(lastCompleted.output);
@@ -578,7 +591,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           }
         }
         if (touches.length > 0) {
-          use.prompt.edits.push({ seq: seqAt, files: touches, gitOp, thread: use.thread });
+          use.prompt.edits.push({ seq: seqAt, files: touches, gitOp, doc: touches.every((t) => isDocPath(t.path)), thread: use.thread });
           if (act) act.edits = touches.map((t) => ({ path: t.path, kind: t.kind, added: t.added, removed: t.removed }));
         }
         return;

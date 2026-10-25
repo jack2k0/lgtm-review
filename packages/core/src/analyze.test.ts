@@ -589,3 +589,86 @@ describe("background checks resolved by task notifications", () => {
     expect(a.finish().prompts[0]).toMatchObject({ status: "checked" });
   });
 });
+
+describe("documentation edits (FR-015)", () => {
+  const P = "/home/user/project/";
+  const diffBash = (id: string, command: string, paths: string[] = [`${P}src/merged.js`]) => [
+    toolUse(id, "Bash", { command }),
+    toolResult(id, "", {
+      toolUseResult: {
+        bashEditDiff: { files: paths.map((filePath) => ({ filePath, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-a", "+b", "+c"] }] })) },
+      },
+    }),
+  ];
+
+  test("DOC-1: doc edit after a passing check keeps it checked", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...edit("e2", `${P}README.md`)]);
+    expect(p).toMatchObject({ status: "checked", reason: "pnpm test passed after last code edit; 1 documentation edit after it" });
+  });
+
+  test("DOC-2: two doc edits are counted", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...edit("e2", `${P}README.md`), ...edit("e3", `${P}docs/a.rst`)]);
+    expect(p.status).toBe("checked");
+    expect(p.reason.endsWith("; 2 documentation edits after it")).toBe(true);
+  });
+
+  test("DOC-3: only doc edits => no-changes, files listed", () => {
+    const p = one([prompt("q"), ...edit("e1", `${P}README.md`), ...edit("e2", `${P}LICENSE`)]);
+    expect(p).toMatchObject({ status: "no-changes", reason: "no code edits (documentation only)" });
+    expect(p.files).toHaveLength(2);
+  });
+
+  test("DOC-4: doc edit plus git operation => documentation only", () => {
+    const p = one([prompt("q"), ...edit("e1", `${P}README.md`), ...diffBash("b1", "git merge main")]);
+    expect(p).toMatchObject({ status: "no-changes", reason: "no code edits (documentation only)" });
+  });
+
+  test("DOC-5: only git operations keep their reason", () => {
+    expect(one([prompt("q"), ...diffBash("b1", "git merge main")])).toMatchObject({ status: "no-changes", reason: "no edits (git operations only)" });
+  });
+
+  test("DOC-6: failing check followed by a doc edit stays failing", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test", { exit: 1 }), ...edit("e2", `${P}README.md`)]);
+    expect(p.status).toBe("failing");
+    expect(p.reason.startsWith("pnpm test failed")).toBe(true);
+  });
+
+  test("DOC-7: doc edit without a check does not add to the unchecked count or hints", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...edit("e2", `${P}README.md`)]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+    expect(p.hints.map((h) => h.rule)).toEqual(["unchecked-edit"]);
+    expect(p.hints.every((h) => h.path === F)).toBe(true);
+  });
+
+  test("DOC-8: mdx is code", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...edit("e2", `${P}src/page.mdx`)]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
+  });
+
+  test("DOC-9: a command editing a doc and a code file is a code edit", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "node fix.js", [`${P}README.md`, `${P}src/e.js`])]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
+  });
+
+  test("DOC-10: shell heuristic doc edit keeps the incomplete note", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bash("b2", "sed -i 's/a/b/' README.md")]);
+    expect(p).toMatchObject({
+      status: "checked",
+      reason: "pnpm test passed after last code edit; 1 documentation edit after it (shell edits may be incomplete)",
+    });
+  });
+
+  test("DOC-11: code edit after the check still makes it unchecked", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...edit("e2"), ...edit("e3", `${P}README.md`)]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
+  });
+
+  test("DOC-12: unverified exit code note precedes the doc suffix", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test | tail -1"), ...edit("e2", `${P}README.md`)]);
+    expect(p.reason).toContain("(exit code not verified); 1 documentation edit after it");
+  });
+
+  test("DOC-13: no documentation edits => reason unchanged", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test")]).reason).toBe("pnpm test passed after last edit");
+  });
+});

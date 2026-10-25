@@ -1,0 +1,208 @@
+{
+  "0:/home/user/project/CHANGELOG.md": {
+    "path": "/home/user/project/CHANGELOG.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,2 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "## Unreleased"
+          },
+          {
+            "t": "+",
+            "s": "## Unreleased"
+          },
+          {
+            "t": "+",
+            "s": "- Fix add"
+          }
+        ]
+      }
+    ]
+  },
+  "0:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a + b"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/README.md": {
+    "path": "/home/user/project/README.md",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -0,0 +1,1 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "# Project"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/docs/guide.md": {
+    "path": "/home/user/project/docs/guide.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "old guide text"
+          },
+          {
+            "t": "+",
+            "s": "new guide text"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/README.md": {
+    "path": "/home/user/project/README.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "# Project"
+          },
+          {
+            "t": "+",
+            "s": "# Project (with sub)"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/src/sub.js": {
+    "path": "/home/user/project/src/sub.js",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -0,0 +1,1 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "export const sub = (a, b) => a - b;"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/docs/notes.md": {
+    "path": "/home/user/project/docs/notes.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "Known issues: none"
+          },
+          {
+            "t": "+",
+            "s": "Known issues: one parser test"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/src/parser.js": {
+    "path": "/home/user/project/src/parser.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "parse(x)"
+          },
+          {
+            "t": "+",
+            "s": "parse(x.trim())"
+          }
+        ]
+      }
+    ]
+  },
+  "4:/home/user/project/SECURITY.md": {
+    "path": "/home/user/project/SECURITY.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "Report issues by email"
+          },
+          {
+            "t": "+",
+            "s": "Report issues privately"
+          }
+        ]
+      }
+    ]
+  },
+  "4:/home/user/project/docs/auth/login.md": {
+    "path": "/home/user/project/docs/auth/login.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "Log in with a password"
+          },
+          {
+            "t": "+",
+            "s": "Log in with a password and a token"
+          }
+        ]
+      }
+    ]
+  }
+}
