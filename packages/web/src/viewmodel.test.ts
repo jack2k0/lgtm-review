@@ -268,3 +268,38 @@ describe("splitInherited", () => {
     expect(r.from).toBe("abc");
   });
 });
+
+describe("worktree routing", () => {
+  test("worktree parameter parses (percent-decoded)", () => {
+    expect(parseRoute("#/?worktree=..%2Fwt")).toStrictEqual({ kind: "list", worktree: "../wt" });
+    expect(parseRoute("#/?worktree=.")).toStrictEqual({ kind: "list", worktree: "." });
+  });
+
+  test("both parameters, in either order", () => {
+    expect(parseRoute("#/?show=attention&worktree=.")).toStrictEqual({ kind: "list", show: "attention", worktree: "." });
+    expect(parseRoute("#/?worktree=.&show=attention")).toStrictEqual({ kind: "list", show: "attention", worktree: "." });
+  });
+
+  test("routeHref writes show first and round-trips", () => {
+    expect(routeHref({ kind: "list", worktree: "../wt" })).toBe("#/?worktree=..%2Fwt");
+    expect(routeHref({ kind: "list", show: "attention", worktree: "." })).toBe("#/?show=attention&worktree=.");
+    expect(routeHref({ kind: "list", worktree: "x y/z" })).toBe("#/?worktree=x%20y%2Fz");
+    for (const r of [
+      { kind: "list", worktree: "../wt" },
+      { kind: "list", show: "attention", worktree: "../wt" },
+      { kind: "list", show: "attention" },
+      { kind: "list" },
+    ] as const) expect(parseRoute(routeHref(r))).toStrictEqual(r);
+  });
+
+  test("empty, duplicate, unknown and badly encoded parameters fall back to the list", () => {
+    for (const h of [
+      "#/?worktree=", "#/?worktree=%20%20x&worktree=.", "#/?worktree=.&worktree=.", "#/?show=attention&show=attention",
+      "#/?show=all", "#/?worktree=%E0%A4%A", "#/?x=1", "#/?worktree=.&x=1", "#/?show=attention&", "#/?",
+    ]) expect(parseRoute(h), h).toStrictEqual({ kind: "list" });
+  });
+
+  test("session routes do not take the worktree parameter", () => {
+    expect(parseRoute("#/session/abc?worktree=.")).toStrictEqual({ kind: "list" });
+  });
+});

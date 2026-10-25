@@ -122,7 +122,7 @@ export function nextLimit(limit: number, total: number): number {
 }
 
 export type Route =
-  | { kind: "list"; show?: "attention" }
+  | { kind: "list"; show?: "attention"; worktree?: string }
   | { kind: "session"; id: string; show?: "attention" }
   | { kind: "steps"; id: string; index: number }
   | { kind: "diff"; id: string; index: number; path: string }
@@ -139,9 +139,36 @@ function decode(s: string): string | null {
   }
 }
 
-/** Hash routes: `#/session/<id>`, `#/session/<id>/map`, `#/session/<id>/prompt/<index>[/map|play]`, `#/session/<id>/prompt/<index>/diff?path=<file>`; `?show=attention` on the list and session routes. Anything else is the list. */
+/** The list query: `&`-separated `show=attention` and `worktree=<percent-encoded label>`, each at most once. Anything else is the plain list. */
+function parseListQuery(query: string): Route {
+  const plain: Route = { kind: "list" };
+  let show: "attention" | undefined;
+  let worktree: string | undefined;
+  for (const pair of query.split("&")) {
+    const eq = pair.indexOf("=");
+    if (eq < 0) return plain;
+    const key = pair.slice(0, eq);
+    const value = pair.slice(eq + 1);
+    if (key === "show" && show === undefined && value === "attention") {
+      show = "attention";
+    } else if (key === "worktree" && worktree === undefined) {
+      const w = decode(value);
+      if (!w) return plain;
+      worktree = w;
+    } else {
+      return plain;
+    }
+  }
+  return {
+    kind: "list",
+    ...(show !== undefined ? { show } : {}),
+    ...(worktree !== undefined ? { worktree } : {}),
+  };
+}
+
+/** Hash routes: `#/session/<id>`, `#/session/<id>/map`, `#/session/<id>/prompt/<index>[/map|play]`, `#/session/<id>/prompt/<index>/diff?path=<file>`; the list is `#/` or `#/?show=attention&worktree=<label>`; `?show=attention` also on the session route. Anything else is the list. */
 export function parseRoute(hash: string): Route {
-  if (hash === "#/?show=attention") return { kind: "list", show: "attention" };
+  if (hash.startsWith("#/?")) return parseListQuery(hash.slice(3));
   const session = /^#\/session\/([^/?]+)\?show=attention$/.exec(hash);
   if (session) {
     const id = decode(session[1]!);
@@ -184,8 +211,12 @@ export function parseRoute(hash: string): Route {
 
 export function routeHref(r: Route): string {
   switch (r.kind) {
-    case "list":
-      return r.show === "attention" ? "#/?show=attention" : "#/";
+    case "list": {
+      const parts: string[] = [];
+      if (r.show === "attention") parts.push("show=attention");
+      if (r.worktree) parts.push(`worktree=${encodeURIComponent(r.worktree)}`);
+      return parts.length > 0 ? `#/?${parts.join("&")}` : "#/";
+    }
     case "session":
       return `#/session/${encodeURIComponent(r.id)}${r.show === "attention" ? "?show=attention" : ""}`;
     case "steps":

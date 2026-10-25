@@ -20,9 +20,9 @@ function Status<T>({ res, back, backLabel = "← Back to steps", children }: { r
   return <>{children(res.data)}</>;
 }
 
-function ListView({ token, show }: { token: string | null; show: Show }) {
+function ListView({ token, show, worktree }: { token: string | null; show: Show; worktree?: string }) {
   const res = useLive<SessionsResponse>((e, s) => fetchSessions(token, e, s), "list");
-  return <Status res={res}>{(d) => <SessionList data={d} show={show} />}</Status>;
+  return <Status res={res}>{(d) => <SessionList data={d} show={show} worktree={worktree} />}</Status>;
 }
 
 function SessionView({ token, id, show }: { token: string | null; id: string; show: Show }) {
@@ -99,7 +99,7 @@ function Routed({ token, route }: { token: string | null; route: Route }) {
     case "play":
       return <PlayRoute token={token} id={route.id} index={route.index} beat={route.beat} />;
     case "list":
-      return <ListView token={token} show={route.show ?? "all"} />;
+      return <ListView token={token} show={route.show ?? "all"} worktree={route.worktree} />;
   }
 }
 

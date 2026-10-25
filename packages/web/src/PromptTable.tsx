@@ -156,7 +156,9 @@ export function PromptTable({ session, show = "all" }: { session: SessionAnalysi
       <div className="session-head">
         <h2>{session.title || session.sessionId}</h2>
         <p className="muted">
-          {session.branch ? <span className="mono">{session.branch}</span> : null} {plural(nonInheritedCount, "prompt")}{inheritedCount > 0 ? ` + ${inheritedCount} inherited` : ""}
+          {session.branch ? <span className="mono">{session.branch}</span> : null}
+          {session.worktree === undefined ? null : session.worktree === "." ? " · main checkout" : ` · worktree ${session.worktree}`}
+          {" "}{plural(nonInheritedCount, "prompt")}{inheritedCount > 0 ? ` + ${inheritedCount} inherited` : ""}
           {nonInheritedCount > 0 ? ` · ${needText(attention.length, "prompt")}` : ""}
         </p>
       </div>
