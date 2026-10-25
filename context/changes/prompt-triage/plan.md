@@ -344,7 +344,7 @@ Keyboard in the prompt table: Tab to a prompt, then ↑/↓ move between prompts
 
 ### Phase 2: Shared rule and session count
 
-- [ ] 2.1 `needsAttention` in core, `SessionSummary.attentionCount`, `summarize()`, `summary.ts` reuse; no golden change; `pnpm check` green
+- [x] 2.1 `needsAttention` in core, `SessionSummary.attentionCount`, `summarize()`, `summary.ts` reuse; no golden change; `pnpm check` green
 
 ### Phase 3: Triage logic and routes
 

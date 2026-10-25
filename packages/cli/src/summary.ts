@@ -1,4 +1,5 @@
 import { inheritedInfo } from "./format.js";
+import { needsAttention } from "@lgtm/core";
 import type { Hint, PromptAnalysis, Recommendation, SessionAnalysis, Status } from "@lgtm/core";
 
 export interface SummaryOptions {
@@ -128,10 +129,6 @@ function hintLines(hints: Hint[], root: string | undefined): string[] {
     out.push(`- **${h.severity}** ${mdCode(h.rule)}: ${g.length} files (first: ${first.join(", ")}, …)`);
   }
   return out;
-}
-
-function needsAttention(p: PromptAnalysis): boolean {
-  return p.hints.length > 0 || p.status === "unchecked" || p.status === "failing";
 }
 
 const FOOTER =

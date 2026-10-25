@@ -83,3 +83,4 @@ export {
 export type { MapNodeInput, MapEdgeInput, MapLayout, NeighbourRank, SelectedMapNodes, LayoutImportMapOptions } from "./map-layout.js";
 export { buildBeats, BEATS_MAX } from "./play.js";
 export type { BuildBeatsInput, BuildBeatsResult, DiffsInput } from "./play.js";
+export { needsAttention } from "./attention.js";

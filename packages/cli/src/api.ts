@@ -2,7 +2,7 @@ import { realpathSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { analyzeFile, analyzeFileDetail, discoverAllSessions, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile } from "@lgtm/core/node";
-import { buildBeats, markInherited } from "@lgtm/core";
+import { buildBeats, markInherited, needsAttention } from "@lgtm/core";
 import type { Analyzer, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
 import { planImportMap, toRepoRelative } from "./map.js";
 import { sortSessions } from "./format.js";
@@ -22,12 +22,14 @@ export function summarize(s: SessionAnalysis, all: readonly SessionAnalysis[] = 
   const statusCounts: Record<Status, number> = { checked: 0, unchecked: 0, failing: 0, "no-changes": 0 };
   const inheritedTally = new Map<string, number>();
   let inheritedCount = 0;
+  let attentionCount = 0;
   for (const p of s.prompts) {
     if (p.inheritedFrom !== undefined) {
       inheritedCount++;
       inheritedTally.set(p.inheritedFrom, (inheritedTally.get(p.inheritedFrom) ?? 0) + 1);
     } else {
       statusCounts[p.status]++;
+      if (needsAttention(p)) attentionCount++;
     }
   }
   // forkOf: session id with most inherited prompts; ties go to the earlier owner (startedAt, then id)
@@ -52,6 +54,7 @@ export function summarize(s: SessionAnalysis, all: readonly SessionAnalysis[] = 
     statusCounts,
     warningCount: s.warnings.length,
     inheritedCount,
+    attentionCount,
     ...(forkOf !== undefined ? { forkOf } : {}),
     ...(s.archived ? { archived: true } : {}),
   };
