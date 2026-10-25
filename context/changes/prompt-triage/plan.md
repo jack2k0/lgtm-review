@@ -356,7 +356,7 @@ Keyboard in the prompt table: Tab to a prompt, then ↑/↓ move between prompts
 
 ### Phase 5: Session list and README
 
-- [ ] 5.1 counts, filter, markers; L1-L6 green; README section; `pnpm check` green
+- [x] 5.1 counts, filter, markers; L1-L6 green; README section; `pnpm check` green
 
 ### Phase 6: Orchestrator
 

@@ -35,6 +35,12 @@ Limits (so very large sessions stay fast): a diff shows at most 2000 lines and 2
 
 The same data is available from the local API (token required, as for the other routes): `GET /api/sessions/<id>/prompts/<index>` and `GET /api/sessions/<id>/prompts/<index>/diff?path=<file>`; `path` must be one of the prompt's files.
 
+## Triage and keyboard
+
+A prompt **needs attention** when it is unchecked or failing or has at least one review hint (the rule of the "Needs attention" section of `--summary`); inherited prompts are not counted. The prompt table says how many need attention ("12 prompts · 4 prompts need attention") and **All** / **Needs attention** above it switch between all prompts and only those. The choice is part of the address (`#/session/<id>?show=attention`), so reload and Back keep it. The session list shows the same count per session and has the same filter (`#/?show=attention`). `GET /api/sessions` carries it as `attentionCount`.
+
+Keyboard in the prompt table: Tab to a prompt, then ↑/↓ move between prompts, Enter or Space expands or collapses the row, `s` opens its Steps and `m` its import map. Escape goes back to the session list. The keys act only on a focused prompt row (Escape anywhere on the page) and never while you type in a field.
+
 ## Import map
 
 The **Map** view (per session or per prompt) shows the changed source files and their direct in-repo neighbours: files they import and files that import them, one hop, at most 150 nodes. Nodes are grouped into layers by top-level directory (`packages/<x>` and `apps/<x>` per package) and coloured by the status of the prompt that last changed them; click a changed file to open its diff. The map reads the **current working tree** under `--dir` ("imports as of now"), not the tree at prompt time; it scans at most 5000 files of 512 KB each.
