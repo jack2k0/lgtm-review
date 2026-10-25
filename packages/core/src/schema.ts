@@ -41,6 +41,7 @@ export const HintRule = z.enum([
   "public-surface",
   "config-change",
   "large-change",
+  "check-scope",
 ]);
 export type HintRule = z.infer<typeof HintRule>;
 
@@ -90,6 +91,8 @@ export const SessionAnalysis = z.object({
   warnings: z.array(Warning),
   /** True only when the session was read from the local archive. */
   archived: z.boolean().optional(),
+  /** Worktree of the session as a path relative to the main checkout ("." for the main checkout). Set by the CLI only when the listed sessions come from more than one worktree (S-19). */
+  worktree: z.string().optional(),
 });
 export type SessionAnalysis = z.infer<typeof SessionAnalysis>;
 
@@ -122,6 +125,8 @@ export const SessionSummary = z.object({
   archived: z.boolean().optional(),
   /** Own (non-inherited) prompts that need attention (`needsAttention`). Always set by the API. */
   attentionCount: z.number().int().nonnegative().optional(),
+  /** Same as `SessionAnalysis.worktree` (S-19). */
+  worktree: z.string().optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummary>;
 
