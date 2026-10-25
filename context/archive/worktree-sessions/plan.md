@@ -229,5 +229,5 @@ D6. Tests:
 
 ### Phase 5: Orchestrator
 
-- [ ] 5.1 README text, synthetic check recorded
-- [ ] 5.2 roadmap, PRD, archive
+- [x] 5.1 README text, synthetic check recorded
+- [x] 5.2 roadmap, PRD, archive
