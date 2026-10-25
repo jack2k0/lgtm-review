@@ -555,6 +555,23 @@ function segmentRoots(toks: string[], s: string): string[] | null {
   }
 }
 
+const REDIRECT_RE = /^(?:\d+|&)?>>?(?:\S*)$|^(?:\d+|&)?<(?:\S*)$/;
+
+/** Drops shell redirections (`> out`, `2>&1`, `< in`) from a segment's tokens; they are not arguments. */
+function stripRedirects(toks: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i] as string;
+    if (!REDIRECT_RE.test(t)) {
+      out.push(t);
+      continue;
+    }
+    // A bare operator (`>`, `2>`, `<`) carries its target in the next token.
+    if (/^(?:\d+|&)?>>?$/.test(t) || /^(?:\d+|&)?<$/.test(t)) i++;
+  }
+  return out;
+}
+
 /**
  * Where a check command ran, as written: the roots (relative to the working directory unless absolute) of
  * every check segment, with `cd` prefixes applied. `null` when a root cannot be placed (named package
@@ -567,7 +584,7 @@ export function checkScope(command: string, repo?: RepoScripts): string[] | null
     const roots: string[] = [];
     for (const seg of splitSegments(stripHeredocs(command))) {
       const s = normalizeFirstToken(stripPrefixes(seg.text));
-      const toks = tokens(s).map(unquote);
+      const toks = stripRedirects(tokens(s).map(unquote));
       const head = toks[0];
       if (head === "cd" || head === "pushd") {
         const arg = toks[1];

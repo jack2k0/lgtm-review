@@ -364,6 +364,26 @@ describe("computeHints rules", () => {
   });
 });
 
+describe("check-scope hint (FR-017)", () => {
+  const base = { lastCheckSeq: 100, cwd: "/p" };
+
+  test("a file outside the passing check's scope gets a warn hint with the label", () => {
+    const h = computeHints({ ...base, edits: [ev("/p/src/b.ts")], outOfScope: new Map([["/p/src/b.ts", "packages/web"]]) });
+    expect(h).toEqual([
+      { rule: "check-scope", severity: "warn", path: "/p/src/b.ts", reason: "outside the scope of the passing check (packages/web)" },
+    ]);
+  });
+
+  test("a documentation path in outOfScope is ignored", () => {
+    expect(computeHints({ ...base, edits: [ev("/p/README.md")], outOfScope: new Map([["/p/README.md", "packages/web"]]) })).toEqual([]);
+  });
+
+  test("no outOfScope map or no entry for the file means no hint", () => {
+    expect(computeHints({ ...base, edits: [ev("/p/src/b.ts")] })).toEqual([]);
+    expect(computeHints({ ...base, edits: [ev("/p/src/b.ts")], outOfScope: new Map() })).toEqual([]);
+  });
+});
+
 describe("recommend", () => {
   const hint = (rule: HintRule, severity: Hint["severity"], path = "a"): Hint => ({ rule, severity, path, reason: "r" });
   const high = (rule: HintRule, path?: string): Hint => hint(rule, "high", path);

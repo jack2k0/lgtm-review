@@ -65,6 +65,20 @@ describe("prompt detection", () => {
 });
 
 describe("tool pairing data", () => {
+  test("tool_use carries the record's cwd; a record without cwd adds no key", () => {
+    const withCwd = rec("assistant", {
+      cwd: "/home/user/project/packages/web",
+      message: { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "pnpm test" } }] },
+    });
+    const withoutCwd = JSON.stringify({
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "tool_use", id: "t2", name: "Bash", input: { command: "pnpm test" } }] },
+    });
+    const uses = parseLines([withCwd, withoutCwd]).events.filter((e) => e.type === "tool_use");
+    expect(uses[0]).toMatchObject({ id: "t1", cwd: "/home/user/project/packages/web" });
+    expect(uses[1] as { cwd?: string }).not.toHaveProperty("cwd");
+  });
+
   test("tool_result carries the id, so reversed result order can be paired by id", () => {
     const lines = [prompt("go"), toolUse("t1", "Bash", { command: "a" }), toolUse("t2", "Bash", { command: "b" }), toolResult("t2", "two"), toolResult("t1", "one")];
     const { events } = parseLines(lines);

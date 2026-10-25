@@ -590,6 +590,96 @@ describe("background checks resolved by task notifications", () => {
   });
 });
 
+describe("scoped checks (FR-017)", () => {
+  const P = "/home/user/project";
+  const WEB = `${P}/packages/web/src/a.ts`;
+  const CORE = `${P}/packages/core/src/b.ts`;
+
+  const withCwd = (line: string, cwd: string): string => {
+    const o = JSON.parse(line) as Record<string, unknown>;
+    o.cwd = cwd;
+    return JSON.stringify(o);
+  };
+  const bashFrom = (id: string, cwd: string, command: string): string[] => {
+    const lines = bash(id, command);
+    lines[0] = withCwd(lines[0]!, cwd);
+    return lines;
+  };
+  const diffBash = (id: string, command: string, path: string) => [
+    toolUse(id, "Bash", { command }),
+    toolResult(id, "", {
+      toolUseResult: { bashEditDiff: { files: [{ filePath: path, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-a", "+b", "+c"] }] }] } },
+    }),
+  ];
+  const scoped = (p: ReturnType<typeof one>): (string | null)[] => p.hints.filter((h) => h.rule === "check-scope").map((h) => h.path);
+
+  test("SC-1: a cd-scoped check flags the edited file outside it", () => {
+    const p = one([prompt("q"), ...edit("e1", WEB), ...edit("e2", CORE), ...bash("b1", "cd packages/web && pnpm test")]);
+    expect(p.status).toBe("checked");
+    expect(p.reason).toBe("pnpm test passed after last edit (scoped to packages/web)");
+    expect(scoped(p)).toEqual([CORE]);
+    expect(p.hints.find((h) => h.rule === "check-scope")).toMatchObject({
+      severity: "warn",
+      reason: "outside the scope of the passing check (packages/web)",
+    });
+  });
+
+  test("SC-2: an unscoped check covers every edited file", () => {
+    const p = one([prompt("q"), ...edit("e1", WEB), ...edit("e2", CORE), ...bash("b1", "pnpm test")]);
+    expect(p).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit" });
+    expect(scoped(p)).toEqual([]);
+  });
+
+  test("SC-3: a file covered by an earlier full run is no gap", () => {
+    const p = one([prompt("q"), ...edit("e1", CORE), ...bash("b1", "pnpm test"), ...edit("e2", WEB), ...bash("b2", "pnpm --filter ./packages/web test")]);
+    expect(p.status).toBe("checked");
+    expect(scoped(p)).toEqual([]);
+  });
+
+  test("SC-4: a named package filter cannot be placed, so nothing is flagged", () => {
+    const p = one([prompt("q"), ...edit("e1", CORE), ...bash("b1", "pnpm --filter @acme/web test")]);
+    expect(p.status).toBe("checked");
+    expect(scoped(p)).toEqual([]);
+  });
+
+  test("SC-5: the record cwd scopes the check", () => {
+    const p = one([prompt("q"), ...edit("e1", CORE), ...bashFrom("b1", `${P}/packages/web`, "pnpm test")]);
+    expect(p.status).toBe("checked");
+    expect(p.reason).toContain("(scoped to packages/web)");
+    expect(scoped(p)).toEqual([CORE]);
+  });
+
+  test("SC-6: a failing scoped check and a later edit are never check-scope hints", () => {
+    const failing = one([prompt("q"), ...edit("e1", WEB), ...edit("e2", CORE), ...bash("b1", "cd packages/web && pnpm test", { exit: 1 })]);
+    expect(failing.status).toBe("failing");
+    expect(scoped(failing)).toEqual([]);
+    const later = one([prompt("q"), ...edit("e1", WEB), ...bash("b1", "cd packages/web && pnpm test"), ...edit("e2", CORE)]);
+    expect(later.status).toBe("unchecked");
+    expect(scoped(later)).toEqual([]);
+  });
+
+  test("SC-7: documentation and git-operation edits outside the scope are never flagged", () => {
+    const p = one([
+      prompt("q"),
+      ...edit("e1", WEB),
+      ...bash("b1", "cd packages/web && pnpm test"),
+      ...edit("e2", `${P}/README.md`),
+      ...diffBash("b2", "git merge main", CORE),
+    ]);
+    expect(p.status).toBe("checked");
+    expect(scoped(p)).toEqual([]);
+    expect(p.hints.some((h) => (h.path ?? "").endsWith("README.md") || h.path === CORE)).toBe(false);
+  });
+
+  test("SC-8: a documentation edit after the scoped check keeps the note and the count", () => {
+    const p = one([prompt("q"), ...edit("e1", WEB), ...edit("e2", CORE), ...bash("b1", "cd packages/web && pnpm test"), ...edit("e3", `${P}/README.md`)]);
+    expect(p.status).toBe("checked");
+    expect(p.reason).toBe("pnpm test passed after last code edit (scoped to packages/web); 1 documentation edit after it");
+    expect(scoped(p)).toEqual([CORE]);
+    expect(p.hints.some((h) => (h.path ?? "").endsWith("README.md"))).toBe(false);
+  });
+});
+
 describe("documentation edits (FR-015)", () => {
   const P = "/home/user/project/";
   const diffBash = (id: string, command: string, paths: string[] = [`${P}src/merged.js`]) => [

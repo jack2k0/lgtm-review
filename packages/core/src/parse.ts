@@ -53,6 +53,8 @@ export type ToolUseEvent = {
   input: ToolInput;
   ts: string | null;
   line: number;
+  /** Working directory recorded on the tool call's record (Claude Code keeps the Bash working directory between calls). */
+  cwd?: string;
   /** Set for events of a subagent transcript (sidechain parser): the subagent's id. */
   agentId?: string;
   /** Set by the subagent merge on an `Agent` call: a transcript was merged, is missing, or lies deeper than the depth limit. */
@@ -540,6 +542,8 @@ export function createParser(opts: ParserOptions = {}): Parser {
       }
       const name = str(b.name) ?? "";
       const use: ToolUseEvent = { type: "tool_use", id, name, input: sanitizeInput(name, b.input, detail), ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo };
+      const cwd = nonEmptyStr(rec.cwd);
+      if (cwd !== undefined) use.cwd = cwd;
       if (agentTag !== undefined) use.agentId = agentTag;
       out.push(use);
     }

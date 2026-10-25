@@ -304,7 +304,7 @@ D7. Tests: `agg.scopedCheckPrompts` equals the number of CLI-JSON prompts whose 
 
 ### Phase 3: Wiring
 
-- [ ] 3.1 event `cwd`, `CheckRec.scope`, `judge` gaps and reason, `check-scope` hint; SC-1..SC-8; no golden change; `pnpm check` green
+- [x] 3.1 event `cwd`, `CheckRec.scope`, `judge` gaps and reason, `check-scope` hint; SC-1..SC-8; no golden change; `pnpm check` green
 
 ### Phase 4: Fixture and goldens
 
