@@ -303,3 +303,17 @@ describe("worktree routing", () => {
     expect(parseRoute("#/session/abc?worktree=.")).toStrictEqual({ kind: "list" });
   });
 });
+
+describe("git crosscheck routing", () => {
+  test("parse and href round-trip", () => {
+    expect(parseRoute("#/session/abc/git")).toStrictEqual({ kind: "git", id: "abc" });
+    expect(routeHref({ kind: "git", id: "a/b" })).toBe("#/session/a%2Fb/git");
+    expect(parseRoute(routeHref({ kind: "git", id: "a/b" }))).toStrictEqual({ kind: "git", id: "a/b" });
+  });
+
+  test("invalid git routes fall back to the list", () => {
+    expect(parseRoute("#/session/abc/prompt/1/git")).toStrictEqual({ kind: "list" });
+    expect(parseRoute("#/session/abc/git?x=1")).toStrictEqual({ kind: "list" });
+  });
+});
+

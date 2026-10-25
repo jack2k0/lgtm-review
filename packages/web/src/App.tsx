@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FileDiff, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
-import { errorMessage, fetchFileDiff, fetchImportMap, fetchPlay, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
+import type { FileDiff, GitCrosscheckResponse, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
+import { errorMessage, fetchFileDiff, fetchGitCrosscheck, fetchImportMap, fetchPlay, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
 import { DiffView } from "./DiffView";
+import { GitView } from "./GitView";
 import { LiveContext, LiveIndicator, useLive, useLiveStatus, type Load } from "./LiveView";
 import { readPaused, writePaused } from "./live";
 import { MapView } from "./MapView";
@@ -31,7 +32,8 @@ function SessionView({ token, id, show }: { token: string | null; id: string; sh
     <>
       <p>
         <a href={routeHref({ kind: "list" })}>&larr; All sessions</a>{" · "}
-        <a href={routeHref({ kind: "map", id, index: null })}>Map</a>
+        <a href={routeHref({ kind: "map", id, index: null })}>Map</a>{" · "}
+        <a href={routeHref({ kind: "git", id })}>Git cross-check</a>
       </p>
       <Status res={res}>{(d) => <PromptTable key={d.sessionId} session={d} show={show} />}</Status>
     </>
@@ -86,6 +88,21 @@ function PlayRoute({ token, id, index, beat }: { token: string | null; id: strin
   );
 }
 
+function GitRoute({ token, id }: { token: string | null; id: string }) {
+  const [tick, setTick] = useState(0);
+  const [res, setRes] = useState<Load<GitCrosscheckResponse>>({ state: "loading" });
+  useEffect(() => {
+    const ac = new AbortController();
+    setRes({ state: "loading" });
+    fetchGitCrosscheck(token, id, null, ac.signal).then(
+      (r) => { if (r.kind === "ok") setRes({ state: "ok", data: r.data }); },
+      (e) => { if (!ac.signal.aborted) setRes({ state: "error", message: errorMessage(e) }); },
+    );
+    return () => ac.abort();
+  }, [token, id, tick]);
+  return <Status res={res} back={routeHref({ kind: "session", id })} backLabel="← Back to session">{(d) => <GitView data={d} onRefresh={() => setTick((t) => t + 1)} />}</Status>;
+}
+
 function Routed({ token, route }: { token: string | null; route: Route }) {
   switch (route.kind) {
     case "session":
@@ -98,6 +115,8 @@ function Routed({ token, route }: { token: string | null; route: Route }) {
       return <MapRoute token={token} id={route.id} index={route.index} />;
     case "play":
       return <PlayRoute token={token} id={route.id} index={route.index} beat={route.beat} />;
+    case "git":
+      return <GitRoute token={token} id={route.id} />;
     case "list":
       return <ListView token={token} show={route.show ?? "all"} worktree={route.worktree} />;
   }

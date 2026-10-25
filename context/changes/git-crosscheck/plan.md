@@ -286,7 +286,7 @@ D4. Tests:
 
 ### Phase 3: Web
 
-- [ ] 3.1 route, fetch, `GitView`, link, Refresh + tests; `pnpm check` green
+- [x] 3.1 route, fetch, `GitView`, link, Refresh + tests; `pnpm check` green
 
 ### Phase 4: Orchestrator
 
