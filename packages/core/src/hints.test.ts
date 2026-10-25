@@ -4,6 +4,7 @@ import {
   computeHints,
   emptyStats,
   isConfigPath,
+  isDocPath,
   isManifestPath,
   isTestPath,
   publicSurfaceKind,
@@ -169,6 +170,50 @@ describe("manifest, public surface and config classifiers", () => {
   });
 });
 
+describe("isDocPath", () => {
+  test.each<[string, boolean]>([
+    ["README.md", true],
+    ["docs/guide.MD", true],
+    ["/home/user/project/notes.markdown", true],
+    ["a.mdown", true],
+    ["b.mkd", true],
+    ["c.mkdn", true],
+    ["x.rst", true],
+    ["y.adoc", true],
+    ["z.asciidoc", true],
+    ["LICENSE", true],
+    ["LICENCE", true],
+    ["COPYING", true],
+    ["NOTICE", true],
+    ["AUTHORS", true],
+    ["CONTRIBUTORS", true],
+    ["CHANGELOG", true],
+    ["CHANGES", true],
+    ["HISTORY", true],
+    ["README", true],
+    ["readme.txt", true],
+    ["LICENSE.txt", true],
+    ["C:\\repo\\README.md", true],
+    [".github/pull_request_template.md", true],
+    ["page.mdx", false],
+    ["notes.txt", false],
+    ["requirements.txt", false],
+    ["README.md.ts", false],
+    ["src/index.ts", false],
+    ["Makefile", false],
+    ["Dockerfile", false],
+    [".env", false],
+    ["(shell edit)", false],
+    ["", false],
+    ["docs/", false],
+    ["docs/guide", false],
+    ["CHANGELOG.json", false],
+    ["history.py", false],
+  ])("%s => %s", (path, expected) => {
+    expect(isDocPath(path)).toBe(expected);
+  });
+});
+
 describe("relativePath", () => {
   test.each<[string, string | null, string]>([
     ["/home/user/project/src/a.ts", "/home/user/project", "src/a.ts"],
@@ -267,6 +312,14 @@ describe("computeHints rules", () => {
     ["300 lines is not large", [ev("/p/src/a.ts", { changed: 300 })], []],
     ["large change adds up over edits", [ev("/p/src/a.ts", { changed: 200 }), ev("/p/src/a.ts", { changed: 150 })], ["large-change:/p/src/a.ts"]],
     ["one hint per (rule, path) over several edits", [ev("/p/tests/a.test.ts", { inFix: true }), ev("/p/tests/a.test.ts", { inFix: true })], ["test-modified-during-fix:/p/tests/a.test.ts"]],
+    ["doc: sensitive name ignored", [ev("/p/SECURITY.md")], []],
+    ["doc: sensitive directory ignored", [ev("/p/docs/auth/login.md")], []],
+    ["doc: unchecked edit ignored", [ev("/p/README.md", { seq: 101 })], []],
+    ["doc: README in a test directory gets no test rules", [ev("/p/tests/README.md", { inFix: true, stats: { assertRemoved: 2 } })], []],
+    ["doc: public surface ignored", [ev("/p/src/api/README.md")], []],
+    ["doc: large change still flagged", [ev("/p/docs/big.md", { changed: 301 })], ["large-change:/p/docs/big.md"]],
+    ["mdx is code", [ev("/p/src/auth/page.mdx")], ["sensitive-path:/p/src/auth/page.mdx"]],
+    ["code file next to a doc file keeps its hints", [ev("/p/README.md", { seq: 101 }), ev("/p/src/a.ts", { seq: 101 })], ["unchecked-edit:/p/src/a.ts"]],
   ])("%s", (_name, edits, expected) => {
     expect(rules(computeHints({ ...base, edits }))).toEqual(expected);
   });

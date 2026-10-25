@@ -210,7 +210,7 @@ Not for implementers. Real logs are read only by local Claude subagents; nothing
 
 ### Phase 1: Documentation classifier and hints
 
-- [ ] 1.1 `isDocPath` + hints rule with tests; no golden changes; `pnpm check` green
+- [x] 1.1 `isDocPath` + hints rule with tests; no golden changes; `pnpm check` green
 
 ### Phase 2: Status rule, fixture and goldens
 
