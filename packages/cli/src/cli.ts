@@ -54,7 +54,7 @@ async function serve(dir: string, projectsDir: string, roots: SessionRoot[], por
   const webRoot = join(dirname(fileURLToPath(import.meta.url)), "web");
   let running;
   try {
-    running = await startServer({ dir, projectsDir, archiveDir: roots[0]!.archiveDir ?? undefined, webRoot, port });
+    running = await startServer({ dir, projectsDir, archiveDir: roots[0]!.archiveDir ?? undefined, roots, webRoot, port });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EADDRINUSE") console.error(`lgtm-review: port ${port} is already in use`);

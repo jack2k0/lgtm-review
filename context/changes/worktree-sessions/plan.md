@@ -221,7 +221,7 @@ D6. Tests:
 
 ### Phase 3: Server and API
 
-- [ ] 3.1 roots in `createApi`, per-session root for scripts/map/play, `worktree` in summaries; tests green; `pnpm check` green
+- [x] 3.1 roots in `createApi`, per-session root for scripts/map/play, `worktree` in summaries; tests green; `pnpm check` green
 
 ### Phase 4: Web
 

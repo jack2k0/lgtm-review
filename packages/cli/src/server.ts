@@ -14,6 +14,8 @@ export interface ServerOptions {
   projectsDir: string;
   /** Local session archive directory (if any). */
   archiveDir?: string;
+  /** Session roots (from `sessionRoots`); default: `dir` alone. */
+  roots?: import("@lgtm/core/node").SessionRoot[];
   /** Directory with the built web app; may not exist. */
   webRoot: string;
   /** 0 (default) picks a free port. */

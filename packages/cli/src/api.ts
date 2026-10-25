@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { analyzeFile, analyzeFileDetail, discoverAllSessions, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile } from "@lgtm/core/node";
+import { analyzeFile, analyzeFileDetail, discoverRootSessions, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile, type SessionRoot } from "@lgtm/core/node";
 import { buildBeats, markInherited, needsAttention } from "@lgtm/core";
 import type { Analyzer, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
 import { planImportMap, toRepoRelative } from "./map.js";
@@ -57,6 +57,7 @@ export function summarize(s: SessionAnalysis, all: readonly SessionAnalysis[] = 
     attentionCount,
     ...(forkOf !== undefined ? { forkOf } : {}),
     ...(s.archived ? { archived: true } : {}),
+    ...(s.worktree !== undefined ? { worktree: s.worktree } : {}),
   };
 }
 
@@ -94,12 +95,12 @@ function pathParam(rawUrl: string): PathParam {
 
 /** JSON API over the analysis of the repo's sessions. Analysis is cached per `path + mtime + size` of the session file and of its subagent files. */
 export function createApi(opts: ServerOptions): ApiHandler {
-  const projectDir = projectDirFor(opts.dir, opts.projectsDir);
+  const roots: SessionRoot[] = opts.roots ?? [{ dir: opts.dir, worktree: ".", projectDir: projectDirFor(opts.dir, opts.projectsDir), archiveDir: opts.archiveDir ?? null }];
   const cache = new Map<string, { key: string; analysis: Promise<SessionAnalysis> }>();
 
   async function discover(): Promise<SessionFile[]> {
     try {
-      return await discoverAllSessions(projectDir, opts.archiveDir ?? null);
+      return await discoverRootSessions(roots);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;
@@ -133,9 +134,10 @@ export function createApi(opts: ServerOptions): ApiHandler {
       detailCache.delete(f.path); // refresh recency
       detailCache.set(f.path, hit);
     } else {
-      const entry = loadRepoScripts(opts.dir).then(async (repo): Promise<DetailEntry> => {
+      const entry = loadRepoScripts(f.root ?? opts.dir).then(async (repo): Promise<DetailEntry> => {
         const { analysis, analyzer } = await analyzeFileDetail(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
         if (f.archived) analysis.archived = true;
+        if (f.worktree !== undefined) analysis.worktree = f.worktree;
         const details = analyzer.details();
         return { analysis, analyzer, details, bytes: analyzer.detailBytes() };
       });
@@ -169,9 +171,10 @@ export function createApi(opts: ServerOptions): ApiHandler {
     const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}`;
     let entry = cache.get(f.path);
     if (!entry || entry.key !== key) {
-      const analysis = loadRepoScripts(opts.dir).then(async (repo) => {
+      const analysis = loadRepoScripts(f.root ?? opts.dir).then(async (repo) => {
         const a = await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
         if (f.archived) a.archived = true;
+        if (f.worktree !== undefined) a.worktree = f.worktree;
         return a;
       });
       entry = { key, analysis };
@@ -302,7 +305,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
     const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     if (prompt !== null && !analysis.prompts[prompt]) return false;
-    const plan = await planImportMap(opts.dir, analysis, prompt, opts.mapCaps, async () => {
+    const plan = await planImportMap(file.root ?? opts.dir, analysis, prompt, opts.mapCaps, async () => {
       const d = await detailFor(file);
       if (!d) return null;
       return {
@@ -347,7 +350,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
 
     let detailPromise: Promise<DetailEntry | null> | undefined;
     const detail = (): Promise<DetailEntry | null> => (detailPromise ??= detailFor(file));
-    const plan = await planImportMap(opts.dir, analysis, index, opts.mapCaps, async () => {
+    const plan = await planImportMap(file.root ?? opts.dir, analysis, index, opts.mapCaps, async () => {
       const d = await detail();
       const promptDetail = d?.details[index];
       if (!d || !promptDetail) return null;
@@ -376,21 +379,22 @@ export function createApi(opts: ServerOptions): ApiHandler {
       }
       const mapBody = mapHit.body as ImportMapResponse;
 
+      const rootDir = file.root ?? opts.dir;
       let root: string;
       try {
-        root = realpathSync(opts.dir);
+        root = realpathSync(rootDir);
       } catch {
-        root = opts.dir;
+        root = rootDir;
       }
 
       const mappedSteps = promptDetail.steps.map((s) => ({
         ...s,
         // Files outside --dir (scratch notes, briefs) are not part of the change shown on the map.
-        files: s.files.map((p) => toRepoRelative(p, [opts.dir, root])).filter((p): p is string => p !== null),
+        files: s.files.map((p) => toRepoRelative(p, [rootDir, root])).filter((p): p is string => p !== null),
       }));
 
       const diffsCallback = (path: string) => {
-        const known = prompt.files.find((f) => f.path === path || toRepoRelative(f.path, [opts.dir, root]) === path);
+        const known = prompt.files.find((f) => f.path === path || toRepoRelative(f.path, [rootDir, root]) === path);
         return known ? d.analyzer.diffFor(index, known.path) : d.analyzer.diffFor(index, path);
       };
 
