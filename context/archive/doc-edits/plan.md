@@ -223,5 +223,5 @@ Not for implementers. Real logs are read only by local Claude subagents; nothing
 
 ### Phase 4: Audit and docs (orchestrator)
 
-- [ ] 4.1 PRE/POST real-log aggregate audit recorded
-- [ ] 4.2 roadmap, PRD, archive
+- [x] 4.1 PRE/POST real-log aggregate audit recorded
+- [x] 4.2 roadmap, PRD, archive
