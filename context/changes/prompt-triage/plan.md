@@ -348,7 +348,7 @@ Keyboard in the prompt table: Tab to a prompt, then ↑/↓ move between prompts
 
 ### Phase 3: Triage logic and routes
 
-- [ ] 3.1 `triage.ts` + `?show=attention` routes with tests; `pnpm check` green
+- [x] 3.1 `triage.ts` + `?show=attention` routes with tests; `pnpm check` green
 
 ### Phase 4: Prompt table
 
