@@ -197,8 +197,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | ---- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---- | -------------------------- | ---------------------------- | ------------------------------ | ----------------------- |
 | S-16 | doc-edits         | see prompts that only edited documentation as needing no check, and keep `checked` when only docs changed after the check   | S    | —                          | S-17                         | FR-015                         | done |
 | S-17 | prompt-triage     | narrow sessions and prompts to "needs attention" and move through prompts with the keyboard                                   | M    | —                          | S-16                         | FR-016, NFR keyboard           | done |
-| S-18 | scoped-checks     | see a `check-scope` hint when the check behind `checked` ran only on part of the repository                                   | M    | S-16                       | S-19 (schema-first rule)     | FR-017                         | proposed                |
-| S-19 | worktree-sessions | see the sessions of every git worktree of the repository in one list                                                          | M    | S-17                       | S-18 (schema-first rule), S-20 | FR-018, NFR read-only git    | proposed                |
+| S-18 | scoped-checks     | see a `check-scope` hint when the check behind `checked` ran only on part of the repository                                   | M    | S-16                       | S-19 (schema-first rule)     | FR-017                         | proposed (plan drafted) |
+| S-19 | worktree-sessions | see the sessions of every git worktree of the repository in one list                                                          | M    | S-17                       | S-18 (schema-first rule), S-20 | FR-018, NFR read-only git    | proposed (plan drafted) |
 | S-20 | status-accuracy-2 | rely on >= 97% status match on real logs (in-command order, background notifications, scratch files, Python comments)         | M    | S-18                       | S-19, S-21                   | FR-002, FR-004, FR-013, SC v3  | proposed                |
 | S-21 | git-crosscheck    | compare what a session's prompts edited with what git shows for that directory                                                | M    | S-19                       | S-20                         | FR-019, NFR read-only git      | proposed                |
 | S-08 | llm-titles        | opt in to one-sentence prompt titles from a local model server (loopback only)                                                | L    | S-17 + owner decisions     | —                            | FR-020, NFR loopback LLM       | proposed (blocked)      |
@@ -219,8 +219,8 @@ Files each slice is expected to touch (for the parallel check):
 | ----- | ---------------------------------------------------------------------------- | ----------- | ------- | ------------ | ------------------------ | ------------------------ | ---- |
 | S-16 | `analyze.ts`, `hints.ts` | — | yes | — | `audit-status.test.ts` (+ `scripts/audit-status.mjs`) | — | — |
 | S-17 | new `attention.ts` (+ one appended export in `index.ts`) | `SessionSummary.attentionCount` (optional) | — (summary output byte-identical) | — | `api.ts` (`summarize`), `api.test.ts`, `summary.ts` (shared rule) | `PromptTable`, `SessionList`, `App`, `viewmodel`, new `triage.ts`, `styles.css`, `testing/`, new DOM tests | dev: `jsdom@30.1.2` (exact) |
-| S-18 | `check-patterns.ts`, `analyze.ts`, `hints.ts` | `HintRule` | yes | — | `audit-status.test.ts` (+ script) | — | — |
-| S-19 | — | `worktree` (optional) | — | new `worktrees.ts`, `discover.ts`, `index.ts` | `cli.ts`, `api.ts`, `export.ts`, `format.ts`, `server.ts`, `map.ts` | `SessionList`, `viewmodel` | — |
+| S-18 | `check-patterns.ts`, `parse.ts`, `analyze.ts`, `hints.ts`, new `scope.ts` | `HintRule` `check-scope` (orchestrator pre-commit) | yes, only new `scoped-checks.*` | — | `audit-status.test.ts` (+ script) | — | — |
+| S-19 | — | `worktree` (optional; orchestrator pre-commit) | — | new `worktrees.ts`, `discover.ts`, `node/index.ts` | `cli.ts`, `api.ts`, `export.ts`, `format.ts`, `server.ts` (+ new tests) | `SessionList`, `viewmodel`, `PromptTable`, `App`, new `worktree.ts` | — |
 | S-20 | `analyze.ts`, `shell-edits.ts`, `parse.ts`, `map-extract-py.ts` | — | yes | `read.ts`/`subagents.ts` (cross-file notifications) | `audit-status.test.ts` (+ script) | — | — |
 | S-21 | — | new response type | — | new `git.ts` (reuses S-19's runner) | `api.ts` (new route) | new view, `App`, `viewmodel` route | — |
 | S-08 | — | new response type | — | new cache | flags, `api.ts` route | `PromptTable` | — |
@@ -267,7 +267,7 @@ Files each slice is expected to touch (for the parallel check):
   - Which runner arguments are path scopes: vitest positional arguments are file-name substring filters, jest arguments are regexes, pytest takes paths or node ids, `go test` package patterns; `cargo test` name filters and named `--filter @scope/pkg` are not resolved (no hint, no node IO). Fixed as a table with tests in the plan. — Owner: team. Block: no.
   - How often the deciding check is scoped on real logs (new aggregate counter in `scripts/audit-status.mjs`), to confirm `warn` severity. — Owner: orchestrator. Block: no.
 - **Risk:** medium: false positives when scoped tests import the edited code; mitigated by covering rules (a scope `tests/api` also covers paths with an `api` segment; `x.test.ts` covers `x.ts`), hint only, never a status, never a `high` severity.
-- **Status:** proposed
+- **Status:** proposed (plan drafted: `context/changes/scoped-checks/plan.md`, incl. the wave-2 schema pre-commit)
 
 ### S-19: Sessions of all worktrees in one list
 
@@ -279,10 +279,10 @@ Files each slice is expected to touch (for the parallel check):
 - **Parallel with:** S-18 (schema-first rule), S-20
 - **Blockers:** —
 - **Unknowns:**
-  - Does Claude Code record sessions started in a worktree (including `claude --worktree` and `isolation: "worktree"` agents) under the project dir named after the worktree path? One aggregate count on the owner's logs before the plan (local Claude only). — Owner: orchestrator. Block: no.
+  - Does Claude Code record sessions started in a worktree (including `claude --worktree` and `isolation: "worktree"` agents) under the project dir named after the worktree path? Checked 2026-10-25 by directory names only: the owner's `~/.claude/projects` has no worktree project dirs yet, so the slice is verified on synthetic layouts and its value depends on starting sessions inside worktrees. — Owner: orchestrator. Block: no.
   - Sessions of worktrees git no longer lists (removed, pruned) are not discovered, and neither are their archive copies; documented, not solved. — Owner: team. Block: no.
 - **Risk:** medium: the "one `--dir` per server" assumption in `api.ts`, map, play and export becomes per-session; worktree paths come only from `git worktree list` run in `--dir` (fixed arguments, no shell), never from log content or a request.
-- **Status:** proposed
+- **Status:** proposed (plan drafted: `context/changes/worktree-sessions/plan.md`)
 
 ### S-20: Status accuracy, round 2 (real-log follow-ups)
 
@@ -335,8 +335,8 @@ Files each slice is expected to touch (for the parallel check):
 | ---------- | ----------------- | -------------------------------------------------------------- | ---------------------------------------- | --------------------------------------- |
 | S-16       | doc-edits         | Documentation-only edits need no check                         | done                                     | wave 1                                  |
 | S-17       | prompt-triage     | "Needs attention" filters and keyboard navigation in the UI    | done                                     | wave 1 (S-16 already merged)            |
-| S-18       | scoped-checks     | Flag checks that ran on only part of the repository            | after S-16 merges                        | wave 2                                  |
-| S-19       | worktree-sessions | One session list for all git worktrees                         | after S-17 merges; worktree count first  | wave 2, schema-first with S-18          |
+| S-18       | scoped-checks     | Flag checks that ran on only part of the repository            | plan drafted; schema pre-commit first    | wave 2; the only wave-2 golden writer   |
+| S-19       | worktree-sessions | One session list for all git worktrees                         | plan drafted; schema pre-commit first    | wave 2, schema-first with S-18          |
 | S-20       | status-accuracy-2 | Status accuracy round 2 (real-log follow-ups)                  | after S-18 merges; re-audit first        | wave 3                                  |
 | S-21       | git-crosscheck    | Git cross-check of a session's edits                           | after S-19 merges                        | wave 3                                  |
 | S-08       | llm-titles        | Opt-in local LLM titles                                        | no: owner decisions O-1..O-3             | gated                                   |
