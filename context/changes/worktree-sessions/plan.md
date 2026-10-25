@@ -225,7 +225,7 @@ D6. Tests:
 
 ### Phase 4: Web
 
-- [ ] 4.1 routes, `worktree.ts`, list column and filter, session header; tests green; `pnpm check` green
+- [x] 4.1 routes, `worktree.ts`, list column and filter, session header; tests green; `pnpm check` green
 
 ### Phase 5: Orchestrator
 
