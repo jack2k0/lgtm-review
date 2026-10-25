@@ -1,0 +1,72 @@
+{
+  "fixture": "scoped-checks",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [
+        "check-scope:packages/core/src/b.ts"
+      ],
+      "note": "web and core edited; the web-scoped check leaves the core file outside its scope"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [
+        "public-surface:src/api/route.ts"
+      ],
+      "note": "API route edited (existing public-surface rule); the scoped vitest run covers src/api by its folder name"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [
+        "check-scope:src/orders.py"
+      ],
+      "note": "cart test covers src/cart.py by file stem; orders.py stays outside the scope"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "core file covered by the earlier full run; the web re-run covers the later edit"
+    },
+    {
+      "index": 4,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "named package filter is not resolved: the check is treated as whole-project"
+    },
+    {
+      "index": 5,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [
+        "check-scope:internal/bar/b.go"
+      ],
+      "note": "go package scope covers internal/foo; internal/bar stays outside"
+    },
+    {
+      "index": 6,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "absolute cd to the project root makes the check whole-project"
+    },
+    {
+      "index": 7,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [
+        "check-scope:packages/core/src/c.ts"
+      ],
+      "note": "Bash record cwd is packages/web: the check is scoped there, the core edit is outside"
+    }
+  ]
+}

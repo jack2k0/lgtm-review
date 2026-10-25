@@ -1,8 +1,9 @@
-import { classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
+import { checkScope, classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
 import { classifyShellMutation, resolveTarget } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, isDocPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
 import { createParser, type Event, type TaskNotificationEvent, type ToolInput, type ToolResultEvent } from "./parse.js";
+import { resolveScope, scopeGaps, type ResolvedScope } from "./scope.js";
 import { ACTIONS_MAX, buildSteps, failureExcerpt, kindOf, oneLine, QUOTES_PER_STEP, type ActionRec } from "./steps.js";
 import { actionPhase, createTimingTracker, parseTs, type TimingTracker } from "./timing.js";
 import { createSubagentCollector, emptyFlags, mergeSubagents, textWeight, type MergeContext, type MergeFlags, type SubagentTranscript } from "./subagents.js";
@@ -111,6 +112,8 @@ interface CheckRec {
   output: string;
   /** Agent id of the subagent that ran the check; `""` for the parent thread. */
   thread: string;
+  /** Where the check ran; `null` when it covers the whole project. */
+  scope: ResolvedScope | null;
 }
 
 interface PromptState {
@@ -219,15 +222,15 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-function judge(p: PromptState, by: (thread: string) => string): { status: Status; reason: string } {
+function judge(p: PromptState, by: (thread: string) => string): { status: Status; reason: string; outOfScope: Map<string, string> } {
   const via = (thread: string): string => (thread === "" ? "" : ` (by subagent ${by(thread)})`);
-  if (p.edits.length === 0) return { status: "no-changes", reason: "no edits" };
+  if (p.edits.length === 0) return { status: "no-changes", reason: "no edits", outOfScope: new Map() };
   // Git operations bring in other people's changes and documentation needs no check (FR-015): neither moves the status.
   const edits = p.edits.filter((e) => !e.gitOp && !e.doc);
   if (edits.length === 0) {
     return p.edits.some((e) => !e.gitOp)
-      ? { status: "no-changes", reason: "no code edits (documentation only)" }
-      : { status: "no-changes", reason: "no edits (git operations only)" };
+      ? { status: "no-changes", reason: "no code edits (documentation only)", outOfScope: new Map() }
+      : { status: "no-changes", reason: "no edits (git operations only)", outOfScope: new Map() };
   }
   const lastEdit = edits.reduce((m, e) => Math.max(m, e.seq), -1);
   const real = p.checks.filter((c) => !c.ignored);
@@ -240,39 +243,64 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
   const incompleteAfter = real.some(
     (c) => !c.completed && !c.stopped && c.useSeq > lastEdit && (lastCompleted === null || c.useSeq > lastCompleted.resultSeq),
   );
-  if (incompleteAfter) return { status: "unchecked", reason: "check did not complete" };
+  if (incompleteAfter) return { status: "unchecked", reason: "check did not complete", outOfScope: new Map() };
 
   if (lastCompleted !== null && lastCompleted.coveredSeq > lastEdit) {
     if (lastCompleted.masked) {
-      return { status: "failing", reason: `${lastCompleted.label} output indicates failures (exit code masked)${via(lastCompleted.thread)}` };
+      return {
+        status: "failing",
+        reason: `${lastCompleted.label} output indicates failures (exit code masked)${via(lastCompleted.thread)}`,
+        outOfScope: new Map(),
+      };
     }
     if (lastCompleted.exit === null) {
-      return { status: "failing", reason: `${lastCompleted.label}: background check failed${via(lastCompleted.thread)}` };
+      return { status: "failing", reason: `${lastCompleted.label}: background check failed${via(lastCompleted.thread)}`, outOfScope: new Map() };
     }
     if (lastCompleted.exit === 0) {
       const note = lastCompleted.probe ? " (edits may have been reverted)" : lastCompleted.unreliable ? " (exit code not verified)" : "";
       const docsAfter = p.edits.filter((e) => e.doc && !e.gitOp && e.seq > lastCompleted.coveredSeq).length;
-      if (docsAfter > 0) {
-        return {
-          status: "checked",
-          reason: `${lastCompleted.label} passed after last code edit${note}${via(lastCompleted.thread)}; ${plural(docsAfter, "documentation edit")} after it`,
-        };
+      // Every code file is checked against the passing checks that finished after its last edit (D5).
+      const files = new Map<string, number>();
+      for (const e of edits) {
+        for (const f of e.files) {
+          if (isDocPath(f.path)) continue;
+          const seen = files.get(f.path);
+          if (seen === undefined || e.seq > seen) files.set(f.path, e.seq);
+        }
       }
-      return { status: "checked", reason: `${lastCompleted.label} passed after last edit${note}${via(lastCompleted.thread)}` };
+      const gaps = scopeGaps(
+        [...files].map(([path, lastSeq]) => ({ path, lastSeq })),
+        completed.map((c) => ({ coveredSeq: c.coveredSeq, passed: c.exit === 0 && !c.masked, scope: c.scope })),
+      );
+      const outOfScope = new Map<string, string>();
+      let scopeNote = "";
+      if (gaps.length > 0) {
+        // An unscoped passing check that finished after the last edit covers every file, so gaps imply a scope.
+        const label = lastCompleted.scope!.label;
+        scopeNote = ` (scoped to ${label})`;
+        for (const gap of gaps) outOfScope.set(gap, label);
+      }
+      const docsTail = docsAfter > 0 ? `; ${plural(docsAfter, "documentation edit")} after it` : "";
+      return {
+        status: "checked",
+        reason: `${lastCompleted.label} passed after last ${docsAfter > 0 ? "code " : ""}edit${note}${scopeNote}${via(lastCompleted.thread)}${docsTail}`,
+        outOfScope,
+      };
     }
     const out = failureOutput(lastCompleted.output);
     return {
       status: "failing",
       reason: (out === "" ? `${lastCompleted.label} failed (exit ${lastCompleted.exit})` : `${lastCompleted.label} failed: ${out}`) + via(lastCompleted.thread),
+      outOfScope: new Map(),
     };
   }
 
-  if (real.some((c) => c.stopped && c.useSeq > lastEdit)) return { status: "unchecked", reason: "check stopped" };
-  if (lastCompleted === null) return { status: "unchecked", reason: "no checks ran" };
+  if (real.some((c) => c.stopped && c.useSeq > lastEdit)) return { status: "unchecked", reason: "check stopped", outOfScope: new Map() };
+  if (lastCompleted === null) return { status: "unchecked", reason: "no checks ran", outOfScope: new Map() };
   const afterEdits = edits.filter((e) => e.seq > lastCompleted.coveredSeq);
-  if (afterEdits.length === 0) return { status: "unchecked", reason: "edit in the same command as the last check" };
+  if (afterEdits.length === 0) return { status: "unchecked", reason: "edit in the same command as the last check", outOfScope: new Map() };
   const latest = afterEdits.reduce((m, e) => (e.seq > m.seq ? e : m));
-  return { status: "unchecked", reason: `${plural(afterEdits.length, "edit")} after last check${via(latest.thread)}` };
+  return { status: "unchecked", reason: `${plural(afterEdits.length, "edit")} after last check${via(latest.thread)}`, outOfScope: new Map() };
 }
 
 function reasonOf(p: PromptState, reason: string): string {
@@ -448,6 +476,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               maskedLine: "",
               output: "",
               thread,
+              scope: resolveScope(checkScope(ev.input.command, opts.repo), ev.cwd ?? parser.meta().cwd, parser.meta().cwd),
             };
             cur.checks.push(check);
           }
@@ -686,7 +715,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
       const meta = parser.meta();
       const out: PromptAnalysis[] = prompts.map((p) => {
         const j = judge(p, byLabel);
-        const hints = computeHints({ edits: evidenceOf(p), lastCheckSeq: lastCheckSeq(p), cwd: meta.cwd });
+        const hints = computeHints({ edits: evidenceOf(p), lastCheckSeq: lastCheckSeq(p), cwd: meta.cwd, outOfScope: j.outOfScope });
         return {
           index: p.index,
           uuid: p.uuid,

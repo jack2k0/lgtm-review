@@ -41,6 +41,9 @@ describe("scripts/audit-status.mjs", () => {
     const docRe = /^no code edits \(documentation only\)|; \d+ documentation edits? after it/;
     expect(agg.docEditPrompts).toBe(prompts.filter((p) => docRe.test(p.reason)).length);
     expect(agg.docEditPrompts).toBeGreaterThan(0);
+    const scopedRe = /\(scoped to [^)]*\)/;
+    expect(agg.scopedCheckPrompts).toBe(prompts.filter((p) => scopedRe.test(p.reason)).length);
+    expect(agg.scopedCheckPrompts).toBeGreaterThan(0);
     expect(agg.partial).toBe(prompts.filter((p) => p.partial).length);
     // Only numbers (and null percentages): no strings anywhere in the output.
     const strings: string[] = [];
@@ -56,9 +59,10 @@ describe("scripts/audit-status.mjs", () => {
     expect(r.stdout).toMatch(/partial .*: \d+ \(\d/);
     expect(r.stdout).toMatch(/heuristic shell edits: \d+ \(/);
     expect(r.stdout).toMatch(/^prompts with documentation edits not counted: \d+ \(/m);
+    expect(r.stdout).toMatch(/^checked prompts with files outside the check's scope: \d+ \(/m);
     expect(r.stdout).not.toContain("/home/user");
     expect(r.stdout).not.toContain("Port the tests");
-    expect(r.stdout.trim().split("\n").length).toBeLessThanOrEqual(10);
+    expect(r.stdout.trim().split("\n").length).toBeLessThanOrEqual(11);
   });
 
   test("an unreadable CLI is a short error, exit 1", () => {

@@ -1,10 +1,10 @@
 ---
 change_id: scoped-checks
 title: Scoped checks flagged — "partially checked" as a check-scope hint
-status: planned
+status: done
 created: 2026-10-25
 updated: 2026-10-25
-archived_at: null
+archived_at: 2026-10-25
 ---
 
 ## Notes

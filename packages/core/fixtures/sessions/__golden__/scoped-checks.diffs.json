@@ -1,0 +1,254 @@
+{
+  "0:/home/user/project/packages/core/src/b.ts": {
+    "path": "/home/user/project/packages/core/src/b.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "const b = 1;"
+          },
+          {
+            "t": "+",
+            "s": "const b = 2;"
+          }
+        ]
+      }
+    ]
+  },
+  "0:/home/user/project/packages/web/src/a.ts": {
+    "path": "/home/user/project/packages/web/src/a.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "return a - b;"
+          },
+          {
+            "t": "+",
+            "s": "return a + b;"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/src/api/route.ts": {
+    "path": "/home/user/project/src/api/route.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "export const route = 1;"
+          },
+          {
+            "t": "+",
+            "s": "export const route = 2;"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/src/cart.py": {
+    "path": "/home/user/project/src/cart.py",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "return total - tax"
+          },
+          {
+            "t": "+",
+            "s": "return total + tax"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/src/orders.py": {
+    "path": "/home/user/project/src/orders.py",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "return len(orders)"
+          },
+          {
+            "t": "+",
+            "s": "return len(orders) + 1"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/packages/core/src/b.ts": {
+    "path": "/home/user/project/packages/core/src/b.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "const b = 2;"
+          },
+          {
+            "t": "+",
+            "s": "const b = 3;"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/packages/web/src/a.ts": {
+    "path": "/home/user/project/packages/web/src/a.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "return a + b;"
+          },
+          {
+            "t": "+",
+            "s": "return a + b + 0;"
+          }
+        ]
+      }
+    ]
+  },
+  "4:/home/user/project/packages/core/src/b.ts": {
+    "path": "/home/user/project/packages/core/src/b.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "const b = 3;"
+          },
+          {
+            "t": "+",
+            "s": "const b = 4;"
+          }
+        ]
+      }
+    ]
+  },
+  "5:/home/user/project/internal/bar/b.go": {
+    "path": "/home/user/project/internal/bar/b.go",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "return 1"
+          },
+          {
+            "t": "+",
+            "s": "return 2"
+          }
+        ]
+      }
+    ]
+  },
+  "5:/home/user/project/internal/foo/a.go": {
+    "path": "/home/user/project/internal/foo/a.go",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "return a - b"
+          },
+          {
+            "t": "+",
+            "s": "return a + b"
+          }
+        ]
+      }
+    ]
+  },
+  "6:/home/user/project/src/x.js": {
+    "path": "/home/user/project/src/x.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "export const x = 1;"
+          },
+          {
+            "t": "+",
+            "s": "export const x = 2;"
+          }
+        ]
+      }
+    ]
+  },
+  "7:/home/user/project/packages/core/src/c.ts": {
+    "path": "/home/user/project/packages/core/src/c.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "const c = 1;"
+          },
+          {
+            "t": "+",
+            "s": "const c = 2;"
+          }
+        ]
+      }
+    ]
+  }
+}

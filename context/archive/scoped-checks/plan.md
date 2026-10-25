@@ -296,25 +296,25 @@ D7. Tests: `agg.scopedCheckPrompts` equals the number of CLI-JSON prompts whose 
 
 ### Phase 1: checkScope
 
-- [ ] 1.1 `checkScope` + table tests; `pnpm check` green
+- [x] 1.1 `checkScope` + table tests; `pnpm check` green
 
 ### Phase 2: Resolution and coverage
 
-- [ ] 2.1 `scope.ts` + tests; `pnpm check` green
+- [x] 2.1 `scope.ts` + tests; `pnpm check` green
 
 ### Phase 3: Wiring
 
-- [ ] 3.1 event `cwd`, `CheckRec.scope`, `judge` gaps and reason, `check-scope` hint; SC-1..SC-8; no golden change; `pnpm check` green
+- [x] 3.1 event `cwd`, `CheckRec.scope`, `judge` gaps and reason, `check-scope` hint; SC-1..SC-8; no golden change; `pnpm check` green
 
 ### Phase 4: Fixture and goldens
 
-- [ ] 4.1 `scoped-checks` fixture + labels + four new goldens only; `pnpm check` green
+- [x] 4.1 `scoped-checks` fixture + labels + four new goldens only; `pnpm check` green
 
 ### Phase 5: Audit counter
 
-- [ ] 5.1 `scopedCheckPrompts`; `pnpm check` green
+- [x] 5.1 `scopedCheckPrompts`; `pnpm check` green
 
 ### Phase 6: Orchestrator
 
-- [ ] 6.1 README text, real-log audit
-- [ ] 6.2 roadmap, PRD, archive
+- [x] 6.1 README text, real-log audit
+- [x] 6.2 roadmap, PRD, archive

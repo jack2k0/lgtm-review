@@ -1,0 +1,288 @@
+{
+  "sessionId": "scoped-checks",
+  "title": "Change web and core, test web only.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Change web and core, test web only.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit (scoped to packages/web)",
+      "files": [
+        {
+          "path": "/home/user/project/packages/core/src/b.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/packages/web/src/a.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [
+        {
+          "rule": "check-scope",
+          "severity": "warn",
+          "path": "/home/user/project/packages/core/src/b.ts",
+          "reason": "outside the scope of the passing check (packages/web)"
+        }
+      ],
+      "recommendation": "skim"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000008",
+      "text": "Fix the API route and run its tests.",
+      "status": "checked",
+      "reason": "vitest run tests/api passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/api/route.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [
+        {
+          "rule": "public-surface",
+          "severity": "warn",
+          "path": "/home/user/project/src/api/route.ts",
+          "reason": "public surface edited (routes or API)"
+        }
+      ],
+      "recommendation": "skim"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000013",
+      "text": "Fix cart totals and run the cart test.",
+      "status": "checked",
+      "reason": "pytest tests/test_cart.py passed after last edit (scoped to tests/test_cart.py)",
+      "files": [
+        {
+          "path": "/home/user/project/src/cart.py",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/orders.py",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [
+        {
+          "rule": "check-scope",
+          "severity": "warn",
+          "path": "/home/user/project/src/orders.py",
+          "reason": "outside the scope of the passing check (tests/test_cart.py)"
+        }
+      ],
+      "recommendation": "skim"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000020",
+      "text": "Run everything, then the web package again.",
+      "status": "checked",
+      "reason": "pnpm --filter ./packages/web test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/packages/core/src/b.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/packages/web/src/a.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 4000,
+        "fixMs": 0
+      },
+      "activeMs": 8000,
+      "headline": "Mostly writing (50%), 2 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 4,
+      "uuid": "00000000-0000-4000-8000-000000000029",
+      "text": "Test the web package by name.",
+      "status": "checked",
+      "reason": "pnpm --filter @acme/web test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/packages/core/src/b.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 5,
+      "uuid": "00000000-0000-4000-8000-000000000034",
+      "text": "Fix foo and bar, test foo.",
+      "status": "checked",
+      "reason": "go test ./internal/foo/... passed after last edit (scoped to internal/foo)",
+      "files": [
+        {
+          "path": "/home/user/project/internal/bar/b.go",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/internal/foo/a.go",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [
+        {
+          "rule": "check-scope",
+          "severity": "warn",
+          "path": "/home/user/project/internal/bar/b.go",
+          "reason": "outside the scope of the passing check (internal/foo)"
+        }
+      ],
+      "recommendation": "skim"
+    },
+    {
+      "index": 6,
+      "uuid": "00000000-0000-4000-8000-000000000041",
+      "text": "Test from the project root.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/x.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 7,
+      "uuid": "00000000-0000-4000-8000-000000000046",
+      "text": "Keep testing in the web folder.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit (scoped to packages/web)",
+      "files": [
+        {
+          "path": "/home/user/project/packages/core/src/c.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [
+        {
+          "rule": "check-scope",
+          "severity": "warn",
+          "path": "/home/user/project/packages/core/src/c.ts",
+          "reason": "outside the scope of the passing check (packages/web)"
+        }
+      ],
+      "recommendation": "skim"
+    }
+  ],
+  "warnings": []
+}

@@ -231,6 +231,8 @@ export interface HintInput {
   lastCheckSeq: number | null;
   /** Working directory of the session; paths inside it are classified relative to it. */
   cwd: string | null;
+  /** Path → label of the scoped check; only for a checked prompt (FR-017). */
+  outOfScope?: ReadonlyMap<string, string>;
 }
 
 const SEVERITY_ORDER: Record<Severity, number> = { high: 0, warn: 1, info: 2 };
@@ -309,6 +311,8 @@ export function computeHints(input: HintInput): Hint[] {
       if (input.lastCheckSeq === null || f.lastSeq > input.lastCheckSeq) {
         add("unchecked-edit", "warn", f.path, input.lastCheckSeq === null ? "edited and no check completed in this prompt" : "edited after the last completed check");
       }
+      const scopedTo = input.outOfScope?.get(f.path);
+      if (scopedTo !== undefined) add("check-scope", "warn", f.path, `outside the scope of the passing check (${scopedTo})`);
       if (isManifestPath(f.rel)) add("dependency-change", "warn", f.path, "dependency manifest or lockfile edited");
       if (!f.isTest) {
         const surface = publicSurfaceKind(f.rel);
