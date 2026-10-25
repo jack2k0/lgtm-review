@@ -274,7 +274,7 @@ D4. Tests:
 
 ### Schema pre-commit (orchestrator)
 
-- [ ] 0.1 `GitFileEntry`, `GitCrosscheckResponse` and their exports on main; `pnpm check` green
+- [x] 0.1 `GitFileEntry`, `GitCrosscheckResponse` and their exports on main; `pnpm check` green
 
 ### Phase 1: Core node
 

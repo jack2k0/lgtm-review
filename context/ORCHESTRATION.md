@@ -20,6 +20,7 @@ Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-li
 
 ## Aktywne slice'y / worktree
 brak
+- v0.3 (2026-10-25): roadmapa i PRD v3 przygotowane przez Opusa (max); S-16..S-21 zaimplementowane przez Haiku/Sonnet/OpenCode (DeepSeek)/Agy (Gemini), zweryfikowane i zmergowane przez Opusa, zarchiwizowane. zod 3 -> 4.6.6 (audit). Czeka na właściciela: S-08 (O-1..O-3 w PRD), widok w przeglądarce S-17/S-19/S-21, ponowny audyt ground truth (>= 97% niezmierzone), push.
 - S-09 walidacja na wdAir (subagent Sonnet, read-only): ekstraktor+resolver vs Python ast 2908/2908 krawędzi, 0 FP/0 FN; luka: zagnieżdżone projekty (vendor/letsfg) -> fix py-roots (OpenCode pQ, 6528775, zmergowany, zweryfikowany: 21/21 importów letsfg rozwiązanych).
 
 ## Bramki
@@ -49,7 +50,7 @@ brak
 ## Notatki
 - Repo ma remote `origin` (github.com/jack2k0/lgtm-review). Push main 426a7f4 za zgodą właściciela (2026-10-23); kolejne pushe tylko na polecenie.
 - Repo lokalne, bez remote. Nie pushować. Branch startowy `master`, docelowy `main` (do zmiany przy commicie fundamentu).
-- Env: node 22 + pnpm przez PATH=/tmp/claude-1000/shim:$HOME/.local/opt/node22/bin. git user nie ustawiony: commity z GIT_AUTHOR_*/GIT_COMMITTER_* (jack / bogatyszejksponsor2@gmail.com). Narzędzia quoty niesprawdzone.
+- Env (2026-10-25): shim /tmp/claude-1000/shim zniknął; pnpm przez corepack (`corepack pnpm`, wrapper w scratchpadzie sesji). Wcześniej: node 22 + pnpm przez PATH=/tmp/claude-1000/shim:$HOME/.local/opt/node22/bin. git user nie ustawiony: commity z GIT_AUTHOR_*/GIT_COMMITTER_* (jack / bogatyszejksponsor2@gmail.com). Narzędzia quoty niesprawdzone.
 
 ## Otwarte problemy
 brak
