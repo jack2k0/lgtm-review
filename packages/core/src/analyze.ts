@@ -1,7 +1,7 @@
 import { checkScope, classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
 import { classifyShellMutation, resolveTarget } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
-import { computeHints, emptyStats, isDocPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
+import { computeHints, emptyStats, isDocPath, isScratchPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
 import { createParser, type Event, type TaskNotificationEvent, type ToolInput, type ToolResultEvent } from "./parse.js";
 import { resolveScope, scopeGaps, type ResolvedScope } from "./scope.js";
 import { ACTIONS_MAX, buildSteps, failureExcerpt, kindOf, oneLine, QUOTES_PER_STEP, type ActionRec } from "./steps.js";
@@ -63,6 +63,8 @@ interface FileTouch {
   inFix: boolean;
   /** Counters of assertion-like and skip-marker lines; the lines themselves are never kept. */
   stats: EditStats;
+  /** code, documentation (FR-015) or scratch (S-20); decided when the edit is recorded. */
+  cls: "code" | "doc" | "scratch";
   /** Detail mode: retained hunks of this edit; `undefined` when the log recorded none. */
   patch?: RawPatch | undefined;
 }
@@ -78,6 +80,8 @@ interface EditRec {
   gitOp: boolean;
   /** Every file of the edit is documentation: listed, never changes the status (FR-015). */
   doc: boolean;
+  /** No code file and not all documentation: scratch files, possibly with documentation (S-20). */
+  scratch: boolean;
   /** Agent id of the subagent that made the edit; `""` for the parent thread. */
   thread: string;
 }
@@ -146,6 +150,8 @@ interface PendingUse {
   name: string;
   input: ToolInput;
   check: CheckRec | null;
+  /** Working directory recorded on the tool_use record; null when absent. */
+  cwd: string | null;
   /** Timestamps (ms) of the previous event and of this tool_use; null when unknown. */
   prevTs: number | null;
   useTs: number | null;
@@ -154,23 +160,23 @@ interface PendingUse {
   action: ActionRec | null;
 }
 
-function editTouch(use: PendingUse, res: ToolResultEvent, inFix: boolean): FileTouch | null {
+function editTouch(use: PendingUse, res: ToolResultEvent, inFix: boolean, cls: FileTouch["cls"]): FileTouch | null {
   const path = use.input.filePath;
   if (path === undefined) return null;
   const isWrite = use.name === "Write";
   // A written file without patch counts the written content as added (nothing is known about the old one).
   const stats = res.stats ?? (isWrite ? use.input.contentStats : undefined) ?? emptyStats();
   if (isWrite && res.resultType === "create") {
-    return { path, kind: "A", added: res.createLines ?? use.input.contentLines ?? 0, removed: 0, maybeIncomplete: false, inFix, stats };
+    return { path, kind: "A", added: res.createLines ?? use.input.contentLines ?? 0, removed: 0, maybeIncomplete: false, inFix, stats, cls };
   }
   if (res.structuredPatch) {
-    return { path, kind: "M", added: res.structuredPatch.added, removed: res.structuredPatch.removed, maybeIncomplete: false, inFix, stats };
+    return { path, kind: "M", added: res.structuredPatch.added, removed: res.structuredPatch.removed, maybeIncomplete: false, inFix, stats, cls };
   }
   if (isWrite) {
     // No create marker and no patch: whole-file write of unknown previous content.
-    return { path, kind: "M", added: use.input.contentLines ?? 0, removed: 0, maybeIncomplete: true, inFix, stats };
+    return { path, kind: "M", added: use.input.contentLines ?? 0, removed: 0, maybeIncomplete: true, inFix, stats, cls };
   }
-  return { path, kind: "M", added: 0, removed: 0, maybeIncomplete: true, inFix, stats };
+  return { path, kind: "M", added: 0, removed: 0, maybeIncomplete: true, inFix, stats, cls };
 }
 
 /** Coverage position of the last completed (non-ignored) check; null when none completed. */
@@ -184,7 +190,10 @@ function evidenceOf(p: PromptState): EditEvidence[] {
   const out: EditEvidence[] = [];
   for (const e of p.edits) {
     if (e.gitOp) continue;
-    for (const t of e.files) out.push({ seq: e.seq, path: t.path, inFix: t.inFix, changed: t.added + t.removed, stats: t.stats });
+    for (const t of e.files) {
+      if (t.cls === "scratch") continue;
+      out.push({ seq: e.seq, path: t.path, inFix: t.inFix, changed: t.added + t.removed, stats: t.stats });
+    }
   }
   return out;
 }
@@ -225,12 +234,15 @@ function plural(n: number, word: string): string {
 function judge(p: PromptState, by: (thread: string) => string): { status: Status; reason: string; outOfScope: Map<string, string> } {
   const via = (thread: string): string => (thread === "" ? "" : ` (by subagent ${by(thread)})`);
   if (p.edits.length === 0) return { status: "no-changes", reason: "no edits", outOfScope: new Map() };
-  // Git operations bring in other people's changes and documentation needs no check (FR-015): neither moves the status.
-  const edits = p.edits.filter((e) => !e.gitOp && !e.doc);
+  // Git operations, documentation and scratch files need no check (FR-015, S-20): none of them moves the status.
+  const edits = p.edits.filter((e) => !e.gitOp && !e.doc && !e.scratch);
   if (edits.length === 0) {
-    return p.edits.some((e) => !e.gitOp)
-      ? { status: "no-changes", reason: "no code edits (documentation only)", outOfScope: new Map() }
-      : { status: "no-changes", reason: "no edits (git operations only)", outOfScope: new Map() };
+    const nonGit = p.edits.filter((e) => !e.gitOp);
+    if (nonGit.length === 0) return { status: "no-changes", reason: "no edits (git operations only)", outOfScope: new Map() };
+    const anyDoc = nonGit.some((e) => e.files.some((t) => t.cls === "doc"));
+    const anyScratch = nonGit.some((e) => e.files.some((t) => t.cls === "scratch"));
+    const what = anyDoc && anyScratch ? "documentation and scratch files only" : anyScratch ? "scratch files only" : "documentation only";
+    return { status: "no-changes", reason: `no code edits (${what})`, outOfScope: new Map() };
   }
   const lastEdit = edits.reduce((m, e) => Math.max(m, e.seq), -1);
   const real = p.checks.filter((c) => !c.ignored);
@@ -259,11 +271,12 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
     if (lastCompleted.exit === 0) {
       const note = lastCompleted.probe ? " (edits may have been reverted)" : lastCompleted.unreliable ? " (exit code not verified)" : "";
       const docsAfter = p.edits.filter((e) => e.doc && !e.gitOp && e.seq > lastCompleted.coveredSeq).length;
+      const nonCodeAfter = p.edits.filter((e) => !e.gitOp && (e.doc || e.scratch) && e.seq > lastCompleted.coveredSeq).length;
       // Every code file is checked against the passing checks that finished after its last edit (D5).
       const files = new Map<string, number>();
       for (const e of edits) {
         for (const f of e.files) {
-          if (isDocPath(f.path)) continue;
+          if (f.cls !== "code") continue;
           const seen = files.get(f.path);
           if (seen === undefined || e.seq > seen) files.set(f.path, e.seq);
         }
@@ -283,7 +296,7 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
       const docsTail = docsAfter > 0 ? `; ${plural(docsAfter, "documentation edit")} after it` : "";
       return {
         status: "checked",
-        reason: `${lastCompleted.label} passed after last ${docsAfter > 0 ? "code " : ""}edit${note}${scopeNote}${via(lastCompleted.thread)}${docsTail}`,
+        reason: `${lastCompleted.label} passed after last ${nonCodeAfter > 0 ? "code " : ""}edit${note}${scopeNote}${via(lastCompleted.thread)}${docsTail}`,
         outOfScope,
       };
     }
@@ -343,6 +356,12 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
   let detailChars = 0;
   let detailCache: PromptDetail[] | null = null;
   const filesCache = new Map<number, FileChange[]>();
+
+  /** File class (S-20): documentation first, then scratch, else code. */
+  function classify(path: string, use: PendingUse): FileTouch["cls"] {
+    if (isDocPath(path)) return "doc";
+    return isScratchPath(path, parser.meta().cwd, use.cwd) ? "scratch" : "code";
+  }
 
   /** Retains `patch` for an edit of `path`, within the per-file line cap and the session budget. */
   function retain(p: PromptState, path: string, patch: RawPatch | undefined): RawPatch | undefined {
@@ -512,7 +531,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             detailChars += 200 + action.target.length + action.quotes.reduce((n, q) => n + q.length, 0);
           }
         }
-        pending.set(pendingKey(thread, ev.id), { prompt: cur, thread, name: ev.name, input: ev.input, check, prevTs, useTs: ts, failing: cur.failing.has(thread), action });
+        pending.set(pendingKey(thread, ev.id), { prompt: cur, thread, name: ev.name, input: ev.input, check, cwd: ev.cwd ?? null, prevTs, useTs: ts, failing: cur.failing.has(thread), action });
         return;
       }
       case "tool_result": {
@@ -575,7 +594,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
         if (ev.isError) return;
         let touches: FileTouch[] = [];
         if (EDIT_TOOLS.has(use.name)) {
-          const t = editTouch(use, ev, phase === "fix");
+          const t = editTouch(use, ev, phase === "fix", classify(use.input.filePath ?? "", use));
           if (t) {
             if (detail) t.patch = retain(use.prompt, t.path, t.kind === "A" ? ev.createPatch : ev.patch);
             touches = [t];
@@ -597,6 +616,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
                 maybeIncomplete: f.maybeIncomplete || gitOp,
                 inFix: phase === "fix",
                 stats: f.stats,
+                cls: classify(f.path, use),
               };
               if (detail) t.patch = retain(use.prompt, f.path, f.patch);
               return t;
@@ -606,21 +626,26 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             // edit (the harness snapshots before the command ends and misses edits committed within it): count the command text.
             gitOp = sm.gitOnly;
             if (!gitOp) seqAt = orderedSeq(seq, sm.order);
-            const cwd = parser.meta().cwd;
-            touches = sm.edits.map((e) => ({
-              path: resolveTarget(e.file, cwd, sm.hasCd),
-              kind: "M" as const,
-              added: 0,
-              removed: 0,
-              maybeIncomplete: true,
-              inFix: use.failing,
-              stats: emptyStats(),
-            }));
+            const cwd = use.cwd ?? parser.meta().cwd;
+            touches = sm.edits.map((e) => {
+              const path = resolveTarget(e.file, cwd, sm.hasCd);
+              return {
+                path,
+                kind: "M" as const,
+                added: 0,
+                removed: 0,
+                maybeIncomplete: true,
+                inFix: use.failing,
+                stats: emptyStats(),
+                cls: classify(path, use),
+              };
+            });
             if (!gitOp) use.prompt.shellHeuristic = true;
           }
         }
         if (touches.length > 0) {
-          use.prompt.edits.push({ seq: seqAt, files: touches, gitOp, doc: touches.every((t) => isDocPath(t.path)), thread: use.thread });
+          const doc = touches.every((t) => isDocPath(t.path));
+          use.prompt.edits.push({ seq: seqAt, files: touches, gitOp, doc, scratch: !doc && touches.every((t) => t.cls !== "code"), thread: use.thread });
           if (act) act.edits = touches.map((t) => ({ path: t.path, kind: t.kind, added: t.added, removed: t.removed }));
         }
         return;

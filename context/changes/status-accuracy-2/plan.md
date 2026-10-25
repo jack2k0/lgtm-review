@@ -258,7 +258,7 @@ Labels: `expectedStatus`, `expectedRecommendation`, `expectedHints` (paths relat
 
 ### Phase 3: Wiring and pinned cases
 
-- [ ] 3.1 classes, status rule, hints, call cwd; SX-1..SX-9, BN-1..BN-2; no golden change; `pnpm check` green
+- [x] 3.1 classes, status rule, hints, call cwd; SX-1..SX-9, BN-1..BN-2; no golden change; `pnpm check` green
 
 ### Phase 4: Fixture and goldens
 
