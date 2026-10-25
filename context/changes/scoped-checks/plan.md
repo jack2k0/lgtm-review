@@ -312,7 +312,7 @@ D7. Tests: `agg.scopedCheckPrompts` equals the number of CLI-JSON prompts whose 
 
 ### Phase 5: Audit counter
 
-- [ ] 5.1 `scopedCheckPrompts`; `pnpm check` green
+- [x] 5.1 `scopedCheckPrompts`; `pnpm check` green
 
 ### Phase 6: Orchestrator
 

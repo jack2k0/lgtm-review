@@ -14,6 +14,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const SHELL_SUFFIX = "(shell edits may be incomplete)";
 const UNRELIABLE_SUFFIXES = ["(exit code not verified)", "(edits may have been reverted)", "(exit code masked)"];
 const DOC_REASON_RE = /^no code edits \(documentation only\)|; \d+ documentation edits? after it/;
+const SCOPED_REASON_RE = /\(scoped to [^)]*\)/;
 
 /** Aggregates of a parsed `--list --json` result. Exported-shape: plain numbers only. */
 export function aggregate(analysis) {
@@ -23,6 +24,7 @@ export function aggregate(analysis) {
   let partial = 0;
   let shell = 0;
   let docEdit = 0;
+  let scoped = 0;
   let checkPrompts = 0;
   let unreliable = 0;
   for (const p of prompts) {
@@ -31,6 +33,7 @@ export function aggregate(analysis) {
     const reason = typeof p.reason === "string" ? p.reason : "";
     if (reason.includes(SHELL_SUFFIX)) shell++;
     if (DOC_REASON_RE.test(reason)) docEdit++;
+    if (SCOPED_REASON_RE.test(reason)) scoped++;
     // A prompt that ends checked or failing on a completed check carries that check's reliability in its reason.
     if (p.status === "checked" || (p.status === "failing" && /(?:failed|masked)/.test(reason))) {
       checkPrompts++;
@@ -50,6 +53,8 @@ export function aggregate(analysis) {
     shellEditPct: pct(shell, prompts.length),
     docEditPrompts: docEdit,
     docEditPct: pct(docEdit, prompts.length),
+    scopedCheckPrompts: scoped,
+    scopedCheckPct: pct(scoped, prompts.length),
     checkPrompts,
     unreliableChecks: unreliable,
     unreliableChecksPct: pct(unreliable, checkPrompts),
@@ -68,6 +73,7 @@ export function render(a) {
     `partial (subagent activity not analysed): ${fmt(a.partial, a.partialPct)}`,
     `prompts with heuristic shell edits: ${fmt(a.shellEditPrompts, a.shellEditPct)}`,
     `prompts with documentation edits not counted: ${fmt(a.docEditPrompts, a.docEditPct)}`,
+    `checked prompts with files outside the check's scope: ${fmt(a.scopedCheckPrompts, a.scopedCheckPct)}`,
     `checks with unverified exit code (of ${a.checkPrompts} prompts that ended on a completed check): ${fmt(a.unreliableChecks, a.unreliableChecksPct)}`,
   ];
   return lines.join("\n");
