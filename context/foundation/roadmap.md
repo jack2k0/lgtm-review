@@ -196,7 +196,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | ID   | Change ID         | Outcome (user can …)                                                                                                          | Size | Prerequisites              | Parallel with                | PRD refs                       | Status                  |
 | ---- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---- | -------------------------- | ---------------------------- | ------------------------------ | ----------------------- |
 | S-16 | doc-edits         | see prompts that only edited documentation as needing no check, and keep `checked` when only docs changed after the check   | S    | —                          | S-17                         | FR-015                         | done |
-| S-17 | prompt-triage     | narrow sessions and prompts to "needs attention" and move through prompts with the keyboard                                   | M    | —                          | S-16                         | FR-016, NFR keyboard           | proposed (plan drafted) |
+| S-17 | prompt-triage     | narrow sessions and prompts to "needs attention" and move through prompts with the keyboard                                   | M    | —                          | S-16                         | FR-016, NFR keyboard           | done |
 | S-18 | scoped-checks     | see a `check-scope` hint when the check behind `checked` ran only on part of the repository                                   | M    | S-16                       | S-19 (schema-first rule)     | FR-017                         | proposed                |
 | S-19 | worktree-sessions | see the sessions of every git worktree of the repository in one list                                                          | M    | S-17                       | S-18 (schema-first rule), S-20 | FR-018, NFR read-only git    | proposed                |
 | S-20 | status-accuracy-2 | rely on >= 97% status match on real logs (in-command order, background notifications, scratch files, Python comments)         | M    | S-18                       | S-19, S-21                   | FR-002, FR-004, FR-013, SC v3  | proposed                |
@@ -252,7 +252,7 @@ Files each slice is expected to touch (for the parallel check):
   - happy-dom or jsdom: resolved 2026-10-25 in the plan: jsdom 30.1.2, exact (every happy-dom from 17.0.0 to 21.0.3 is under a high advisory that would fail CI's `pnpm audit --audit-level=high`; jsdom 30.1.2 audits clean and passed a spike with vitest 4.1.12 and React 19.3.1). — Owner: team. Block: no.
   - Keys must not hijack page scrolling or screen readers: arrows act only while focus is on a row button (roving focus), single-letter keys only outside inputs. — Owner: team. Block: no.
 - **Risk:** low; mostly web. The session-level count needs one optional field, `SessionSummary.attentionCount`, computed by the API with a shared core rule `needsAttention` that `--summary` also uses (output unchanged); schema-first rule with S-18 if both are in flight. The one dependency of the batch (jsdom, dev-only, exact) is not shipped (web is bundled into the CLI). Plan: `context/changes/prompt-triage/plan.md`.
-- **Status:** proposed (plan drafted, awaiting plan-review)
+- **Status:** done (2026-10-25; phases Sonnet/OpenCode/OpenCode/Sonnet/OpenCode, 0 fixes; visual browser check pending for the owner, `context/archive/prompt-triage/reviews/browser-check.md`)
 
 ### S-18: Scoped checks flagged ("partially checked" as a hint)
 
@@ -334,7 +334,7 @@ Files each slice is expected to touch (for the parallel check):
 | Roadmap ID | Change ID         | Suggested issue title                                          | Ready for plan                           | Notes                                   |
 | ---------- | ----------------- | -------------------------------------------------------------- | ---------------------------------------- | --------------------------------------- |
 | S-16       | doc-edits         | Documentation-only edits need no check                         | done                                     | wave 1                                  |
-| S-17       | prompt-triage     | "Needs attention" filters and keyboard navigation in the UI    | plan drafted; next: plan-review          | wave 1 (S-16 already merged)            |
+| S-17       | prompt-triage     | "Needs attention" filters and keyboard navigation in the UI    | done                                     | wave 1 (S-16 already merged)            |
 | S-18       | scoped-checks     | Flag checks that ran on only part of the repository            | after S-16 merges                        | wave 2                                  |
 | S-19       | worktree-sessions | One session list for all git worktrees                         | after S-17 merges; worktree count first  | wave 2, schema-first with S-18          |
 | S-20       | status-accuracy-2 | Status accuracy round 2 (real-log follow-ups)                  | after S-18 merges; re-audit first        | wave 3                                  |

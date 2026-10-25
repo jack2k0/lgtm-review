@@ -340,25 +340,25 @@ Keyboard in the prompt table: Tab to a prompt, then ↑/↓ move between prompts
 
 ### Phase 1: DOM test environment
 
-- [ ] 1.1 jsdom 30.1.2 (exact, dev) + `testing/dom.ts` + `testing/fixtures.ts`; C1-C5 green; audit clean; `pnpm check` green
+- [x] 1.1 jsdom 30.1.2 (exact, dev) + `testing/dom.ts` + `testing/fixtures.ts`; C1-C5 green; audit clean; `pnpm check` green
 
 ### Phase 2: Shared rule and session count
 
-- [ ] 2.1 `needsAttention` in core, `SessionSummary.attentionCount`, `summarize()`, `summary.ts` reuse; no golden change; `pnpm check` green
+- [x] 2.1 `needsAttention` in core, `SessionSummary.attentionCount`, `summarize()`, `summary.ts` reuse; no golden change; `pnpm check` green
 
 ### Phase 3: Triage logic and routes
 
-- [ ] 3.1 `triage.ts` + `?show=attention` routes with tests; `pnpm check` green
+- [x] 3.1 `triage.ts` + `?show=attention` routes with tests; `pnpm check` green
 
 ### Phase 4: Prompt table
 
-- [ ] 4.1 counts, filter, keys, styles; P1-P8 green; `pnpm check` green
+- [x] 4.1 counts, filter, keys, styles; P1-P8 green; `pnpm check` green
 
 ### Phase 5: Session list and README
 
-- [ ] 5.1 counts, filter, markers; L1-L6 green; README section; `pnpm check` green
+- [x] 5.1 counts, filter, markers; L1-L6 green; README section; `pnpm check` green
 
 ### Phase 6: Orchestrator
 
-- [ ] 6.1 browser check recorded
-- [ ] 6.2 roadmap, PRD, archive
+- [x] 6.1 browser check recorded
+- [x] 6.2 roadmap, PRD, archive

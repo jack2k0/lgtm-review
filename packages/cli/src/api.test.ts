@@ -61,7 +61,7 @@ describe("GET /api/sessions", () => {
     expect(r.json.dir).toBe(PROJECT);
     expect(r.json.sessions.map((s: { id: string }) => s.id).sort()).toEqual([...ids].sort());
     for (const s of r.json.sessions) {
-      const keys = ["branch", "id", "inheritedCount", "promptCount", "startedAt", "statusCounts", "title", "warningCount"];
+      const keys = ["attentionCount", "branch", "id", "inheritedCount", "promptCount", "startedAt", "statusCounts", "title", "warningCount"];
       expect(Object.keys(s).sort()).toEqual((s.inheritedCount > 0 ? [...keys, "forkOf"] : keys).sort());
       expect(Object.keys(s.statusCounts).sort()).toEqual(["checked", "failing", "no-changes", "unchecked"]);
       const total = Object.values(s.statusCounts as Record<string, number>).reduce((a, b) => a + b, 0);
@@ -76,6 +76,17 @@ describe("GET /api/sessions", () => {
     for (const s of list) expect(summarize(fulls.find((f) => f.sessionId === s.id)!, fulls)).toEqual(s);
     const dated = list.map((s) => s.startedAt).filter((x): x is string => x !== null);
     expect(dated).toEqual([...dated].sort().reverse());
+  });
+
+  test("attentionCount counts own prompts that need attention", async () => {
+    const list = (await get(srv, "/api/sessions")).json.sessions as { id: string; attentionCount: number }[];
+    for (const s of list) {
+      const full = SessionAnalysis.parse((await get(srv, `/api/sessions/${s.id}`)).json);
+      const expected = full.prompts.filter(
+        (p) => p.inheritedFrom === undefined && (p.hints.length > 0 || p.status === "unchecked" || p.status === "failing"),
+      ).length;
+      expect(s.attentionCount, s.id).toBe(expected);
+    }
   });
 
   test("no sessions or missing project dir -> empty list", async () => {
@@ -108,7 +119,7 @@ describe("fork/resume dedupe", () => {
 
   test("summarize breaks forkOf ties by ownership order, not by prompt order", () => {
     const mk = (sessionId: string, startedAt: string | null, uuids: string[], from: string[]) =>
-      ({ sessionId, startedAt, title: "", branch: "", warnings: [], prompts: uuids.map((uuid, i) => ({ uuid, index: i, status: "checked", ...(from[i] ? { inheritedFrom: from[i] } : {}) })) }) as any;
+      ({ sessionId, startedAt, title: "", branch: "", warnings: [], prompts: uuids.map((uuid, i) => ({ uuid, index: i, status: "checked", hints: [], ...(from[i] ? { inheritedFrom: from[i] } : {}) })) }) as any;
     const early = mk("zzz", "2026-01-01T00:00:00Z", [], []);
     const late = mk("aaa", "2026-01-02T00:00:00Z", [], []);
     const child = mk("child", "2026-01-03T00:00:00Z", ["1", "2"], ["aaa", "zzz"]);

@@ -1,10 +1,10 @@
 ---
 change_id: prompt-triage
 title: Triage in the browser — "needs attention" filters, counts and keyboard navigation
-status: planned
+status: done
 created: 2026-10-25
 updated: 2026-10-25
-archived_at: null
+archived_at: 2026-10-25
 ---
 
 ## Notes

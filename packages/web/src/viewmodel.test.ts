@@ -95,6 +95,30 @@ describe("routing", () => {
   });
 });
 
+describe("attention routing", () => {
+  test("the filter is part of the list and session routes", () => {
+    expect(parseRoute("#/?show=attention")).toStrictEqual({ kind: "list", show: "attention" });
+    expect(parseRoute("#/session/a%2Fb?show=attention")).toStrictEqual({ kind: "session", id: "a/b", show: "attention" });
+    for (const r of [
+      { kind: "list", show: "attention" },
+      { kind: "session", id: "x y", show: "attention" },
+      { kind: "session", id: "x/y", show: "attention" },
+    ] as const) expect(parseRoute(routeHref(r))).toStrictEqual(r);
+  });
+
+  test("routes without the filter are byte-identical", () => {
+    expect(routeHref({ kind: "list" })).toBe("#/");
+    expect(routeHref({ kind: "session", id: "x" })).toBe("#/session/x");
+    expect(parseRoute("#/session/abc")).toStrictEqual({ kind: "session", id: "abc" });
+  });
+
+  test("other queries and bad encodings fall back to the list", () => {
+    for (const h of ["#/session/x?show=all", "#/session/x?show=attention&y=1", "#/?show=bogus", "#/session/%E0%A4%A?show=attention"]) {
+      expect(parseRoute(h), h).toStrictEqual({ kind: "list" });
+    }
+  });
+});
+
 describe("steps routing", () => {
   test("steps and diff routes round-trip", () => {
     expect(parseRoute("#/session/abc/prompt/0")).toEqual({ kind: "steps", id: "abc", index: 0 });

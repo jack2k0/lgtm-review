@@ -120,6 +120,8 @@ export const SessionSummary = z.object({
   forkOf: z.string().optional(),
   /** True only when the session was read from the local archive. */
   archived: z.boolean().optional(),
+  /** Own (non-inherited) prompts that need attention (`needsAttention`). Always set by the API. */
+  attentionCount: z.number().int().nonnegative().optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummary>;
 

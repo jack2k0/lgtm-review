@@ -122,8 +122,8 @@ export function nextLimit(limit: number, total: number): number {
 }
 
 export type Route =
-  | { kind: "list" }
-  | { kind: "session"; id: string }
+  | { kind: "list"; show?: "attention" }
+  | { kind: "session"; id: string; show?: "attention" }
   | { kind: "steps"; id: string; index: number }
   | { kind: "diff"; id: string; index: number; path: string }
   | { kind: "map"; id: string; index: number | null }
@@ -139,8 +139,14 @@ function decode(s: string): string | null {
   }
 }
 
-/** Hash routes: `#/session/<id>`, `#/session/<id>/map`, `#/session/<id>/prompt/<index>[/map|play]`, `#/session/<id>/prompt/<index>/diff?path=<file>`. Anything else is the list. */
+/** Hash routes: `#/session/<id>`, `#/session/<id>/map`, `#/session/<id>/prompt/<index>[/map|play]`, `#/session/<id>/prompt/<index>/diff?path=<file>`; `?show=attention` on the list and session routes. Anything else is the list. */
 export function parseRoute(hash: string): Route {
+  if (hash === "#/?show=attention") return { kind: "list", show: "attention" };
+  const session = /^#\/session\/([^/?]+)\?show=attention$/.exec(hash);
+  if (session) {
+    const id = decode(session[1]!);
+    return id === null ? { kind: "list" } : { kind: "session", id, show: "attention" };
+  }
   const m = /^#\/session\/([^/?]+)(?:\/prompt\/([^/?]+))?(?:\/(map|diff|play)(?:[?]([^#]*))?)?$/.exec(hash);
   if (!m) return { kind: "list" };
   const id = decode(m[1]!);
@@ -179,9 +185,9 @@ export function parseRoute(hash: string): Route {
 export function routeHref(r: Route): string {
   switch (r.kind) {
     case "list":
-      return "#/";
+      return r.show === "attention" ? "#/?show=attention" : "#/";
     case "session":
-      return `#/session/${encodeURIComponent(r.id)}`;
+      return `#/session/${encodeURIComponent(r.id)}${r.show === "attention" ? "?show=attention" : ""}`;
     case "steps":
       return `#/session/${encodeURIComponent(r.id)}/prompt/${r.index}`;
     case "diff":
