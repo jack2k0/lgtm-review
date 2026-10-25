@@ -3,8 +3,8 @@ import { chmod, link, lstat, rename, stat, unlink, writeFile } from "node:fs/pro
 import { userInfo } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { markInherited } from "@lgtm/core";
-import type { Analyzer, FileDiff, SessionAnalysis } from "@lgtm/core";
-import { analyzeFile, analyzeFileDetail, discoverAllSessions, loadRepoScripts, projectDirFor, type SessionFile } from "@lgtm/core/node";
+import type { Analyzer, FileDiff, RepoScripts, SessionAnalysis } from "@lgtm/core";
+import { analyzeFile, analyzeFileDetail, discoverRootSessions, loadRepoScripts, projectDirFor, type SessionFile, type SessionRoot } from "@lgtm/core/node";
 import { renderExport, type ExportInput } from "./export-html.js";
 
 /** Total diff text (characters) put into one export; further diffs are left out. */
@@ -68,6 +68,8 @@ export interface ExportCommand {
   dir: string;
   projectsDir: string;
   archiveDir?: string;
+  /** From `sessionRoots`; default: `dir` alone. */
+  roots?: SessionRoot[];
   prefix: string;
   /** Output file; default `lgtm-review-<8 chars of the id>.html` in the current directory. */
   out?: string;
@@ -104,7 +106,7 @@ export async function runExport(cmd: ExportCommand): Promise<number> {
   const projectDir = projectDirFor(cmd.dir, cmd.projectsDir);
   let files: SessionFile[];
   try {
-    files = await discoverAllSessions(projectDir, cmd.archiveDir ?? null);
+    files = await discoverRootSessions(cmd.roots ?? [{ dir: cmd.dir, worktree: ".", projectDir, archiveDir: cmd.archiveDir ?? null }]);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
       console.error(`lgtm-review: cannot read ${projectDir}: ${err instanceof Error ? err.message : err}`);
@@ -146,17 +148,25 @@ export async function runExport(cmd: ExportCommand): Promise<number> {
 
   let result;
   try {
-    const repo = await loadRepoScripts(cmd.dir);
+    const repos = new Map<string, Promise<RepoScripts>>();
+    const repoFor = (d: string) => {
+      let p = repos.get(d);
+      if (!p) repos.set(d, (p = loadRepoScripts(d)));
+      return p;
+    };
+    const repo = await repoFor(file.root ?? cmd.dir);
     const detail = await analyzeFileDetail(file.path, { repo, sessionId: file.id, file: `${file.id}.jsonl` });
     if (file.archived) detail.analysis.archived = true;
+    if (file.worktree !== undefined) detail.analysis.worktree = file.worktree;
     const { analyzer } = detail;
     // Inheritance depends on the other sessions of the project; unreadable ones are skipped.
     const all: SessionAnalysis[] = [detail.analysis];
     for (const f of files) {
       if (f === file) continue;
       try {
-        const a = await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
+        const a = await analyzeFile(f.path, { repo: await repoFor(f.root ?? cmd.dir), sessionId: f.id, file: `${f.id}.jsonl` });
         if (f.archived) a.archived = true;
+        if (f.worktree !== undefined) a.worktree = f.worktree;
         all.push(a);
       } catch {
         // skipped, like the list does
@@ -169,7 +179,7 @@ export async function runExport(cmd: ExportCommand): Promise<number> {
       titles: cmd.titles,
       diffs: cmd.diffs,
       exportedAt: new Date().toISOString().slice(0, 10),
-      redact: { usernames: osUsernames(), repoDir: cmd.dir },
+      redact: { usernames: osUsernames(), repoDir: file.root ?? cmd.dir },
       diffsCapped: capped,
     });
   } catch (err) {

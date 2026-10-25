@@ -61,6 +61,13 @@ describe("formatText", () => {
     expect(t.match(/inherited from/g)).toHaveLength(2);
   });
 
+  test("shows [worktree <label>] in the header except for . or unset", () => {
+    const f = (extra: Partial<SessionAnalysis>) => formatText([session("wt111111", "2026-01-01T00:00:00Z", extra)], { color: false, dir: "/x" });
+    expect(f({ worktree: "../wt" })).toContain("2026-01-01T00:00:00Z [worktree ../wt]");
+    expect(f({ worktree: "." })).not.toContain("[worktree");
+    expect(f({})).not.toContain("[worktree");
+  });
+
   test("appends (archived) to the session header when archived: true", () => {
     const t = formatText([session("arch11111", "2026-01-01T00:00:00Z", { archived: true })], { color: false, dir: "/x" });
     expect(t).toContain("arch1111  A title  [main]  2026-01-01T00:00:00Z (archived)");

@@ -61,7 +61,7 @@ export function formatText(sessions: SessionAnalysis[], opts: FormatOptions): st
       .filter(([, n]) => n > 0)
       .map(([st, n]) => `${n} ${st}`)
       .join(", ");
-    const archived = s.archived ? " (archived)" : "";
+    const archived = (s.archived ? " (archived)" : "") + (s.worktree !== undefined && s.worktree !== "." ? ` [worktree ${s.worktree}]` : "");
     out.push(
       `${paint(opts, "1", s.sessionId.slice(0, 8))}  ${oneLine(s.title, 60)}  [${s.branch}]  ${s.startedAt ?? "unknown start"}${archived}`,
     );

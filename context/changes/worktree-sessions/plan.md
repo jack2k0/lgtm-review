@@ -217,7 +217,7 @@ D6. Tests:
 
 ### Phase 2: CLI commands
 
-- [ ] 2.1 `--no-worktrees`, roots in list/json/summary/export/archive, `[worktree …]` in the list; e2e green; `pnpm check` green
+- [x] 2.1 `--no-worktrees`, roots in list/json/summary/export/archive, `[worktree …]` in the list; e2e green; `pnpm check` green
 
 ### Phase 3: Server and API
 
