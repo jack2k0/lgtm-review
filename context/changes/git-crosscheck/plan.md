@@ -278,7 +278,7 @@ D4. Tests:
 
 ### Phase 1: Core node
 
-- [ ] 1.1 `git.ts` runner, parsers, `gitCrosscheck` + tests; `pnpm check` green
+- [x] 1.1 `git.ts` runner, parsers, `gitCrosscheck` + tests; `pnpm check` green
 
 ### Phase 2: API
 
