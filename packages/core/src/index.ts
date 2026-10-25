@@ -38,6 +38,8 @@ export {
   PlayBeatFocus,
   PlayBeat,
   PlayResponse,
+  GitFileEntry,
+  GitCrosscheckResponse,
 } from "./schema.js";
 export { makeHeadline } from "./timing.js";
 export { computeHints, recommend, isTestPath, sensitiveMatch, isManifestPath, isConfigPath, publicSurfaceKind } from "./hints.js";

@@ -349,3 +349,40 @@ export const PlayResponse = z.object({
   truncated: z.boolean(),
 });
 export type PlayResponse = z.infer<typeof PlayResponse>;
+
+/** One file git reports for a session's directory (`GET /api/sessions/:id/git`). */
+export const GitFileEntry = z.object({
+  /** Path relative to the repository's top level, "/"-separated. */
+  path: z.string(),
+  /** Porcelain status of the uncommitted change (`M`, `A`, `D`, `R`, `??`, …) or the name-status letter of the newest commit that touched it. */
+  status: z.string(),
+  /** True when a prompt of the session (not an inherited one) edited this file. */
+  inLog: z.boolean(),
+});
+export type GitFileEntry = z.infer<typeof GitFileEntry>;
+
+/** Body of `GET /api/sessions/:id/git`: what git shows next to what the session edited. Read-only; never changes statuses. */
+export const GitCrosscheckResponse = z.object({
+  sessionId: z.string(),
+  /** False when the directory is not in a git repository or git is unavailable; the lists are then empty. */
+  available: z.boolean(),
+  /** Branch whose commits were read, `HEAD` as a fallback, or null when commits were not read. */
+  ref: z.string().nullable(),
+  /** Commit window (ISO): session start - 10 min to the log's last write + 10 min; null when the start is unknown. */
+  since: z.string().nullable(),
+  until: z.string().nullable(),
+  /** Non-merge commits read in the window (at most 500). */
+  commitCount: z.number().int().nonnegative(),
+  /** Uncommitted changes, sorted by path. */
+  uncommitted: z.array(GitFileEntry),
+  /** Files changed by the window's commits, sorted by path. */
+  committed: z.array(GitFileEntry),
+  /** Repository-relative files the session edited that git shows neither as uncommitted nor in the window's commits, sorted. */
+  notInGit: z.array(z.string()),
+  /** Edited files outside the repository (scratch files, other repositories); not compared. */
+  outsideRepo: z.number().int().nonnegative(),
+  /** A list was cut at 2000 entries or the commit scan stopped at 500 commits. */
+  truncated: z.boolean(),
+  notes: z.array(z.string()),
+});
+export type GitCrosscheckResponse = z.infer<typeof GitCrosscheckResponse>;
