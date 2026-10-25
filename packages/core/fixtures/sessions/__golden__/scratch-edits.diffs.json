@@ -1,0 +1,141 @@
+{
+  "0:/tmp/claude-1000/project/session/scratchpad/probe.py": {
+    "path": "/tmp/claude-1000/project/session/scratchpad/probe.py",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -0,0 +1,3 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "import os"
+          },
+          {
+            "t": "+",
+            "s": ""
+          },
+          {
+            "t": "+",
+            "s": "print(os.getcwd())"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a + b"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/tmp/claude-1000/project/session/scratchpad/results.txt": {
+    "path": "/tmp/claude-1000/project/session/scratchpad/results.txt",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -0,0 +1,1 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "Tests: 3 passed"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/README.md": {
+    "path": "/home/user/project/README.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "# Project"
+          },
+          {
+            "t": "+",
+            "s": "# Project (scratch)"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/tmp/claude-1000/project/session/scratchpad/draft.ts": {
+    "path": "/tmp/claude-1000/project/session/scratchpad/draft.ts",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -0,0 +1,1 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "export const draft = 1;"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/src/sub.js": {
+    "path": "/home/user/project/src/sub.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a - b - 1"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/tmp/claude-1000/project/session/scratchpad/sub.backup.js": {
+    "path": "/tmp/claude-1000/project/session/scratchpad/sub.backup.js",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -0,0 +1,1 @@",
+        "lines": [
+          {
+            "t": "+",
+            "s": "export const sub = (a, b) => a - b;"
+          }
+        ]
+      }
+    ]
+  }
+}

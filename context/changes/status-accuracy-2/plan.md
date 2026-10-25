@@ -262,7 +262,7 @@ Labels: `expectedStatus`, `expectedRecommendation`, `expectedHints` (paths relat
 
 ### Phase 4: Fixture and goldens
 
-- [ ] 4.1 `scratch-edits` fixture + labels + four new goldens only; `pnpm check` green
+- [x] 4.1 `scratch-edits` fixture + labels + four new goldens only; `pnpm check` green
 
 ### Phase 5: Orchestrator
 
