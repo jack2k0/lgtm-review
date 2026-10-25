@@ -1,0 +1,584 @@
+[
+  {
+    "index": 0,
+    "text": "Change web and core, test web only.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit (scoped to packages/web)",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "check-scope",
+        "severity": "warn",
+        "path": "/home/user/project/packages/core/src/b.ts",
+        "reason": "outside the scope of the passing check (packages/web)"
+      }
+    ],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit packages/web/src/a.ts (+1 -1), edit packages/core/src/b.ts (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 4000,
+        "quotes": [
+          "Editing /home/user/project/packages/web/src/a.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "packages/web/src/a.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "packages/core/src/b.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/packages/web/src/a.ts",
+          "/home/user/project/packages/core/src/b.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:06.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running the web tests."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "cd packages/web && pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:06.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "cd packages/web && pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Fix the API route and run its tests.",
+    "status": "checked",
+    "reason": "vitest run tests/api passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:08.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "public-surface",
+        "severity": "warn",
+        "path": "/home/user/project/src/api/route.ts",
+        "reason": "public surface edited (routes or API)"
+      }
+    ],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/api/route.ts (+1 -1)",
+        "startedAt": "2026-01-01T00:00:09.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/api/route.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/api/route.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:09.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/api/route.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run vitest run tests/api -> passed",
+        "startedAt": "2026-01-01T00:00:11.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running the API tests."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm exec vitest run tests/api",
+            "ok": true,
+            "ts": "2026-01-01T00:00:11.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm exec vitest run tests/api",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Fix cart totals and run the cart test.",
+    "status": "checked",
+    "reason": "pytest tests/test_cart.py passed after last edit (scoped to tests/test_cart.py)",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:13.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "check-scope",
+        "severity": "warn",
+        "path": "/home/user/project/src/orders.py",
+        "reason": "outside the scope of the passing check (tests/test_cart.py)"
+      }
+    ],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/cart.py (+1 -1), edit src/orders.py (+1 -1)",
+        "startedAt": "2026-01-01T00:00:14.000Z",
+        "durationMs": 4000,
+        "quotes": [
+          "Editing /home/user/project/src/cart.py."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/cart.py",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "src/orders.py",
+            "ok": true,
+            "ts": "2026-01-01T00:00:16.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/cart.py",
+          "/home/user/project/src/orders.py"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pytest tests/test_cart.py -> passed",
+        "startedAt": "2026-01-01T00:00:18.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running the cart test."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pytest tests/test_cart.py",
+            "ok": true,
+            "ts": "2026-01-01T00:00:18.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pytest tests/test_cart.py",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Run everything, then the web package again.",
+    "status": "checked",
+    "reason": "pnpm --filter ./packages/web test passed after last edit",
+    "headline": "Mostly writing (50%), 2 checks",
+    "startedAt": "2026-01-01T00:00:20.000Z",
+    "activeMs": 8000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit packages/core/src/b.ts (+1 -1)",
+        "startedAt": "2026-01-01T00:00:21.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/packages/core/src/b.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "packages/core/src/b.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:21.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/packages/core/src/b.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:23.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running all tests."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:23.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "write",
+        "title": "Edit packages/web/src/a.ts (+1 -1)",
+        "startedAt": "2026-01-01T00:00:25.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/packages/web/src/a.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "packages/web/src/a.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:25.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/packages/web/src/a.ts"
+        ]
+      },
+      {
+        "n": 4,
+        "phase": "check",
+        "title": "Run pnpm --filter ./packages/web test -> passed",
+        "startedAt": "2026-01-01T00:00:27.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running the web package again."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm --filter ./packages/web test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:27.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm --filter ./packages/web test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "text": "Test the web package by name.",
+    "status": "checked",
+    "reason": "pnpm --filter @acme/web test passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:29.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit packages/core/src/b.ts (+1 -1)",
+        "startedAt": "2026-01-01T00:00:30.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/packages/core/src/b.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "packages/core/src/b.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:30.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/packages/core/src/b.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm --filter @acme/web test -> passed",
+        "startedAt": "2026-01-01T00:00:32.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running the web package by name."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm --filter @acme/web test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:32.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm --filter @acme/web test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 5,
+    "text": "Fix foo and bar, test foo.",
+    "status": "checked",
+    "reason": "go test ./internal/foo/... passed after last edit (scoped to internal/foo)",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:34.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "check-scope",
+        "severity": "warn",
+        "path": "/home/user/project/internal/bar/b.go",
+        "reason": "outside the scope of the passing check (internal/foo)"
+      }
+    ],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit internal/foo/a.go (+1 -1), edit internal/bar/b.go (+1 -1)",
+        "startedAt": "2026-01-01T00:00:35.000Z",
+        "durationMs": 4000,
+        "quotes": [
+          "Editing /home/user/project/internal/foo/a.go."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "internal/foo/a.go",
+            "ok": true,
+            "ts": "2026-01-01T00:00:35.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "internal/bar/b.go",
+            "ok": true,
+            "ts": "2026-01-01T00:00:37.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/internal/foo/a.go",
+          "/home/user/project/internal/bar/b.go"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run go test ./internal/foo/... -> passed",
+        "startedAt": "2026-01-01T00:00:39.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running the foo tests."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "go test ./internal/foo/...",
+            "ok": true,
+            "ts": "2026-01-01T00:00:39.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "go test ./internal/foo/...",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 6,
+    "text": "Test from the project root.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:41.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/x.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:42.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/x.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/x.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:42.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/x.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:44.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running all tests from the project root."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "cd /home/user/project && pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:44.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "cd /home/user/project && pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 7,
+    "text": "Keep testing in the web folder.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit (scoped to packages/web)",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:46.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "check-scope",
+        "severity": "warn",
+        "path": "/home/user/project/packages/core/src/c.ts",
+        "reason": "outside the scope of the passing check (packages/web)"
+      }
+    ],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit packages/core/src/c.ts (+1 -1)",
+        "startedAt": "2026-01-01T00:00:47.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/packages/core/src/c.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "packages/core/src/c.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:47.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/packages/core/src/c.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:49.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running the tests."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:49.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  }
+]

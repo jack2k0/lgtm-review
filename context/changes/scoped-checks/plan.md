@@ -308,7 +308,7 @@ D7. Tests: `agg.scopedCheckPrompts` equals the number of CLI-JSON prompts whose 
 
 ### Phase 4: Fixture and goldens
 
-- [ ] 4.1 `scoped-checks` fixture + labels + four new goldens only; `pnpm check` green
+- [x] 4.1 `scoped-checks` fixture + labels + four new goldens only; `pnpm check` green
 
 ### Phase 5: Audit counter
 
