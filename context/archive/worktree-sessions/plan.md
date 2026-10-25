@@ -213,21 +213,21 @@ D6. Tests:
 
 ### Phase 1: Core node
 
-- [ ] 1.1 `worktrees.ts`, `SessionRoot`, `discoverRootSessions` + tests; `pnpm check` green
+- [x] 1.1 `worktrees.ts`, `SessionRoot`, `discoverRootSessions` + tests; `pnpm check` green
 
 ### Phase 2: CLI commands
 
-- [ ] 2.1 `--no-worktrees`, roots in list/json/summary/export/archive, `[worktree …]` in the list; e2e green; `pnpm check` green
+- [x] 2.1 `--no-worktrees`, roots in list/json/summary/export/archive, `[worktree …]` in the list; e2e green; `pnpm check` green
 
 ### Phase 3: Server and API
 
-- [ ] 3.1 roots in `createApi`, per-session root for scripts/map/play, `worktree` in summaries; tests green; `pnpm check` green
+- [x] 3.1 roots in `createApi`, per-session root for scripts/map/play, `worktree` in summaries; tests green; `pnpm check` green
 
 ### Phase 4: Web
 
-- [ ] 4.1 routes, `worktree.ts`, list column and filter, session header; tests green; `pnpm check` green
+- [x] 4.1 routes, `worktree.ts`, list column and filter, session header; tests green; `pnpm check` green
 
 ### Phase 5: Orchestrator
 
-- [ ] 5.1 README text, synthetic check recorded
-- [ ] 5.2 roadmap, PRD, archive
+- [x] 5.1 README text, synthetic check recorded
+- [x] 5.2 roadmap, PRD, archive

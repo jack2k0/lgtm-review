@@ -10,6 +10,20 @@ export interface SessionFile {
   mtimeMs: number;
   /** True only when the session was discovered from the local archive. */
   archived?: true;
+  /** Directory of the root the session was found under. */
+  root?: string;
+  /** Worktree label; set only when sessions came from more than one root. */
+  worktree?: string;
+}
+
+export interface SessionRoot {
+  /** Directory whose Claude Code project dir is read: `--dir` itself, or another worktree's root. */
+  dir: string;
+  /** Path of the root's worktree relative to the main checkout, "/"-separated; "." for the main checkout. */
+  worktree: string;
+  projectDir: string;
+  /** Archive dir of this root's project dir; null when no archive root is used. */
+  archiveDir: string | null;
 }
 
 export function defaultProjectsDir(): string {
@@ -92,6 +106,37 @@ export async function discoverAllSessions(
 
   const combined = [...liveFiles, ...archivedOnly];
   return combined.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** Sessions of every root: live and archived (`discoverAllSessions` per root), tagged with `root`; an id seen in an earlier root wins; newest first like `discoverSessions`. */
+export async function discoverRootSessions(
+  roots: readonly SessionRoot[],
+  warnings?: string[],
+): Promise<SessionFile[]> {
+  const seen = new Set<string>();
+  const out: SessionFile[] = [];
+  let contributing = 0;
+  for (const [i, root] of roots.entries()) {
+    let files: SessionFile[];
+    try {
+      files = await discoverAllSessions(root.projectDir, root.archiveDir, warnings);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      if (i === 0) throw err;
+      warnings?.push(`${root.projectDir}: unreadable (${err instanceof Error ? err.message : "error"})`);
+      continue;
+    }
+    let added = 0;
+    for (const f of files) {
+      if (seen.has(f.id)) continue;
+      seen.add(f.id);
+      out.push({ ...f, root: root.dir, worktree: root.worktree });
+      added++;
+    }
+    if (added > 0) contributing++;
+  }
+  if (contributing < 2) for (const f of out) delete f.worktree;
+  return out.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 const PKG_SCRIPTS = new Set(["test", "lint", "typecheck", "check", "build"]);

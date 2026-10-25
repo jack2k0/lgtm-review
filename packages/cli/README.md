@@ -5,7 +5,7 @@ CLI. Run `npx lgtm-review`.
 ## Usage
 
 ```
-npx lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>]
+npx lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>] [--no-worktrees]
 ```
 
 Without flags the command starts a local web UI for the Claude Code sessions of the current repository, prints its URL and opens it in your browser. Press Ctrl+C to stop.
@@ -15,6 +15,7 @@ Without flags the command starts a local web UI for the Claude Code sessions of 
 - `--list` prints the sessions and their prompt statuses in the terminal instead of starting the UI (`--json` prints the analysis as JSON).
 - `--summary` prints a markdown review summary of one session (see below); `--session <id-prefix>` picks the session (default: the newest), `--no-titles` leaves prompt titles out.
 - `--no-open` prints the URL without opening a browser.
+- `--no-worktrees` shows only the sessions of `--dir`, not of the repository's other git worktrees.
 - `--port <n>` listens on a fixed port instead of a free one.
 
 Security: the server listens only on 127.0.0.1, is read-only, and checks the Host and Origin headers on every request. The URL carries a random per-run token (in the `#k=` fragment) that the page sends with each API call, so other local sites and processes cannot read your sessions. Treat the URL as a secret and do not share it. The URL is printed to stdout in full; the browser is opened through a short-lived 0600 file in a private temp directory (removed on exit or after about 60 s) so the token never appears in another process's command line.
@@ -110,6 +111,10 @@ To measure how these limits affect your own sessions, run `pnpm build` and then 
 Resuming or forking a Claude Code session copies the earlier prompts (same prompt `uuid`) into a new file. lgtm-review analyses all sessions of the project together: the session that started first owns a prompt, and the copies in later sessions are marked `inheritedFrom: <session id>`. Inherited prompts are not counted: `promptCount` and `statusCounts` cover the session's own prompts, `inheritedCount` the rest, and `forkOf` names the session most of them came from.
 
 `--list` marks them `(inherited from <id8>)`; `--json` and the API keep them, with `inheritedFrom`. `--summary` and `--export` leave them out and say so ("N prompts inherited from <id8> omitted"); a session with no prompts of its own prints "All N prompts inherited from <id8>. No prompts to review." Only equal prompt `uuid`s count; the timelines are not merged.
+
+## Worktrees
+
+Claude Code stores each session under the directory it was started in, so sessions of a linked git worktree (`git worktree add`, or `claude --worktree`, which creates worktrees under `.claude/worktrees/`) belong to that worktree. lgtm-review asks git once per run for the repository's worktrees (`git worktree list`, read-only) and shows the sessions of all of them: the terminal list marks them `[worktree ../name]`, `--json` and the API carry `worktree` (the path relative to the main checkout, `.` for the main checkout), and the web list gets a Worktree column and filter. Steps, diffs, the import map and play of a worktree session use that worktree's directory; `--export` redacts its path as `<repo>`. `--archive` mirrors every worktree's sessions. Worktrees that git no longer lists, and their archived sessions, are not shown; a worktree added while the UI runs appears after a restart. Use `--no-worktrees` for the sessions of `--dir` only.
 
 ## Summary
 

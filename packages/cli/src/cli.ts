@@ -1,19 +1,21 @@
+import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import type { SessionFile } from "@lgtm/core/node";
+import type { SessionFile, SessionRoot } from "@lgtm/core/node";
 import {
   analyzeFile,
   archiveDirFor,
   archiveSessions,
   defaultArchiveRoot,
   defaultProjectsDir,
-  discoverAllSessions,
+  discoverRootSessions,
   loadRepoScripts,
   projectDirFor,
+  sessionRoots,
 } from "@lgtm/core/node";
 import { markInherited } from "@lgtm/core";
-import type { Analysis, SessionAnalysis } from "@lgtm/core";
+import type { Analysis, RepoScripts, SessionAnalysis } from "@lgtm/core";
 import { runExport } from "./export.js";
 import { formatText, sortSessions } from "./format.js";
 import { formatSummary } from "./summary.js";
@@ -24,7 +26,7 @@ const VERSION = "0.0.0";
 
 const HELP = `lgtm-review ${VERSION}
 
-Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>]
+Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>] [--no-worktrees]
 
 Without --archive/--list/--json/--summary, starts a local web UI on 127.0.0.1 and prints its URL.
 
@@ -41,17 +43,18 @@ Without --archive/--list/--json/--summary, starts a local web UI on 127.0.0.1 an
   --out <file>           with --export: output file (default: lgtm-review-<first 8 chars of the id>.html)
   --force                with --export: overwrite an existing output file
   --no-diffs             with --export: leave the file diffs out
+  --no-worktrees         only the sessions of --dir, not of the repository's other git worktrees
   --no-open              do not open the browser
   --port <n>             port for the UI (default: a free port)
   --version              print the version
   --help                 print this help
 `;
 
-async function serve(dir: string, projectsDir: string, archiveDir: string, port: number, noOpen: boolean): Promise<number> {
+async function serve(dir: string, projectsDir: string, roots: SessionRoot[], port: number, noOpen: boolean): Promise<number> {
   const webRoot = join(dirname(fileURLToPath(import.meta.url)), "web");
   let running;
   try {
-    running = await startServer({ dir, projectsDir, archiveDir, webRoot, port });
+    running = await startServer({ dir, projectsDir, archiveDir: roots[0]!.archiveDir ?? undefined, roots, webRoot, port });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EADDRINUSE") console.error(`lgtm-review: port ${port} is already in use`);
@@ -102,12 +105,21 @@ async function summary(dir: string, files: SessionFile[], prefix: string | undef
       return 1;
     }
   }
-  const repo = await loadRepoScripts(dir);
+  const repos = new Map<string, Promise<RepoScripts>>();
+  const repoFor = (d: string) => {
+    let p = repos.get(d);
+    if (!p) repos.set(d, (p = loadRepoScripts(d)));
+    return p;
+  };
+  const rootOf = new Map<string, string>();
   const sessions: SessionAnalysis[] = [];
   for (const f of files) {
     try {
+      rootOf.set(f.id, f.root ?? dir);
+      const repo = await repoFor(f.root ?? dir);
       const a = await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
       if (f.archived) a.archived = true;
+      if (f.worktree !== undefined) a.worktree = f.worktree;
       sessions.push(a);
     } catch (err) {
       if (pool.includes(f)) console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
@@ -120,7 +132,7 @@ async function summary(dir: string, files: SessionFile[], prefix: string | undef
     console.error("lgtm-review: no readable session");
     return 1;
   }
-  process.stdout.write(formatSummary(chosen, { titles, root: dir }));
+  process.stdout.write(formatSummary(chosen, { titles, root: rootOf.get(chosen.sessionId) ?? dir }));
   return 0;
 }
 
@@ -143,6 +155,7 @@ async function main(): Promise<number> {
         force: { type: "boolean" },
         "no-diffs": { type: "boolean" },
         "no-open": { type: "boolean" },
+        "no-worktrees": { type: "boolean" },
         port: { type: "string" },
         version: { type: "boolean" },
         help: { type: "boolean" },
@@ -229,21 +242,31 @@ async function main(): Promise<number> {
 
   const dir = resolve(values.dir ?? process.cwd());
   const projectsDir = values["projects-dir"] ?? defaultProjectsDir();
-  const projectDir = projectDirFor(dir, projectsDir);
   const archiveRoot = values["archive-dir"] ?? defaultArchiveRoot(process.env);
-  const archiveDir = archiveDirFor(projectDir, archiveRoot);
+  const roots = await sessionRoots(dir, projectsDir, archiveRoot, { worktrees: values["no-worktrees"] !== true });
+  const projectDir = roots[0]!.projectDir;
+  const archiveDir = roots[0]!.archiveDir!;
 
   if (archiving) {
-    let res;
-    try {
-      res = await archiveSessions(projectDir, archiveDir);
-    } catch (err) {
-      console.error(`lgtm-review: cannot read ${projectDir}: ${err instanceof Error ? err.message : err}`);
-      return 1;
+    const lines: { text: string; label: string }[] = [];
+    for (const [i, root] of roots.entries()) {
+      if (i > 0 && !existsSync(root.projectDir)) continue;
+      let res;
+      try {
+        res = await archiveSessions(root.projectDir, root.archiveDir!);
+      } catch (err) {
+        if (i === 0) {
+          console.error(`lgtm-review: cannot read ${root.projectDir}: ${err instanceof Error ? err.message : err}`);
+          return 1;
+        }
+        console.error(`warning: ${root.projectDir}: cannot archive (${err instanceof Error ? err.message : err})`);
+        continue;
+      }
+      const mb = (res.bytes / (1024 * 1024)).toFixed(1);
+      for (const w of res.warnings) console.error(`warning: ${w}`);
+      lines.push({ text: `archived ${res.copied} new or updated, ${res.unchanged} unchanged (${mb} MB) -> ${root.archiveDir}`, label: root.worktree });
     }
-    const mb = (res.bytes / (1024 * 1024)).toFixed(1);
-    for (const w of res.warnings) console.error(`warning: ${w}`);
-    console.log(`archived ${res.copied} new or updated, ${res.unchanged} unchanged (${mb} MB) -> ${archiveDir}`);
+    for (const l of lines) console.log(lines.length > 1 ? `[worktree ${l.label}] ${l.text}` : l.text);
     return 0;
   }
 
@@ -252,6 +275,7 @@ async function main(): Promise<number> {
       dir,
       projectsDir,
       archiveDir,
+      roots,
       prefix: values.export!,
       ...(values.out !== undefined ? { out: values.out } : {}),
       force: values.force === true,
@@ -259,12 +283,12 @@ async function main(): Promise<number> {
       titles: values["no-titles"] !== true,
     });
   }
-  if (!values.list && !values.json && !values.summary) return serve(dir, projectsDir, archiveDir, port, values["no-open"] === true);
+  if (!values.list && !values.json && !values.summary) return serve(dir, projectsDir, roots, port, values["no-open"] === true);
 
   const discoveryWarnings: string[] = [];
   let files: SessionFile[];
   try {
-    files = await discoverAllSessions(projectDir, archiveDir, discoveryWarnings);
+    files = await discoverRootSessions(roots, discoveryWarnings);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT") files = [];
@@ -287,12 +311,17 @@ async function main(): Promise<number> {
 
   if (values.summary) return summary(dir, files, values.session, values["no-titles"] !== true);
 
-  const repo = await loadRepoScripts(dir);
+  const repos = new Map<string, Promise<RepoScripts>>();
   const analysed: SessionAnalysis[] = [];
   for (const f of files) {
     try {
+      const rd = f.root ?? dir;
+      let rp = repos.get(rd);
+      if (!rp) repos.set(rd, (rp = loadRepoScripts(rd)));
+      const repo = await rp;
       const a = await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
       if (f.archived) a.archived = true;
+      if (f.worktree !== undefined) a.worktree = f.worktree;
       analysed.push(a);
     } catch (err) {
       console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);

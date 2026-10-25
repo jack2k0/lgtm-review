@@ -1,10 +1,10 @@
 ---
 change_id: worktree-sessions
 title: Sessions of all git worktrees of the repository in one list
-status: planned
+status: done
 created: 2026-10-25
 updated: 2026-10-25
-archived_at: null
+archived_at: 2026-10-25
 ---
 
 ## Notes
