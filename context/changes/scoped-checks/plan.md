@@ -300,7 +300,7 @@ D7. Tests: `agg.scopedCheckPrompts` equals the number of CLI-JSON prompts whose 
 
 ### Phase 2: Resolution and coverage
 
-- [ ] 2.1 `scope.ts` + tests; `pnpm check` green
+- [x] 2.1 `scope.ts` + tests; `pnpm check` green
 
 ### Phase 3: Wiring
 
