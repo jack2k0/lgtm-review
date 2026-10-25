@@ -316,5 +316,5 @@ D7. Tests: `agg.scopedCheckPrompts` equals the number of CLI-JSON prompts whose 
 
 ### Phase 6: Orchestrator
 
-- [ ] 6.1 README text, real-log audit
-- [ ] 6.2 roadmap, PRD, archive
+- [x] 6.1 README text, real-log audit
+- [x] 6.2 roadmap, PRD, archive

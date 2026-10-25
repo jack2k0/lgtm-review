@@ -197,7 +197,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | ---- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---- | -------------------------- | ---------------------------- | ------------------------------ | ----------------------- |
 | S-16 | doc-edits         | see prompts that only edited documentation as needing no check, and keep `checked` when only docs changed after the check   | S    | —                          | S-17                         | FR-015                         | done |
 | S-17 | prompt-triage     | narrow sessions and prompts to "needs attention" and move through prompts with the keyboard                                   | M    | —                          | S-16                         | FR-016, NFR keyboard           | done |
-| S-18 | scoped-checks     | see a `check-scope` hint when the check behind `checked` ran only on part of the repository                                   | M    | S-16                       | S-19 (schema-first rule)     | FR-017                         | proposed (plan drafted) |
+| S-18 | scoped-checks     | see a `check-scope` hint when the check behind `checked` ran only on part of the repository                                   | M    | S-16                       | S-19 (schema-first rule)     | FR-017                         | done |
 | S-19 | worktree-sessions | see the sessions of every git worktree of the repository in one list                                                          | M    | S-17                       | S-18 (schema-first rule), S-20 | FR-018, NFR read-only git    | proposed (plan drafted) |
 | S-20 | status-accuracy-2 | rely on >= 97% status match on real logs (in-command order, background notifications, scratch files, Python comments)         | M    | S-18                       | S-19, S-21                   | FR-002, FR-004, FR-013, SC v3  | proposed                |
 | S-21 | git-crosscheck    | compare what a session's prompts edited with what git shows for that directory                                                | M    | S-19                       | S-20                         | FR-019, NFR read-only git      | proposed                |
@@ -267,7 +267,7 @@ Files each slice is expected to touch (for the parallel check):
   - Which runner arguments are path scopes: vitest positional arguments are file-name substring filters, jest arguments are regexes, pytest takes paths or node ids, `go test` package patterns; `cargo test` name filters and named `--filter @scope/pkg` are not resolved (no hint, no node IO). Fixed as a table with tests in the plan. — Owner: team. Block: no.
   - How often the deciding check is scoped on real logs (new aggregate counter in `scripts/audit-status.mjs`), to confirm `warn` severity. — Owner: orchestrator. Block: no.
 - **Risk:** medium: false positives when scoped tests import the edited code; mitigated by covering rules (a scope `tests/api` also covers paths with an `api` segment; `x.test.ts` covers `x.ts`), hint only, never a status, never a `high` severity.
-- **Status:** proposed (plan drafted: `context/changes/scoped-checks/plan.md`, incl. the wave-2 schema pre-commit)
+- **Status:** done (2026-10-25; phases Sonnet/Haiku/OpenCode/OpenCode/OpenCode, 0 fixes; real-log audit: no status change, 2 of 162 prompts flagged `check-scope`, `context/archive/scoped-checks/reviews/audit-2026-10-25.md`)
 
 ### S-19: Sessions of all worktrees in one list
 
@@ -335,7 +335,7 @@ Files each slice is expected to touch (for the parallel check):
 | ---------- | ----------------- | -------------------------------------------------------------- | ---------------------------------------- | --------------------------------------- |
 | S-16       | doc-edits         | Documentation-only edits need no check                         | done                                     | wave 1                                  |
 | S-17       | prompt-triage     | "Needs attention" filters and keyboard navigation in the UI    | done                                     | wave 1 (S-16 already merged)            |
-| S-18       | scoped-checks     | Flag checks that ran on only part of the repository            | plan drafted; schema pre-commit first    | wave 2; the only wave-2 golden writer   |
+| S-18       | scoped-checks     | Flag checks that ran on only part of the repository            | done                                     | wave 2; the only wave-2 golden writer   |
 | S-19       | worktree-sessions | One session list for all git worktrees                         | plan drafted; schema pre-commit first    | wave 2, schema-first with S-18          |
 | S-20       | status-accuracy-2 | Status accuracy round 2 (real-log follow-ups)                  | after S-18 merges; re-audit first        | wave 3                                  |
 | S-21       | git-crosscheck    | Git cross-check of a session's edits                           | after S-19 merges                        | wave 3                                  |
