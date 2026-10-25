@@ -195,7 +195,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 | ID   | Change ID         | Outcome (user can …)                                                                                                          | Size | Prerequisites              | Parallel with                | PRD refs                       | Status                  |
 | ---- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---- | -------------------------- | ---------------------------- | ------------------------------ | ----------------------- |
-| S-16 | doc-edits         | see prompts that only edited documentation as needing no check, and keep `checked` when only docs changed after the check   | S    | —                          | S-17                         | FR-015                         | proposed (plan drafted) |
+| S-16 | doc-edits         | see prompts that only edited documentation as needing no check, and keep `checked` when only docs changed after the check   | S    | —                          | S-17                         | FR-015                         | done |
 | S-17 | prompt-triage     | narrow sessions and prompts to "needs attention" and move through prompts with the keyboard                                   | M    | —                          | S-16                         | FR-016, NFR keyboard           | proposed                |
 | S-18 | scoped-checks     | see a `check-scope` hint when the check behind `checked` ran only on part of the repository                                   | M    | S-16                       | S-19 (schema-first rule)     | FR-017                         | proposed                |
 | S-19 | worktree-sessions | see the sessions of every git worktree of the repository in one list                                                          | M    | S-17                       | S-18 (schema-first rule), S-20 | FR-018, NFR read-only git    | proposed                |
@@ -237,7 +237,7 @@ Files each slice is expected to touch (for the parallel check):
 - **Unknowns:**
   - How many of the owner's real `unchecked` prompts are documentation-only or end with documentation edits after a passing check? Measured by the PRE/POST aggregate audit in the slice's last phase (local Claude only, counts only). — Owner: orchestrator. Block: no.
 - **Risk:** low; core-only, no schema or UI change. It changes the status rule, so the decision is recorded in the PRD next to the S-11 git-operation decision; `.mdx`, `.txt` (except the named files) and unknown shell-edit targets stay code. Plan: `context/changes/doc-edits/plan.md`.
-- **Status:** proposed (plan drafted, awaiting plan-review)
+- **Status:** done (2026-10-25; phases Haiku/Sonnet/Haiku, 0 fixes; real-log audit: 19 of 159 prompts changed status, 18 of them out of `unchecked`, `context/archive/doc-edits/reviews/audit-2026-10-25.md`)
 
 ### S-17: Triage in the browser ("needs attention" and keyboard)
 
@@ -333,7 +333,7 @@ Files each slice is expected to touch (for the parallel check):
 
 | Roadmap ID | Change ID         | Suggested issue title                                          | Ready for plan                           | Notes                                   |
 | ---------- | ----------------- | -------------------------------------------------------------- | ---------------------------------------- | --------------------------------------- |
-| S-16       | doc-edits         | Documentation-only edits need no check                         | plan drafted; next: plan-review          | wave 1                                  |
+| S-16       | doc-edits         | Documentation-only edits need no check                         | done                                     | wave 1                                  |
 | S-17       | prompt-triage     | "Needs attention" filters and keyboard navigation in the UI    | yes                                      | wave 1, parallel with S-16              |
 | S-18       | scoped-checks     | Flag checks that ran on only part of the repository            | after S-16 merges                        | wave 2                                  |
 | S-19       | worktree-sessions | One session list for all git worktrees                         | after S-17 merges; worktree count first  | wave 2, schema-first with S-18          |

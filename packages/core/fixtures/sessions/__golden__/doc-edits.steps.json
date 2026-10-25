@@ -1,0 +1,297 @@
+[
+  {
+    "index": 0,
+    "text": "Fix add, run the tests, then note it in the changelog.",
+    "status": "checked",
+    "reason": "pnpm test passed after last code edit; 1 documentation edit after it",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/add.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running the tests."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "write",
+        "title": "Edit CHANGELOG.md (+2 -1)",
+        "startedAt": "2026-01-01T00:00:06.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/CHANGELOG.md."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "CHANGELOG.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:06.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/CHANGELOG.md"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Update the guide and the README.",
+    "status": "no-changes",
+    "reason": "no code edits (documentation only)",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:08.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit docs/guide.md (+1 -1), create README.md (+1)",
+        "startedAt": "2026-01-01T00:00:09.000Z",
+        "durationMs": 4000,
+        "quotes": [
+          "Editing /home/user/project/docs/guide.md."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "docs/guide.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:09.000Z"
+          },
+          {
+            "tool": "Write",
+            "summary": "README.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:11.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/docs/guide.md",
+          "/home/user/project/README.md"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Add sub and document it, no need to test.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:13.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/sub.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Create src/sub.js (+1), edit README.md (+1 -1)",
+        "startedAt": "2026-01-01T00:00:14.000Z",
+        "durationMs": 4000,
+        "quotes": [
+          "Creating /home/user/project/src/sub.js."
+        ],
+        "actions": [
+          {
+            "tool": "Write",
+            "summary": "src/sub.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "README.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:16.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/sub.js",
+          "/home/user/project/README.md"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Fix the parser and note what still fails.",
+    "status": "failing",
+    "reason": "pnpm test failed: Tests: 1 failed, 2 passed",
+    "headline": "Mostly writing (33%), 1 check",
+    "startedAt": "2026-01-01T00:00:18.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/parser.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:19.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/src/parser.js."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/parser.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:19.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/parser.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> failed (exit 1)",
+        "startedAt": "2026-01-01T00:00:21.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running the tests."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": false,
+            "ts": "2026-01-01T00:00:21.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 1,
+          "passed": false,
+          "excerpt": "Tests: 1 failed, 2 passed"
+        }
+      },
+      {
+        "n": 3,
+        "phase": "fix",
+        "title": "Fix: edit docs/notes.md (+1 -1)",
+        "startedAt": "2026-01-01T00:00:23.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/docs/notes.md."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "docs/notes.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:23.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/docs/notes.md"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "text": "Tighten the security policy and the auth docs.",
+    "status": "no-changes",
+    "reason": "no code edits (documentation only)",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:25.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit SECURITY.md (+1 -1), edit docs/auth/login.md (+1 -1)",
+        "startedAt": "2026-01-01T00:00:26.000Z",
+        "durationMs": 4000,
+        "quotes": [
+          "Editing /home/user/project/SECURITY.md."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "SECURITY.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:26.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "docs/auth/login.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:28.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/SECURITY.md",
+          "/home/user/project/docs/auth/login.md"
+        ]
+      }
+    ]
+  }
+]

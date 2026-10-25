@@ -1,0 +1,43 @@
+{
+  "fixture": "doc-edits",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "passing pnpm test after the code edit, then a CHANGELOG.md edit: documentation after the check does not invalidate it"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "only documentation edited (guide.md, README.md): no check needed"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "unchecked-edit:src/sub.js"
+      ],
+      "note": "code edit without a check; the README.md edit adds no hint and no count"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "failing",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [],
+      "note": "failing check; the later docs/notes.md edit does not change the status"
+    },
+    {
+      "index": 4,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "SECURITY.md and docs/auth/login.md are documentation: no sensitive-path hint, no check needed"
+    }
+  ]
+}

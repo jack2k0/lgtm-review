@@ -210,18 +210,18 @@ Not for implementers. Real logs are read only by local Claude subagents; nothing
 
 ### Phase 1: Documentation classifier and hints
 
-- [ ] 1.1 `isDocPath` + hints rule with tests; no golden changes; `pnpm check` green
+- [x] 1.1 `isDocPath` + hints rule with tests; no golden changes; `pnpm check` green
 
 ### Phase 2: Status rule, fixture and goldens
 
-- [ ] 2.1 `EditRec.doc` + `judge()` with DOC-1..DOC-13
-- [ ] 2.2 fixture `doc-edits` + labels, `shell-edits` label, exactly the D7 goldens; `pnpm check` green
+- [x] 2.1 `EditRec.doc` + `judge()` with DOC-1..DOC-13
+- [x] 2.2 fixture `doc-edits` + labels, `shell-edits` label, exactly the D7 goldens; `pnpm check` green
 
 ### Phase 3: Audit counter and README
 
-- [ ] 3.1 `docEditPrompts` in the audit script with tests; README; `pnpm check` green
+- [x] 3.1 `docEditPrompts` in the audit script with tests; README; `pnpm check` green
 
 ### Phase 4: Audit and docs (orchestrator)
 
-- [ ] 4.1 PRE/POST real-log aggregate audit recorded
-- [ ] 4.2 roadmap, PRD, archive
+- [x] 4.1 PRE/POST real-log aggregate audit recorded
+- [x] 4.2 roadmap, PRD, archive

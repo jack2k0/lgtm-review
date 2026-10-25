@@ -199,6 +199,18 @@ export function isConfigPath(rel: string): boolean {
   return false;
 }
 
+/** File names (lower-cased, optionally with `.txt`) that are documentation wherever they are. */
+const DOC_NAME_RE = /^(?:readme|licen[cs]e|copying|notice|authors|contributors|changelog|changes|history)(?:\.txt)?$/;
+/** Documentation extensions. `.mdx` (compiled by site generators) and other `.txt` files are code on purpose. */
+const DOC_EXT_RE = /\.(?:md|markdown|mdown|mkdn?|rst|adoc|asciidoc)$/;
+
+/** Documentation file (FR-015): edits to it need no check. Decided by the file name only. */
+export function isDocPath(path: string): boolean {
+  const name = (path.replace(/\\/g, "/").split("/").pop() ?? "").toLowerCase();
+  if (name === "") return false;
+  return DOC_EXT_RE.test(name) || DOC_NAME_RE.test(name);
+}
+
 // --- rules -----------------------------------------------------------------------------------
 
 /** One successful file edit with the counters collected while parsing. */
@@ -271,35 +283,39 @@ export function computeHints(input: HintInput): Hint[] {
   };
 
   for (const f of files.values()) {
-    if (f.isTest) {
-      if (f.fixEdits > 0) {
-        add("test-modified-during-fix", "high", f.path, `test file edited ${plural(f.fixEdits, "time")} while fixing a failing check`);
+    // Documentation files get only the size rule: no check can verify prose (FR-015).
+    const doc = isDocPath(f.rel);
+    if (!doc) {
+      if (f.isTest) {
+        if (f.fixEdits > 0) {
+          add("test-modified-during-fix", "high", f.path, `test file edited ${plural(f.fixEdits, "time")} while fixing a failing check`);
+        }
+        if (f.stats.assertRemoved > f.stats.assertAdded) {
+          add("assertions-removed", "high", f.path, `${plural(f.stats.assertRemoved, "assertion line")} removed, ${f.stats.assertAdded} added`);
+        }
+        if (f.stats.skipAdded > f.stats.skipRemoved) {
+          add("test-skipped", "high", f.path, `${plural(f.stats.skipAdded - f.stats.skipRemoved, "skip marker")} added`);
+        }
       }
-      if (f.stats.assertRemoved > f.stats.assertAdded) {
-        add("assertions-removed", "high", f.path, `${plural(f.stats.assertRemoved, "assertion line")} removed, ${f.stats.assertAdded} added`);
+      const sensitive = sensitiveMatch(f.rel);
+      if (sensitive !== null) {
+        add(
+          "sensitive-path",
+          f.isTest ? "warn" : "high",
+          f.path,
+          `path matches sensitive pattern "${sensitive}"${f.isTest ? " (test file)" : ""}`,
+        );
       }
-      if (f.stats.skipAdded > f.stats.skipRemoved) {
-        add("test-skipped", "high", f.path, `${plural(f.stats.skipAdded - f.stats.skipRemoved, "skip marker")} added`);
+      if (input.lastCheckSeq === null || f.lastSeq > input.lastCheckSeq) {
+        add("unchecked-edit", "warn", f.path, input.lastCheckSeq === null ? "edited and no check completed in this prompt" : "edited after the last completed check");
       }
+      if (isManifestPath(f.rel)) add("dependency-change", "warn", f.path, "dependency manifest or lockfile edited");
+      if (!f.isTest) {
+        const surface = publicSurfaceKind(f.rel);
+        if (surface !== null) add("public-surface", "warn", f.path, `public surface edited (${surface})`);
+      }
+      if (isConfigPath(f.rel)) add("config-change", "info", f.path, "build, lint, TypeScript or CI configuration edited");
     }
-    const sensitive = sensitiveMatch(f.rel);
-    if (sensitive !== null) {
-      add(
-        "sensitive-path",
-        f.isTest ? "warn" : "high",
-        f.path,
-        `path matches sensitive pattern "${sensitive}"${f.isTest ? " (test file)" : ""}`,
-      );
-    }
-    if (input.lastCheckSeq === null || f.lastSeq > input.lastCheckSeq) {
-      add("unchecked-edit", "warn", f.path, input.lastCheckSeq === null ? "edited and no check completed in this prompt" : "edited after the last completed check");
-    }
-    if (isManifestPath(f.rel)) add("dependency-change", "warn", f.path, "dependency manifest or lockfile edited");
-    if (!f.isTest) {
-      const surface = publicSurfaceKind(f.rel);
-      if (surface !== null) add("public-surface", "warn", f.path, `public surface edited (${surface})`);
-    }
-    if (isConfigPath(f.rel)) add("config-change", "info", f.path, "build, lint, TypeScript or CI configuration edited");
     if (f.changed > LARGE_CHANGE_LINES) add("large-change", "info", f.path, `${f.changed} changed lines (limit ${LARGE_CHANGE_LINES})`);
   }
   return out.sort(compareHints);

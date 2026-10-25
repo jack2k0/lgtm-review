@@ -2,12 +2,12 @@
 
 Branch: `main` · Date: 2026-01-01 · Session: `shell-ed`
 
-8 prompts: 2 checked, 3 unchecked, 1 failing, 2 no-changes.
+8 prompts: 1 checked, 3 unchecked, 1 failing, 3 no-changes.
 
 | # | Status | Review | Prompt | Files | +/- |
 | ---: | --- | --- | --- | ---: | --- |
 | 1 | unchecked | Read flagged | Rename the constant in the config loader. | 1 | +0 -0 |
-| 2 | checked | Skim | Rename it in the docs too and run the tests. | 1 | +0 -0 |
+| 2 | no-changes | Skim | Rename it in the docs too and run the tests. | 1 | +0 -0 |
 | 3 | checked | Skim | Generate the lookup table and verify. | 1 | +0 -0 |
 | 4 | no-changes | Skim | Dump the environment to a scratch file. | 0 | +0 -0 |
 | 5 | no-changes | Skim | Patch the parser. | 0 | +0 -0 |
