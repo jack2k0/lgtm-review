@@ -199,7 +199,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-17 | prompt-triage     | narrow sessions and prompts to "needs attention" and move through prompts with the keyboard                                   | M    | —                          | S-16                         | FR-016, NFR keyboard           | done |
 | S-18 | scoped-checks     | see a `check-scope` hint when the check behind `checked` ran only on part of the repository                                   | M    | S-16                       | S-19 (schema-first rule)     | FR-017                         | done |
 | S-19 | worktree-sessions | see the sessions of every git worktree of the repository in one list                                                          | M    | S-17                       | S-18 (schema-first rule), S-20 | FR-018, NFR read-only git    | done |
-| S-20 | status-accuracy-2 | rely on >= 97% status match on real logs (in-command order, background notifications, scratch files, Python comments)         | M    | S-18                       | S-19, S-21                   | FR-002, FR-004, FR-013, SC v3  | proposed (plan drafted) |
+| S-20 | status-accuracy-2 | rely on >= 97% status match on real logs (in-command order, background notifications, scratch files, Python comments)         | M    | S-18                       | S-19, S-21                   | FR-002, FR-004, FR-013, SC v3  | done |
 | S-21 | git-crosscheck    | compare what a session's prompts edited with what git shows for that directory                                                | M    | S-19                       | S-20                         | FR-019, NFR read-only git      | proposed (plan drafted) |
 | S-08 | llm-titles        | opt in to one-sentence prompt titles from a local model server (loopback only)                                                | L    | S-17 + owner decisions     | —                            | FR-020, NFR loopback LLM       | proposed (blocked)      |
 
@@ -298,7 +298,7 @@ Files each slice is expected to touch (for the parallel check):
   - Where Claude Code puts isolated agent worktrees: if under a temp root, the scratch rule must not treat their edits as scratch (subagent edits can simply be exempted). — Owner: team. Block: no.
   - Why 121 of 606 task notifications match no launch in the same file (other session, subagent file, or noise). — Owner: orchestrator. Block: no.
 - **Risk:** low–medium; every case gets a synthetic fixture; the real-log audit stays orchestrator-only (no external models, aggregate counts only).
-- **Status:** proposed (plan drafted: `context/changes/status-accuracy-2/plan.md`; 2026-10-25 probes show the in-command order, status-less and parent/subagent notification cases already behave, so they are pinned; the real changes are scratch files, the call working directory for shell targets and the Python scanner)
+- **Status:** done (2026-10-25; phases OpenCode x4, 0 fixes; real logs: no status change, >= 97% not re-measured — `context/archive/status-accuracy-2/reviews/audit-2026-10-25.md`)
 
 ### S-21: Git cross-check ("what landed vs what the log shows")
 
@@ -337,7 +337,7 @@ Files each slice is expected to touch (for the parallel check):
 | S-17       | prompt-triage     | "Needs attention" filters and keyboard navigation in the UI    | done                                     | wave 1 (S-16 already merged)            |
 | S-18       | scoped-checks     | Flag checks that ran on only part of the repository            | done                                     | wave 2; the only wave-2 golden writer   |
 | S-19       | worktree-sessions | One session list for all git worktrees                         | done                                     | wave 2, schema-first with S-18          |
-| S-20       | status-accuracy-2 | Status accuracy round 2 (real-log follow-ups)                  | plan drafted; baseline (phase 0) first   | wave 3; the only wave-3 golden writer   |
+| S-20       | status-accuracy-2 | Status accuracy round 2 (real-log follow-ups)                  | done                                     | wave 3; the only wave-3 golden writer   |
 | S-21       | git-crosscheck    | Git cross-check of a session's edits                           | plan drafted; schema pre-commit first    | wave 3                                  |
 | S-08       | llm-titles        | Opt-in local LLM titles                                        | no: owner decisions O-1..O-3             | gated                                   |
 

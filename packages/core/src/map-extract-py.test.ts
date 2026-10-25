@@ -117,6 +117,54 @@ describe("extractPythonImports", () => {
     ]);
   });
 
+  test("ignores a triple quote inside a comment (S-20)", () => {
+    const src = ['# use """ for docstrings', "import os"].join("\n");
+
+    expect(extractPythonImports(src)).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+  });
+
+  test("ignores a hash inside a string (S-20)", () => {
+    const src = 's = "#"; import json';
+
+    expect(extractPythonImports(src)).toEqual([
+      { module: "json", names: [], line: 1 },
+    ]);
+  });
+
+  test("ignores triple quotes inside a single-line string (S-20)", () => {
+    const src = [`x = '"""'`, "import sys"].join("\n");
+
+    expect(extractPythonImports(src)).toEqual([
+      { module: "sys", names: [], line: 2 },
+    ]);
+  });
+
+  test("ignores imports inside a prefixed triple-quoted string (S-20)", () => {
+    const src = ['r"""raw', "import fake", '"""', "import real"].join("\n");
+
+    expect(extractPythonImports(src)).toEqual([
+      { module: "real", names: [], line: 4 },
+    ]);
+  });
+
+  test("keeps imports after an f-string containing a hash (S-20)", () => {
+    const src = 'f"{a!r}#not a comment"; import re';
+
+    expect(extractPythonImports(src)).toEqual([
+      { module: "re", names: [], line: 1 },
+    ]);
+  });
+
+  test("ends an unterminated single-line string at the end of its line (S-20)", () => {
+    const src = ['s = "abc', "import os"].join("\n");
+
+    expect(extractPythonImports(src)).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+  });
+
   test("extracts imports inside indented scopes (functions, TYPE_CHECKING)", () => {
     const src = [
       "if TYPE_CHECKING:",
