@@ -299,3 +299,7 @@ a.map-node-link:focus-visible .map-rect { stroke: var(--focus); stroke-width: 3;
 @media (max-width: 800px) {
   .prompts td:nth-child(5) { min-width: 120px; }
 }
+
+.filters { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0; font-size: 13px; }
+.filters a[aria-current="page"] { color: var(--text); font-weight: 700; text-decoration: none; }
+.keys { font-size: 12px; margin-top: 6px; }

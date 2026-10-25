@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PromptAnalysis, SessionAnalysis } from "@lgtm/core";
 import { HintList, ReviewCell, RuleMarkers } from "./Hints";
 import { StatusTag } from "./StatusDot";
 import { TimeBar, TimeLegend } from "./TimeBar";
+import { attentionPrompts, escapeToList, needText, rowKey, type Show } from "./triage";
 import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, plural, routeHref, retainKeys, rulesByPath, shortPath, toggleKey, visiblePrompts, splitInherited } from "./viewmodel";
 
 /** Changed files of a prompt; each path links to its diff (the link carries the exact path from the list). */
@@ -34,7 +35,7 @@ export function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: Pr
       <tr className={open ? "open" : undefined}>
         <td className="nowrap"><StatusTag status={p.status} /></td>
         <td className="title">
-          <button type="button" className="rowbtn" aria-expanded={open} aria-controls={open ? detailId : undefined} onClick={onToggle}>
+          <button type="button" className="rowbtn" data-index={p.index} aria-expanded={open} aria-controls={open ? detailId : undefined} onClick={onToggle}>
             <span className="chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
             <span className={open ? "text" : "text clamp"}>{p.text || "(empty prompt)"}</span>
           </button>
@@ -104,18 +105,51 @@ function InheritedGroup({ sessionId, rows, from, openIdx, onToggle }: { sessionI
   );
 }
 
-export function PromptTable({ session }: { session: SessionAnalysis }) {
+export function PromptTable({ session, show = "all" }: { session: SessionAnalysis; show?: Show }) {
   const [limit, setLimit] = useState(PROMPT_PAGE);
   // Keyed by prompt index (append-only in a session file), so rows stay expanded across live refreshes.
   const [openState, setOpenIdx] = useState<ReadonlySet<number>>(new Set());
   const openIdx = retainKeys(openState, session.prompts.map((p) => p.index));
   const { own, inherited, from } = splitInherited(session.prompts);
-  const { shown, hidden } = visiblePrompts(own, limit);
+  const attention = attentionPrompts(session.prompts);
+  const rows = show === "attention" ? attention : own;
+  const { shown, hidden } = visiblePrompts(rows, limit);
 
   const toggle = (i: number) => setOpenIdx((prev) => toggleKey(prev, i));
 
   const nonInheritedCount = own.length;
   const inheritedCount = inherited.length;
+  const id = session.sessionId;
+
+  // Escape on the session page goes back to the list (not while typing in a field).
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (escapeToList(e)) {
+        e.preventDefault();
+        window.location.hash = routeHref({ kind: "list" });
+      }
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
+
+  const onRowsKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (!target.matches("button.rowbtn")) return;
+    const k = rowKey(e);
+    if (k === null) return;
+    e.preventDefault();
+    if (k === "next" || k === "prev") {
+      const btns = Array.from(e.currentTarget.querySelectorAll<HTMLElement>("button.rowbtn"));
+      const at = btns.indexOf(target);
+      const to = btns[k === "next" ? at + 1 : at - 1];
+      if (to) to.focus();
+    } else if (k === "steps") {
+      window.location.hash = routeHref({ kind: "steps", id, index: Number(target.dataset.index) });
+    } else {
+      window.location.hash = routeHref({ kind: "map", id, index: Number(target.dataset.index) });
+    }
+  };
 
   return (
     <>
@@ -123,8 +157,15 @@ export function PromptTable({ session }: { session: SessionAnalysis }) {
         <h2>{session.title || session.sessionId}</h2>
         <p className="muted">
           {session.branch ? <span className="mono">{session.branch}</span> : null} {plural(nonInheritedCount, "prompt")}{inheritedCount > 0 ? ` + ${inheritedCount} inherited` : ""}
+          {nonInheritedCount > 0 ? ` · ${needText(attention.length, "prompt")}` : ""}
         </p>
       </div>
+      {nonInheritedCount > 0 ? (
+        <nav className="filters" aria-label="Filter prompts">
+          <a href={routeHref({ kind: "session", id })} aria-current={show === "all" ? "page" : undefined}>All ({nonInheritedCount})</a>
+          <a href={routeHref({ kind: "session", id, show: "attention" })} aria-current={show === "attention" ? "page" : undefined}>Needs attention ({attention.length})</a>
+        </nav>
+      ) : null}
       {session.warnings.length > 0 ? (
         <details className="warnings" open={session.warnings.length <= 5}>
           <summary>{plural(session.warnings.length, "warning")} while reading the log</summary>
@@ -142,23 +183,33 @@ export function PromptTable({ session }: { session: SessionAnalysis }) {
         <p className="empty">This session has no prompts.</p>
       ) : (
         <>
-          <TimeLegend />
-          <table className="prompts">
-            <PromptHead />
-            <tbody>
-              {shown.map((p) => (
-                <Row key={p.index} sessionId={session.sessionId} p={p} open={openIdx.has(p.index)} onToggle={() => toggle(p.index)} />
-              ))}
-            </tbody>
-          </table>
-          {hidden > 0 ? (
-            <p>
-              <button type="button" className="more" onClick={() => setLimit(nextLimit(limit, session.prompts.length))}>
-                Show more ({hidden} hidden)
-              </button>
-            </p>
-          ) : null}
-          {inheritedCount > 0 ? <InheritedGroup sessionId={session.sessionId} rows={inherited} from={from} openIdx={openIdx} onToggle={toggle} /> : null}
+          {show === "attention" ? <p className="muted">Showing {rows.length} of {nonInheritedCount} prompts.</p> : null}
+          <div className="prompt-rows" onKeyDown={onRowsKey}>
+            {rows.length === 0 && show === "attention" ? (
+              <p className="empty">No prompts need attention.</p>
+            ) : (
+              <>
+                <TimeLegend />
+                <table className="prompts">
+                  <PromptHead />
+                  <tbody>
+                    {shown.map((p) => (
+                      <Row key={p.index} sessionId={id} p={p} open={openIdx.has(p.index)} onToggle={() => toggle(p.index)} />
+                    ))}
+                  </tbody>
+                </table>
+                {hidden > 0 ? (
+                  <p>
+                    <button type="button" className="more" onClick={() => setLimit(nextLimit(limit, rows.length))}>
+                      Show more ({hidden} hidden)
+                    </button>
+                  </p>
+                ) : null}
+              </>
+            )}
+            {inheritedCount > 0 ? <InheritedGroup sessionId={id} rows={inherited} from={from} openIdx={openIdx} onToggle={toggle} /> : null}
+          </div>
+          {rows.length > 0 ? <p className="muted keys">Keys: Tab to a prompt, ↑/↓ move, Enter expands, s Steps, m Map, Esc back to sessions.</p> : null}
         </>
       )}
     </>

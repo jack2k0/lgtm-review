@@ -352,7 +352,7 @@ Keyboard in the prompt table: Tab to a prompt, then ↑/↓ move between prompts
 
 ### Phase 4: Prompt table
 
-- [ ] 4.1 counts, filter, keys, styles; P1-P8 green; `pnpm check` green
+- [x] 4.1 counts, filter, keys, styles; P1-P8 green; `pnpm check` green
 
 ### Phase 5: Session list and README
 

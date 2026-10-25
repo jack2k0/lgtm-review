@@ -10,6 +10,7 @@ import { PromptTable } from "./PromptTable";
 import { SessionList } from "./SessionList";
 import { StepsView } from "./StepsView";
 import { sessionStore } from "./token";
+import type { Show } from "./triage";
 import { parseRoute, routeHref, type Route } from "./viewmodel";
 
 function Status<T>({ res, back, backLabel = "← Back to steps", children }: { res: Load<T>; back?: string; backLabel?: string; children: (data: T) => React.ReactNode }) {
@@ -24,7 +25,7 @@ function ListView({ token }: { token: string | null }) {
   return <Status res={res}>{(d) => <SessionList data={d} />}</Status>;
 }
 
-function SessionView({ token, id }: { token: string | null; id: string }) {
+function SessionView({ token, id, show }: { token: string | null; id: string; show: Show }) {
   const res = useLive<SessionAnalysis>((e, s) => fetchSession(token, id, e, s), `s:${id}`);
   return (
     <>
@@ -32,7 +33,7 @@ function SessionView({ token, id }: { token: string | null; id: string }) {
         <a href={routeHref({ kind: "list" })}>&larr; All sessions</a>{" · "}
         <a href={routeHref({ kind: "map", id, index: null })}>Map</a>
       </p>
-      <Status res={res}>{(d) => <PromptTable key={d.sessionId} session={d} />}</Status>
+      <Status res={res}>{(d) => <PromptTable key={d.sessionId} session={d} show={show} />}</Status>
     </>
   );
 }
@@ -88,7 +89,7 @@ function PlayRoute({ token, id, index, beat }: { token: string | null; id: strin
 function Routed({ token, route }: { token: string | null; route: Route }) {
   switch (route.kind) {
     case "session":
-      return <SessionView token={token} id={route.id} />;
+      return <SessionView token={token} id={route.id} show={route.show ?? "all"} />;
     case "steps":
       return <StepsRoute token={token} id={route.id} index={route.index} />;
     case "diff":
