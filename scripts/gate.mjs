@@ -73,28 +73,41 @@ export function parseGateBlock(text) {
 }
 
 /**
- * Parse a findings ledger: reviewer names, and one { line, verdict } per table row below a header. Fails closed:
- * a row in a table without a Verdict column gets verdict "" (unanswered). Rows may omit the outer pipes; `\|` is
- * a literal pipe inside a cell. Only a bare name counts as a reviewer (a placeholder like `<a>` does not).
+ * Parse a findings ledger: reviewer names, and one { line, verdict } per table row. Fails closed (verdict "" =
+ * unanswered): a row in a table without a Verdict column, a row whose cell count differs from the header, a
+ * header not followed by a separator row (so a row after a blank line is not taken as a header). Rows may omit
+ * the outer pipes; `\|` is a literal pipe. Only a bare name or @handle counts as a reviewer (not `<a>`).
  */
 export function parseLedger(text) {
   const rv = /^reviewers\s*:\s*(.*)$/im.exec(text);
-  const names = (rv?.[1] ?? "").split(",").map((r) => r.trim().toLowerCase());
+  const names = (rv?.[1] ?? "").split(",").map((r) => r.trim().toLowerCase().replace(/^@/, ""));
   const reviewers = [...new Set(names.filter((r) => /^[a-z0-9][\w.+-]*$/.test(r) && r !== "none"))];
   const rows = [];
-  let col = null; // null = outside a table; -1 = table without a Verdict column
+  const SEP = (cells) => cells.every((c) => /^:?-+:?$/.test(c));
+  let head = null; // { line, cells, col, confirmed } of the current table; null = outside a table
   let fence = false;
+  const endTable = () => {
+    if (head && !head.confirmed) rows.push({ line: head.line, verdict: "" });
+    head = null;
+  };
   text.split(/\r?\n/).forEach((line, i) => {
     if (/^\s*(```|~~~)/.test(line)) fence = !fence;
     const t = line.trim();
-    if (fence || !/(^|[^\\])\|/.test(t)) return void (col = null);
+    if (fence || !/(^|[^\\])\|/.test(t)) return endTable();
     const cells = t.replace(/^\|/, "").replace(/(^|[^\\])\|$/, "$1").split(/(?<!\\)\|/).map((c) => c.trim());
-    if (col === null) return void (col = cells.findIndex((c) => /^verdict\b/i.test(c)));
-    if (cells.every((c) => /^:?-+:?$/.test(c))) return;
-    const cell = col < 0 ? "" : (cells[col] ?? "").toLowerCase();
+    if (!head) return void (head = { line: i + 1, cells, col: cells.findIndex((c) => /^verdict\b/i.test(c)), confirmed: false });
+    if (!head.confirmed) {
+      if (SEP(cells)) return void (head.confirmed = true);
+      rows.push({ line: head.line, verdict: "" });
+      head.confirmed = true;
+      head.col = -1;
+    }
+    if (SEP(cells)) return;
+    const cell = head.col < 0 || cells.length !== head.cells.length ? "" : cells[head.col].toLowerCase().replace(/[*_`~]/g, "");
     rows.push({ line: i + 1, verdict: /^([a-z]+)(?=$|[\s(:,;])/.exec(cell)?.[1] ?? cell });
   });
-  return { reviewers, rows };
+  endTable();
+  return { reviewers, rows, none: /^findings\s*:\s*none\s*$/im.test(text) };
 }
 
 const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
@@ -224,10 +237,12 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
   else if (need === 0) add("review", "PASS", "tier Low: no reviewer required");
   else if (!ledgerPath || !existsSync(ledgerPath)) add("review", "FAIL", `tier ${tier} needs ${need} reviewer(s); no findings ledger${ledgerPath ? ` at ${ledgerPath}` : " (--findings or --plan)"}`);
   else {
-    const { reviewers, rows } = parseLedger(readFileSync(ledgerPath, "utf8"));
+    const { reviewers, rows, none } = parseLedger(readFileSync(ledgerPath, "utf8"));
     const open = rows.filter((r) => !VERDICTS.includes(r.verdict)).map((r) => `${ledgerPath}:${r.line}: verdict "${r.verdict}"`);
     const tally = VERDICTS.map((v) => `${rows.filter((r) => r.verdict === v).length} ${v}`).join(", ");
     if (reviewers.length < need) add("review", "FAIL", `tier ${tier} needs ${need} reviewer(s), ledger names ${reviewers.length}`);
+    else if (rows.length === 0 && !none) add("review", "FAIL", "no findings table rows; write `findings: none` when the reviewers found nothing");
+    else if (rows.length > 0 && none) add("review", "FAIL", `\`findings: none\` but ${rows.length} finding row(s)`);
     else if (!bad("review", open, "unanswered finding(s) (verdict must be fixed | rejected | deferred)")) add("review", "PASS", `${reviewers.join(" + ")}; ${rows.length} finding(s): ${tally}`);
   }
 

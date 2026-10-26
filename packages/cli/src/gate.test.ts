@@ -257,6 +257,13 @@ describe("scripts/gate.mjs", () => {
     expect(run("reviewers: a\n\n| # | Finding | Verdict | Why |\n|---|---|---|---|\n| 1 | a \\| fixed | | e |\n").out).toMatch(/FAIL review: 1 unanswered/);
     expect(run("reviewers: a\n\n| Verdict |\n|---|\n| fixed? |\n| fixed-not |\n| not fixed |\n").out).toMatch(/FAIL review: 3 unanswered/);
     expect(run("reviewers: <a>\n").out).toMatch(/ledger names 0/);
+    expect(run("reviewers: a\n\n- 1. Important: leak. Verdict: open\n").out).toMatch(/FAIL review: no findings table rows/);
+    expect(run("reviewers: a\nfindings: none\n").code).toBe(0);
+    expect(run("reviewers: a\nfindings: none\n\n| Verdict |\n|---|\n| fixed |\n").out).toMatch(/FAIL review: `findings: none` but 1/);
+    const T = "| # | Finding | Verdict |\n|---|---|---|\n| 1 | x | fixed |\n";
+    expect(run(`reviewers: a\n\n${T}\n| 2 | after a blank line | |\n`).out).toMatch(/FAIL review: 1 unanswered.*\n.*:7: verdict ""/);
+    expect(run(`reviewers: a\n\n${T}| 2 | in \`a | b\` | fixed | |\n`).out).toMatch(/FAIL review: 1 unanswered/);
+    expect(run("reviewers: @a\n\n| Verdict |\n|---|\n| **fixed** |\n| `rejected`: no |\n").out).toMatch(/PASS review: a; 2 finding/);
     const ok = run("reviewers: a\n\n```\n| x | y |\n```\n\n| # | Verdict |\n|---|---|\n| 1 | fixed (abc) |\n| 2 | Deferred: S-22 |\n");
     expect(ok.code).toBe(0);
     expect(ok.out).toMatch(/2 finding\(s\): 1 fixed, 0 rejected, 1 deferred/);
