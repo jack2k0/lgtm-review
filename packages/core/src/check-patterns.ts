@@ -455,6 +455,18 @@ function unquote(t: string): string {
   return t.length >= 2 && (t[0] === '"' || t[0] === "'") && t[t.length - 1] === t[0] ? t.slice(1, -1) : t;
 }
 
+const SECRET_VALUE_OPTS = new Set([
+  "--password",
+  "--passwd",
+  "--token",
+  "--secret",
+  "--api-key",
+  "--apikey",
+  "--auth",
+  "--credentials",
+  "--private-key",
+]);
+
 function parseArgs(toks: readonly string[], start: number, valueOpts: ReadonlySet<string>, stopAtPositional = false): ParsedArgs {
   const out: ParsedArgs = { pos: [], vals: new Map(), flags: new Set() };
   const put = (k: string, v: string): void => {
@@ -471,7 +483,7 @@ function parseArgs(toks: readonly string[], start: number, valueOpts: ReadonlySe
     if (t.startsWith("-") && t !== "-") {
       const eq = t.indexOf("=");
       if (t.startsWith("--") && eq > 0) put(t.slice(0, eq), t.slice(eq + 1));
-      else if (valueOpts.has(t)) {
+      else if (valueOpts.has(t) || SECRET_VALUE_OPTS.has(t.toLowerCase())) {
         const v = toks[i + 1];
         if (v !== undefined) put(t, v);
         i++;

@@ -1,4 +1,4 @@
-# Review summary: Add helpers; let an agent finish the multiply in the backgro
+# Review summary: Add helpers; let an agent finish the multiply in the
 
 Branch: `main` · Date: 2026-01-01 · Session: `subagent`
 
