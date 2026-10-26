@@ -377,6 +377,7 @@ Moved out of Parked on 2026-10-25 (v0.3 extension):
 - **Parallel worktrees** (was: the MVP chain is strictly sequential; parallel pairs post-MVP, capped at 2 by review capacity) → superseded by "Parallel work rules (v0.3)": at most two slices in flight, schema-first rule.
 
 ## Done
+- **v0.2 review round (2026-10-26)** — reviews of S-06 (redaction/export), S-15 (archive), S-16 (doc names) and fixes; no new FR. See `context/ORCHESTRATION.md`.
 - **v0.3 review round (2026-10-26)** — read-only reviews of S-17..S-21 and fixes (no new FR); `turbo`/`nx` task runners recognized as checks (FR-002). See `context/ORCHESTRATION.md`.
 
 - **S-15: Local session archive (`--archive`, archived sessions in every view)** — FR-008 second half; done 2026-10-23 (`context/archive/session-archive/`).
