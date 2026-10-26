@@ -12,8 +12,9 @@ export const SHELL_EDIT_FILE = "(shell edit)";
 export interface ShellEditTarget {
   /** Target path as written in the command, or `SHELL_EDIT_FILE`. */
   file: string;
-  /** The edit comes from a git operation (`git mv`): it never changes the status. */
+  /** The edit comes from a git operation (`git mv`, `git rm`): it never changes the status. */
   gitOp: boolean;
+  kind?: "M" | "A" | "D";
 }
 
 export interface ShellMutation {
@@ -234,9 +235,14 @@ function pythonWrites(command: string): string[] {
   return out;
 }
 
+interface MutFile {
+  file: string;
+  kind?: "M" | "A" | "D";
+}
+
 interface SegMut {
   gitOp: boolean;
-  files: string[];
+  files: MutFile[];
 }
 
 const XARGS_VALUE_OPTS = new Set(["-I", "-n", "-P", "-d", "-L", "-s", "-E", "-a", "-J"]);
@@ -258,45 +264,73 @@ function segmentMutation(
 ): SegMut | null {
   const words = unwrapXargs(rawWords);
   const head = words[0]?.text ?? "";
-  const files: string[] = [];
+  const files: MutFile[] = [];
   let gitOp = false;
   let mutating = false;
 
   const git = gitSub(words);
   if (git !== null) {
-    if (GIT_OPS.has(git.sub)) {
+    if (git.sub === "rm") {
+      const hasCached = git.args.some((w) => w.text === "--cached");
+      if (!hasCached) {
+        const ops = git.args.filter((w) => !isOption(w));
+        const targets = operandFiles(ops);
+        if (targets.length > 0) {
+          gitOp = true;
+          mutating = true;
+          for (const f of targets) {
+            files.push({ file: f, kind: "D" });
+          }
+        }
+      }
+    } else if (GIT_OPS.has(git.sub)) {
       gitOp = true;
       mutating = true;
       if (git.sub === "mv") {
         const ops = git.args.filter((w) => !isOption(w));
-        const dest = ops[ops.length - 1];
-        if (dest !== undefined) files.push(...operandFiles([dest]));
-        else files.push(SHELL_EDIT_FILE);
+        if (ops.length >= 2) {
+          const dest = ops[ops.length - 1]!;
+          const sources = ops.slice(0, ops.length - 1);
+          for (const src of sources) {
+            for (const f of operandFiles([src])) {
+              files.push({ file: f, kind: "D" });
+            }
+          }
+          for (const f of operandFiles([dest])) {
+            files.push({ file: f, kind: "A" });
+          }
+        } else if (ops.length === 1) {
+          for (const f of operandFiles(ops)) {
+            files.push({ file: f, kind: "A" });
+          }
+        } else {
+          files.push({ file: SHELL_EDIT_FILE, kind: "M" });
+        }
       }
     } else if (git.sub === "apply" && !git.args.some((w) => GIT_APPLY_READONLY.has(w.text))) {
       mutating = true;
-      files.push(SHELL_EDIT_FILE);
+      files.push({ file: SHELL_EDIT_FILE, kind: "M" });
     }
   } else if (head === "sed" || head === "gsed") {
     const f = sedFiles(words.slice(1));
     if (f !== null) {
       mutating = f.length > 0;
-      files.push(...f);
+      files.push(...f.map((file) => ({ file, kind: "M" as const })));
     }
   } else if (head === "perl") {
     const f = perlFiles(words.slice(1));
     if (f !== null) {
       mutating = f.length > 0;
-      files.push(...f);
+      files.push(...f.map((file) => ({ file, kind: "M" as const })));
     }
   } else if (head === "tee" && !pipedFromCheck) {
     const f = teeFiles(words.slice(1));
     mutating = f.length > 0;
-    files.push(...f);
+    files.push(...f.map((file) => ({ file, kind: "M" as const })));
   } else if (/^python[\d.]*$/.test(head) && command.includes("<<")) {
     const f = pythonWrites(command);
     mutating = f.length > 0;
-    files.push(...f);
+    files.push(...f.map((file) => ({ file, kind: "M" as const })));
   }
 
   // `cmd > file` / `cmd >> file`; a check's own redirects capture its log, not an edit.
@@ -305,7 +339,7 @@ function segmentMutation(
       if ((r.fd !== "" && r.fd !== "1") || r.target === null) continue;
       if (isUnknownTarget(r.target) || isIgnoredPath(r.target.text)) continue;
       mutating = true;
-      files.push(r.target.text);
+      files.push({ file: r.target.text, kind: "M" as const });
     }
   }
   return mutating ? { gitOp, files } : null;
@@ -365,10 +399,11 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
         plainIdx.push(i);
       }
       for (const f of m.files) {
-        const key = `${m.gitOp ? "g" : "e"}\u0000${f}`;
+        const kind = f.kind ?? "M";
+        const key = `${m.gitOp ? "g" : "e"}\u0000${kind}\u0000${f.file}`;
         if (seen.has(key) || edits.length >= FILES_MAX) continue;
         seen.add(key);
-        edits.push({ file: f, gitOp: m.gitOp });
+        edits.push({ file: f.file, gitOp: m.gitOp, kind });
       }
     });
     if (!anyMutating) return NONE;

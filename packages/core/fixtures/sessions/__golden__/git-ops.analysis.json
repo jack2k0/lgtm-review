@@ -217,14 +217,14 @@
       "files": [
         {
           "path": "/home/user/project/src/f.js",
-          "kind": "M",
+          "kind": "D",
           "added": 1,
           "removed": 1,
-          "maybeIncomplete": false
+          "maybeIncomplete": true
         },
         {
           "path": "/home/user/project/src/g.js",
-          "kind": "M",
+          "kind": "A",
           "added": 0,
           "removed": 0,
           "maybeIncomplete": true

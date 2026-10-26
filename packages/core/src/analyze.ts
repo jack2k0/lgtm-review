@@ -650,7 +650,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               const path = resolveTarget(e.file, cwd, sm.hasCd);
               return {
                 path,
-                kind: "M" as const,
+                kind: e.kind ?? ("M" as const),
                 added: 0,
                 removed: 0,
                 maybeIncomplete: true,

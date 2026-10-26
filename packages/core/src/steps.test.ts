@@ -114,6 +114,38 @@ describe("step grouping", () => {
     const w = toolUse("w", "Write", { file_path: `${P}/src/new.ts`, content: "a\nb\n" });
     const wr = toolResult("w", "ok", { toolUseResult: { type: "create", content: "a\nb\n", structuredPatch: [] } });
     expect(steps([prompt("p"), w, wr])[0]!.title).toBe("Create src/new.ts (+2)");
+    const e = toolUse("e", "Edit", { file_path: `${P}/src/new.ts`, old_string: "a", new_string: "x\ny" });
+    const er = toolResult("e", "File updated.", { toolUseResult: patchResult(["x", "y"], ["a"]) });
+    expect(steps([prompt("p"), w, wr, e, er])[0]!.title).toBe("Create src/new.ts (+4 -1)");
+    const delOnly = [
+      prompt("p"),
+      toolUse("b", "Bash", { command: "git rm src/old.ts" }),
+      toolResult("b", "", {
+        toolUseResult: {
+          stdout: "",
+          bashEditDiff: {
+            files: [{ filePath: `${P}/src/old.ts`, hunks: [{ oldStart: 1, oldLines: 3, newStart: 0, newLines: 0, lines: ["-a", "-b", "-c"] }] }],
+          },
+        },
+      }),
+    ];
+    expect(steps(delOnly)[0]!.title).toBe("Delete src/old.ts (-3)");
+    const editThenDel = [
+      prompt("p"),
+      ...edit("e1", `${P}/src/old.ts`),
+      toolUse("b", "Bash", { command: "git rm src/old.ts" }),
+      toolResult("b", "", {
+        toolUseResult: {
+          stdout: "",
+          bashEditDiff: {
+            files: [{ filePath: `${P}/src/old.ts`, hunks: [{ oldStart: 1, oldLines: 3, newStart: 0, newLines: 0, lines: ["-a", "-b", "-c"] }] }],
+          },
+        },
+      }),
+    ];
+    expect(steps(editThenDel)[0]!.title).toBe("Delete src/old.ts (+1 -4)");
+    expect(steps([prompt("p"), ...bash("b", "git rm src/a.js")])[0]!.title).toBe("Delete src/a.js (-0)");
+    expect(steps([prompt("p"), ...bash("b", "git mv src/a.js src/b.js")])[0]!.title).toBe("Delete src/a.js (-0), create src/b.js (+0)");
     const many = [prompt("p"), ...edit("e1", `${P}/a`), ...edit("e2", `${P}/b`), ...edit("e3", `${P}/c`)];
     expect(steps(many)[0]!.title).toBe("Edit 3 files (+3 -3)");
     const failed = [prompt("p"), toolUse("e", "Edit", { file_path: `${P}/a` }), toolResult("e", "nope", { isError: true })];
