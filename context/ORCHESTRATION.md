@@ -35,6 +35,8 @@ brak
 
 - 2026-10-26 (cd. 3): S-03 (Agy): git mv/git rm w heurystyce jako D+A/D, tytuły kroków z oboma licznikami; zwykłe rm/mv celowo pominięte (real logs: 161 rm bez bashEditDiff, głównie sprzątanie). SendMessage zagnieżdżony w subagencie: 0 przypadków na real logs — odłożone. Proces na wzór Anthropic ('Solving code review at Anthropic', analiza Opus xhigh: scratchpad anthropic-process-analysis.md): zrobiony krok 1 z 3 — `scripts/gate.mjs` (bramka przed merge: zakres z bloku ```gate w plan.md, zakaz zmian istniejących *.labels.json, goldeny, usunięte oczekiwania testów, zależności, schema, opcjonalnie pnpm check, tier Low/Medium/High). Od teraz: uruchamiać `node scripts/gate.mjs --base main` przed każdym merge i wklejać blok do opisu merge. AGENTS.md/REVIEW.md i przegląd przed merge wg tieru CZEKAJĄ na decyzje właściciela (publiczność plików, akceptacja High, język, Sonnet jako zapasowy recenzent, lista High).
 
+- 2026-10-26 (cd. 4): testy czasowe (20 MB core, 20 MB e2e HTTP, długie komendy shell) przeniesione bez zmian progów do *.perf.test.ts (sekwencyjnie) — koniec flaky pod obciążeniem; eksport: nagłówek diffu ma liczniki pliku + '(diff truncated)' (S-03 3.2/3.3). Pierwszy merge przez bramkę: NEEDS-EYES, pozycje uzasadnione. Kickoff prompt: bramka w B3 i w briefie workera.
+
 ## Bramki
 - Npm publish: czeka na decyzję właściciela.
 
@@ -61,7 +63,7 @@ brak
 
 ## Notatki
 - Repo ma remote `origin` (github.com/jack2k0/lgtm-review). Push main 426a7f4 za zgodą właściciela (2026-10-23); kolejne pushe tylko na polecenie.
-- Push main e93427d za zgodą właściciela (2026-10-26); CI zielone (run 40285484561).
+- Push main e93427d za zgodą właściciela (2026-10-26); CI zielone (run 40285484561). Push e93427d..c54447b (56 commitów) za zgodą Jacka (2026-10-26, wykonał Shepherd); CI zielone (run 40343934760).
 - Env (2026-10-26): domyślny node to 20; `pnpm check` wymaga PATH=<scratchpad>/bin:$HOME/.local/opt/node22/bin, gdzie `bin/pnpm` to wrapper `exec corepack pnpm "$@"` (turbo szuka binarki pnpm w PATH). Env (2026-10-25): shim /tmp/claude-1000/shim zniknął; pnpm przez corepack. Wcześniej: node 22 + pnpm przez PATH=/tmp/claude-1000/shim:$HOME/.local/opt/node22/bin. git user nie ustawiony: commity z GIT_AUTHOR_*/GIT_COMMITTER_* (jack / bogatyszejksponsor2@gmail.com). Narzędzia quoty niesprawdzone.
 
 ## Otwarte problemy
