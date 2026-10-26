@@ -33,12 +33,62 @@ const SKIP_RE =
 /** Cheap pre-filter: lines without any of these words cannot match the two regexes above. */
 const QUICK_RE = /assert|expect|should|require\.|skip|Skip|xit|xtest|xdescribe|todo|xfail|Disabled/;
 
+/**
+ * Diff lines whose content (after +/- marker and indentation) starts a comment (//, #, /*, *, <!--)
+ * are ignored.
+ */
+function isCommentLine(body: string): boolean {
+  const trimmed = body.trimStart();
+  return (
+    trimmed.startsWith("//") ||
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("/*") ||
+    trimmed.startsWith("*") ||
+    trimmed.startsWith("<!--")
+  );
+}
+
+/**
+ * Returns true if the index in `line` is preceded on that line by an odd number of unescaped quotes
+ * of any single kind ('', "", ``), indicating the occurrence sits inside a string literal.
+ */
+function isInsideString(line: string, index: number): boolean {
+  let single = 0;
+  let double = 0;
+  let backtick = 0;
+  for (let i = 0; i < index; i++) {
+    const c = line[i];
+    if (c === "'" || c === '"' || c === "`") {
+      let bs = 0;
+      for (let j = i - 1; j >= 0 && line[j] === "\\"; j--) bs++;
+      if (bs % 2 === 0) {
+        if (c === "'") single++;
+        else if (c === '"') double++;
+        else backtick++;
+      }
+    }
+  }
+  return single % 2 === 1 || double % 2 === 1 || backtick % 2 === 1;
+}
+
+/** Finds a code match for `re` in `line` that is not inside a string literal. */
+function hasCodeMatch(re: RegExp, line: string): boolean {
+  const r = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+  let m: RegExpExecArray | null;
+  while ((m = r.exec(line)) !== null) {
+    if (!isInsideString(line, m.index)) return true;
+    if (m.index === r.lastIndex) r.lastIndex++;
+  }
+  return false;
+}
+
 function scanBody(body: string, added: boolean, s: EditStats): void {
-  if (ASSERT_RE.test(body)) {
+  if (isCommentLine(body)) return;
+  if (hasCodeMatch(ASSERT_RE, body)) {
     if (added) s.assertAdded++;
     else s.assertRemoved++;
   }
-  if (SKIP_RE.test(body)) {
+  if (hasCodeMatch(SKIP_RE, body)) {
     if (added) s.skipAdded++;
     else s.skipRemoved++;
   }
@@ -92,8 +142,9 @@ const TEST_DIRS = new Set(["test", "tests", "__tests__", "spec"]);
 /** Test file: a `test`/`tests`/`__tests__`/`spec` directory, `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.py`, `tests.py`, `conftest.py` or `*_test.go`. */
 export function isTestPath(rel: string): boolean {
   const { dirs, name } = split(rel);
-  if (dirs.some((d) => TEST_DIRS.has(d.toLowerCase()))) return true;
   const n = name.toLowerCase();
+  if (n.endsWith(".snap") || dirs.some((d) => d.toLowerCase() === "__snapshots__")) return false;
+  if (dirs.some((d) => TEST_DIRS.has(d.toLowerCase()))) return true;
   return /\.(?:test|spec)\.[^./]+$/.test(n) || /^(?:test_.*|.*_test|tests?|conftest)\.py$/i.test(n) || /_test\.go$/.test(n);
 }
 
@@ -110,6 +161,7 @@ const SENSITIVE_WORDS = new Set([
   "credentials",
   "token",
   "tokens",
+  "migration",
   "migrations",
   "migrate",
   "permissions",
@@ -117,6 +169,7 @@ const SENSITIVE_WORDS = new Set([
 ]);
 const SENSITIVE_EXCLUDED = /^(?:author(?!iz|is)|design[-_]?tokens|tokenizer)/i;
 const STYLE_EXT = /\.(?:css|scss|sass|less)$/i;
+const ENV_TEMPLATE_RE = /^\.env\.(?:example|sample|template|dist)(?:\.|$)/i;
 
 /** Words of a path segment: split on `-`, `_`, `.` and camelCase humps, lower-cased. */
 function words(seg: string): string[] {
@@ -140,7 +193,7 @@ export function sensitiveMatch(rel: string): string | null {
     if (segs[i] === ".github" && segs[i + 1] === "workflows") return ".github/workflows";
   }
   const lower = name.toLowerCase();
-  if (lower.startsWith(".env")) return ".env";
+  if (lower.startsWith(".env") && !ENV_TEMPLATE_RE.test(lower)) return ".env";
   if (lower.startsWith("dockerfile")) return "Dockerfile";
   for (const seg of segs) {
     if (SENSITIVE_EXCLUDED.test(seg)) continue;
@@ -150,7 +203,7 @@ export function sensitiveMatch(rel: string): string | null {
 }
 
 const MANIFEST_RE =
-  /^(?:package\.json|pnpm-lock\.yaml|package-lock\.json|yarn\.lock|requirements[^/]*\.txt|pyproject\.toml|poetry\.lock|uv\.lock|pipfile(?:\.lock)?|setup\.(?:py|cfg)|go\.mod|go\.sum|cargo\.toml|cargo\.lock|pom\.xml|build\.gradle[^/]*)$/;
+  /^(?:package\.json|pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|gemfile\.lock|composer\.lock|requirements[^/]*\.txt|pyproject\.toml|poetry\.lock|uv\.lock|pipfile(?:\.lock)?|setup\.(?:py|cfg)|go\.mod|go\.sum|cargo\.toml|cargo\.lock|pom\.xml|build\.gradle[^/]*)$/;
 
 /** Dependency manifest or lockfile (path-based; the dependencies section is not parsed). */
 export function isManifestPath(rel: string): boolean {
@@ -326,6 +379,16 @@ export function computeHints(input: HintInput): Hint[] {
     out.push({ rule, severity, path, reason });
   };
 
+  let totalAssertRemoved = 0;
+  let totalAssertAdded = 0;
+  for (const f of files.values()) {
+    if (!isDocPath(f.rel) && f.isTest) {
+      totalAssertRemoved += f.stats.assertRemoved;
+      totalAssertAdded += f.stats.assertAdded;
+    }
+  }
+  const promptNetAssertRemoved = totalAssertRemoved - totalAssertAdded;
+
   for (const f of files.values()) {
     // Documentation files get only the size rule: no check can verify prose (FR-015).
     const doc = isDocPath(f.rel);
@@ -334,7 +397,7 @@ export function computeHints(input: HintInput): Hint[] {
         if (f.fixEdits > 0) {
           add("test-modified-during-fix", "high", f.path, `test file edited ${plural(f.fixEdits, "time")} while fixing a failing check`);
         }
-        if (f.stats.assertRemoved > f.stats.assertAdded) {
+        if (promptNetAssertRemoved > 0 && f.stats.assertRemoved > f.stats.assertAdded) {
           add("assertions-removed", "high", f.path, `${plural(f.stats.assertRemoved, "assertion line")} removed, ${f.stats.assertAdded} added`);
         }
         if (f.stats.skipAdded > f.stats.skipRemoved) {
