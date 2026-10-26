@@ -151,8 +151,8 @@ describe("redaction (D5)", () => {
     "Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig",
     "password=hunter2",
     "token: abc123",
-    "0123456789abcdef0123456789abcdef0123",
-    "dGhpcyBpcyBhIGxvbmcgYmFzZTY0IHN0cmluZyE=",
+    "token=0123456789abcdef0123456789abcdef0123",
+    "secret=dGhpcyBpcyBhIGxvbmcgYmFzZTY0IHN0cmluZyE=",
   ];
   test.each(secrets)("redacts %s", (secret) => {
     const out = redact(`use ${secret} here`);
@@ -172,10 +172,68 @@ describe("redaction (D5)", () => {
     expect(summaryTitle(text, 0, true)).not.toContain("SECRET");
   });
   test("a failing command label is redacted too", () => {
-    expect(summaryReason({ status: "failing", reason: "curl -H 'Authorization: Bearer abc.def' failed: 401" })).not.toContain("abc.def");
+    expect(summaryReason({ status: "failing", reason: "curl -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig' failed: 401" })).not.toContain("eyJ");
   });
   test("a link smuggled in after a secret stays inert", () => {
     expect(summaryTitle("sk-ant-api03-abcdefgh](http://evil.example/x)", 0, true)).not.toMatch(/(?<!\\)\]\(/);
+  });
+  test("summary with DB_PASSWORD=hunter2 / URL creds in a title", () => {
+    const md = formatSummary(
+      session([
+        prompt({
+          text: "Deploy with DB_PASSWORD=hunter2 and client_secret=hunter2",
+        }),
+        prompt({
+          index: 1,
+          text: "Connection https://deployer:S3cretPassw0rd@db.example.test:5432/app",
+        }),
+      ]),
+      { titles: true },
+    );
+    expect(md).not.toContain("hunter2");
+    expect(md).not.toContain("S3cretPassw0rd");
+    expect(md).toContain("redacted:secret");
+    expect(md).toContain("redacted:url-credentials");
+  });
+  test("ghp_ token in branch and in an edited file path (single + collapsed hint)", () => {
+    const branchToken = "ghp_BRANCH01234567890123456789012345678";
+    const singleToken = "ghp_SINGLE01234567890123456789012345678";
+    const collapsedTokens = Array.from(
+      { length: 4 },
+      (_, i) => `ghp_COLLAPSED${i}01234567890123456789012345`,
+    );
+
+    const s = session(
+      [
+        prompt({
+          hints: [
+            hint({
+              rule: "test-modified-during-fix",
+              severity: "high",
+              path: `${ROOT}/src/${singleToken}.ts`,
+            }),
+            ...collapsedTokens.map((tok) =>
+              hint({
+                rule: "unchecked-edit",
+                severity: "warn",
+                path: `${ROOT}/src/${tok}.ts`,
+              }),
+            ),
+          ],
+        }),
+      ],
+      { branch: `feature/${branchToken}` },
+    );
+
+    const md = formatSummary(s, { titles: true, root: ROOT });
+    expect(md).not.toContain(branchToken);
+    expect(md).not.toContain(singleToken);
+    for (const tok of collapsedTokens) {
+      expect(md).not.toContain(tok);
+    }
+    expect(md).toContain("Branch: `feature/[redacted:github-token]`");
+    expect(md).toContain("- **high** `test-modified-during-fix`: `src/[redacted:github-token].ts`");
+    expect(md).toContain("- **warn** `unchecked-edit`: 4 files (first: `src/[redacted:github-token].ts`, `src/[redacted:github-token].ts`, `src/[redacted:github-token].ts`, …)");
   });
 });
 

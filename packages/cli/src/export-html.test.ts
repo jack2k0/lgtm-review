@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import { createAnalyzer } from "@lgtm/core";
 import type { FileDiff, PromptDetail, SessionAnalysis } from "@lgtm/core";
 import { buildExportInput } from "./export.js";
-import { EXPORT_CSP, EXPORT_CSS, escapeHtml, renderExport, type ExportInput, type ExportOptions } from "./export-html.js";
+import { EXPORT_CSP, EXPORT_CSS, escapeHtml, renderExport, stripDroppedControls, type ExportInput, type ExportOptions } from "./export-html.js";
 
 const fixturesRoot = join(dirname(fileURLToPath(import.meta.url)), "../../core/fixtures");
 const sessionsDir = join(fixturesRoot, "sessions");
@@ -361,11 +361,63 @@ describe("hostile and secret-bearing content", () => {
   test("another run gives the same bytes", () => {
     expect(renderExport(hostileInput(), opts).html).toBe(html);
   });
+
+  test("export with ghp_\\u0000AAAA... and ghp_\\rAAAA... split -> redacted", () => {
+    const token1Tail = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    const token2Tail = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+    const input: ExportInput = {
+      analysis: {
+        ...hostileInput().analysis,
+        title: `split title ghp_\u0000${token1Tail}`,
+        prompts: [
+          {
+            ...hostileInput().analysis.prompts[0]!,
+            text: `prompt with ghp_\r${token2Tail}`,
+            files: [{ path: "/home/user/project/src/a.ts", kind: "M", added: 1, removed: 0, maybeIncomplete: false }],
+          },
+        ],
+      },
+      details: [],
+      diffs: new Map([
+        [
+          0,
+          [
+            {
+              path: "/home/user/project/src/a.ts",
+              kind: "M",
+              truncated: false,
+              maybeIncomplete: false,
+              hunks: [
+                {
+                  header: "@@ -1,1 +1,2 @@",
+                  lines: [
+                    { t: "+", s: `const tokenNul = "ghp_\u0000${token1Tail}";` },
+                    { t: "+", s: `const tokenCr = "ghp_\r${token2Tail}";` },
+                  ],
+                },
+              ],
+            },
+          ],
+        ],
+      ]),
+    };
+
+    const r = renderExport(input, opts);
+    expect(r.html).not.toContain(token1Tail);
+    expect(r.html).not.toContain(token2Tail);
+    expect(r.html).not.toContain(`ghp_${token1Tail}`);
+    expect(r.html).not.toContain(`ghp_${token2Tail}`);
+    expect(r.html).toContain("[redacted:github-token]");
+  });
 });
 
 describe("escapeHtml", () => {
   test("escapes the five characters and the backtick, drops control characters except newline and tab", () => {
     expect(escapeHtml(`&<>"'\`a\tb\nc\u0000\u0007\r\u007f\u009f‮`)).toBe("&amp;&lt;&gt;&quot;&#39;&#96;a\tb\nc");
+  });
+
+  test("stripDroppedControls drops NUL, CR and other controls while preserving newlines and tabs", () => {
+    expect(stripDroppedControls("a\u0000b\rc\td\ne\u007f\u009f\u202af")).toBe("abc\td\nef");
   });
 });
 

@@ -83,8 +83,8 @@ try {
   for (const line of [
     "# Review summary: Fix the add function so the tests pass.",
     "| # | Status | Review | Prompt | Files | +/- |",
-    "- **high** `assertions-removed`: `/home/user/project/tests/add.test.ts`",
-    "- **high** `test-skipped`: `/home/user/project/tests/net.test.ts`",
+    "- **high** `assertions-removed`: `~/project/tests/add.test.ts`",
+    "- **high** `test-skipped`: `~/project/tests/net.test.ts`",
   ]) {
     if (!sum.stdout.includes(line)) fail(`--summary output lacks ${JSON.stringify(line)}:\n${sum.stdout}`);
   }

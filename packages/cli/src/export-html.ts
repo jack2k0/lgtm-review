@@ -40,13 +40,21 @@ export const ACTIONS_PER_STEP_MAX = 200;
 const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
 
 /**
+ * Control characters dropped by HTML export: other than `\n` and `\t` (including NUL, CR, DEL, C1)
+ * and bidirectional overrides. Must be stripped BEFORE redaction so split tokens cannot bypass redaction.
+ */
+export const DROPPED_CONTROL_CHARS_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g;
+
+export function stripDroppedControls(s: string): string {
+  return s.replace(DROPPED_CONTROL_CHARS_RE, "");
+}
+
+/**
  * Escapes text for an HTML text node or a quoted attribute value. Control characters other than `\n` and `\t`
  * (including NUL, CR, DEL, C1) and bidirectional overrides are dropped first. Must run AFTER `redact`.
  */
 export function escapeHtml(s: string): string {
-  return s
-    .replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f‪-‮⁦-⁩]/g, "")
-    .replace(/[&<>"'`]/g, (c) => ESC[c]!);
+  return stripDroppedControls(s).replace(/[&<>"'`]/g, (c) => ESC[c]!);
 }
 
 const STATUS_LABEL: Record<Status, string> = { checked: "Checked", unchecked: "Unchecked", failing: "Failing", "no-changes": "No changes" };
@@ -102,7 +110,10 @@ export function renderExport(input: ExportInput, opts: ExportOptions): ExportRes
   let redactions = 0;
 
   /** Redacted (not yet escaped) text; the count is added by the caller that actually uses the result. */
-  const red = (s: string, extra: RedactOptions = {}): { text: string; count: number } => (s === "" ? { text: "", count: 0 } : redact(s, { ...opts.redact, ...extra }));
+  const red = (s: string, extra: RedactOptions = {}): { text: string; count: number } => {
+    const stripped = stripDroppedControls(s);
+    return stripped === "" ? { text: "", count: 0 } : redact(stripped, { ...opts.redact, ...extra });
+  };
   /** Redacted and escaped text for a text node. */
   const t = (s: string): string => {
     const r = red(s);
