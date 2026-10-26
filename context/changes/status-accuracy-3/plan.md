@@ -37,6 +37,7 @@ allow: ^packages/core/src/(check-patterns|shell-edits|analyze)(\.test)?\.ts$
 allow: ^packages/core/fixtures/sessions/(wrapped-checks|git-doc-mix|heredoc-targets)\.(jsonl|labels\.json)$
 allow: ^packages/core/fixtures/sessions/__golden__/(wrapped-checks|git-doc-mix|heredoc-targets)\.
 allow: ^context/changes/status-accuracy-3/
+allow: ^scripts/audit/
 goldens: (wrapped-checks|git-doc-mix|heredoc-targets)\.
 labels: new-only
 deps: no
@@ -74,6 +75,21 @@ schema: no
 - Tests: `p = "docs/x.md"; open(p, "w")` → `docs/x.md`; `Path("a/b.md").write_text(…)`; `p = Path("a.md"); p.write_text`; `python3 - "$R" <<EOF … open(sys.argv[1], "w")` with `R=context/plan.md &&` before; `open(f"{x}.md", "w")` → `(shell edit)`; a literal under the scratchpad → ignored.
 - New fixture `heredoc-targets` with goldens: code edit + passing check, then a heredoc doc write → checked with the documentation tail; a heredoc code write after the check → unchecked.
 - [x] done when: tests pass; `pnpm check` green; gate exit 0/2.
+
+## Phase 5: Remaining tool gaps from the POST audit (adjudication round 2)
+
+POST after phases 1-3: A 85.5%, B 83.5% (from 74.0% / 68.9%); 27 disagreements left, tool wrong in 18. Fix:
+- R1 `shell-edits.ts` `pythonWrites`: resolve each write with the binding in effect at its position (a name rebound later does not become unresolved); support `NAME + "lit"` / `"lit" + NAME` and `NAME / "lit"` (pathlib) when the parts resolve; `os.path.join(lit|NAME, …)`.
+- R2 `shell-edits.ts`: `$VAR` / `${VAR}` / `"$VAR"` operands of `sed -i`, redirects, `tee`, `cp`/`mv`/`rm` resolve from literal assignments earlier in the same command (the same `vars` map used for python argv).
+- R3 `analyze.ts` `plainDiffPaths`: a doc/scratch plain target absent from a capped `bashEditDiff.files` does not make the match fail (it cannot change the code attribution); a code target absent from the diff still does.
+- R4 `shell-edits.ts` `segmentMutation`: only the heredoc fed to the python segment's stdin is scanned for python writes, not every heredoc in the command.
+- Tests for each, failing on the code before this phase; extend the `heredoc-targets` / `git-doc-mix` fixtures only by NEW fixtures (e.g. `heredoc-targets-2`), never by editing the new ones' labels after the fact unless the label was wrong by the plan (then say so).
+- [ ] done when: tests pass; `pnpm check` green; gate exit 0/2.
+
+## Phase 6: Truth-script fixes (audit tool, a different agent than the tool phases)
+
+`scripts/audit/truth.py`: unwrap `flock` (and the other wrappers) for every runner, not only scripts; `git diff <file>` is not a check; a wait loop (`pgrep`/`sleep`/`until`) is not a check; expand `cd $VAR` from same-command assignments. One synthetic fixture case each in `scripts/audit/fixtures`, self-test green.
+- [ ] done when: `node --test scripts/audit/audit.test.mjs` passes; gate exit 0/2.
 
 ## Phase 4: Real-log audit (orchestrator only)
 
