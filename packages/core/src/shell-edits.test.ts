@@ -255,3 +255,25 @@ describe("classifyShellMutation: fail closed on unresolved shell writes (review 
     expect(classifyShellMutation(cmd).opaque).toBe(opaque);
   });
 });
+
+describe("classifyShellMutation: read-only segments do not make a mixed command opaque", () => {
+  const mixed = (seg: string) => `git merge b && sed -i s/x/y/ plan.md && ${seg}`;
+  test.each([
+    "tail -5 log", "head -3 f", "grep -r x .", "egrep x f", "rg x", "cut -d: -f1 f", "wc -l f", "tr a b", "sort f", "uniq f", "diff a b", "cmp a b",
+    "jq . f", "column -t f", "nl f", "basename a", "dirname a", "realpath a", "readlink a", "stat a", "file a", "du -sh .", "df -h", "date", "which git",
+    "type git", "command -v git", "whoami", "hostname", "sleep 1", "sed -n 1p f", "sed s/a/b/ f", "for f in a b; do echo $f; done", "if true; then true; fi",
+    "while false; do break; done", "case x in x) true;; esac", "exit 0", "mkdir -p d", "rmdir d", "git branch -D x", "git push origin x", "git fetch",
+    "git remote -v", "git rev-parse HEAD", "git rev-list HEAD", "git merge-base a b", "git show-ref", "git grep x", "git ls-files", "git worktree add ../w",
+    "git worktree remove ../w", "git worktree prune", "git worktree list", "git tag v1", "git describe", "git config --get user.name", "herdr pane list",
+  ])("safe: %s", (seg) => {
+    expect(classifyShellMutation(mixed(seg)).opaque).toBe(false);
+  });
+
+  test.each([
+    "cp a b", "rm a", "mv a b", "install a b", "python3 x.py", "node x.js", "bash x.sh", "sh x.sh", "uv run x", "pnpm publish", "npm run x", "npx x", "make all",
+    "awk '{print}' f", "perl x.pl", "frobnicate", "sed -n 'w out' f", "sed 's/a/b/w out' f", "git config user.name x",
+    "git worktree move a b", "git clean -fd", "echo x > $UNSET", "grep x f > $UNSET",
+  ])("kept opaque: %s", (seg) => {
+    expect(classifyShellMutation(mixed(seg)).opaque).toBe(true);
+  });
+});

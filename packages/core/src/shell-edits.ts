@@ -496,8 +496,29 @@ function collectAssignments(seg: string, vars: Map<string, string>): void {
   }
 }
 
-const SAFE_HEADS = new Set(["cd", "pushd", "popd", "echo", "printf", "ls", "cat", "true", "false", ":", "test", "[", "[[", "sleep", "export", "set", "unset", "pwd"]);
-const SAFE_GIT = new Set(["add", "commit", "status", "log", "diff", "show"]);
+const SAFE_HEADS = new Set(
+  (
+    "cd pushd popd echo printf ls cat true false : test [ [[ sleep export set unset pwd " +
+    // read-only text and system tools
+    "tail head grep egrep fgrep rg cut wc tr sort uniq diff cmp jq column nl basename dirname realpath readlink stat file du df date which type whoami hostname -v " +
+    // shell keywords and grouping
+    "for do done if then else elif fi while until case esac break continue exit return { } ( ) " +
+    // creates directories only; terminal control
+    "mkdir rmdir herdr"
+  ).split(" "),
+);
+const SAFE_GIT = new Set(["add", "commit", "status", "log", "diff", "show", "branch", "push", "fetch", "remote", "rev-parse", "rev-list", "merge-base", "show-ref", "grep", "ls-files", "tag", "describe"]);
+const SAFE_WORKTREE = new Set(["add", "remove", "prune", "list"]);
+
+/** `sed` that neither edits in place nor writes a file with a `w` command / flag. */
+function isReadOnlySed(words: Word[]): boolean {
+  for (const w of words.slice(1)) {
+    const t = w.text;
+    if (t === "--in-place" || t.startsWith("--in-place=") || /^-[A-Za-z]*i/.test(t)) return false;
+    if (/(?:^|[;{}\s])w\s*\S/.test(t) || /\/[A-Za-z0-9]*w\s*\S/.test(t)) return false;
+  }
+  return true;
+}
 
 /** Segments known not to write files (beyond what `segmentMutation` already reported). */
 function isKnownNonWriting(words: Word[], redirects: Redirect[]): boolean {
@@ -507,7 +528,13 @@ function isKnownNonWriting(words: Word[], redirects: Redirect[]): boolean {
   if (redirects.some((r) => (r.fd === "" || r.fd === "1") && (r.target === null || isUnknownTarget(r.target)))) return false;
   if (/^[A-Za-z_]\w*=/.test(head)) return true;
   const git = gitSub(words);
-  if (git !== null) return SAFE_GIT.has(git.sub) || (git.sub === "worktree" && git.args[0]?.text === "list");
+  if (git !== null) {
+    if (SAFE_GIT.has(git.sub)) return true;
+    if (git.sub === "worktree") return SAFE_WORKTREE.has(git.args[0]?.text ?? "");
+    if (git.sub === "config") return git.args.some((w) => w.text === "--get" || w.text === "--get-all" || w.text === "--list" || w.text === "-l");
+    return false;
+  }
+  if (head === "sed" || head === "gsed") return isReadOnlySed(words);
   return SAFE_HEADS.has(head);
 }
 
