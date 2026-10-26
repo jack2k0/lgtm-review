@@ -440,9 +440,12 @@ function orDot(roots: string[]): string[] {
 
 /** pnpm/bun filter: only path-style filters can be placed without the file system. */
 function pathFilter(raw: string): string | null {
-  if (/[*?[{]/.test(raw)) return null; // a glob or brace selects several projects
-  const f = raw.replace(/^(?:\.\.\.|\^)+/, "").replace(/(?:\.\.\.)+$/, "");
-  return f.startsWith("./") || f.startsWith("../") ? f : null;
+  // A glob or a comma list selects several projects; `{dir}` alone is pnpm's directory selector.
+  if (/[*?[]/.test(raw) || /\{[^}]*,/.test(raw)) return null;
+  const braced = /^(?:\.\.\.|\^)*\{[^{}]+\}(?:\.\.\.)?$/.test(raw);
+  if (!braced && /[{}]/.test(raw)) return null;
+  const f = raw.replace(/[{}]/g, "").replace(/^(?:\.\.\.|\^)+/, "").replace(/(?:\.\.\.)+$/, "");
+  return braced || f.startsWith("./") || f.startsWith("../") ? f : null;
 }
 
 const PM_SCOPE_VALUE_OPTS = new Set(["-C", "--dir", "--filter", "-F", "--prefix", "-w", "--workspace", "--cwd"]);
