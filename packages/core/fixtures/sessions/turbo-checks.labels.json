@@ -1,0 +1,45 @@
+{
+  "fixture": "turbo-checks",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "an edit followed by 'turbo run test' is checked"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [
+        "check-scope:packages/core/src/c.ts"
+      ],
+      "note": "a path-filtered turbo run is scoped to packages/web; the core edit is outside its scope"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "'nx run-many -t test' without a projects filter is a whole-repo check"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "unchecked-edit:packages/web/src/e.ts"
+      ],
+      "note": "'turbo run test --dry' only prints the task graph and is not a check"
+    },
+    {
+      "index": 4,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "'nx run web:test' names a project and cannot be placed, so it covers the whole project"
+    }
+  ]
+}

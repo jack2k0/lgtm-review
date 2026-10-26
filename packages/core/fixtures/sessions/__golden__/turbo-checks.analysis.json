@@ -1,0 +1,165 @@
+{
+  "sessionId": "turbo-checks",
+  "title": "Fix the core helper and run the suite.",
+  "branch": "main",
+  "startedAt": "2026-01-02T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000111",
+      "text": "Fix the core helper and run the suite.",
+      "status": "checked",
+      "reason": "turbo run test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/packages/core/src/a.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000116",
+      "text": "Fix the web view and core model, then test web only.",
+      "status": "checked",
+      "reason": "turbo run test --filter ./packages/web passed after last edit (scoped to packages/web)",
+      "files": [
+        {
+          "path": "/home/user/project/packages/core/src/c.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/packages/web/src/b.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [
+        {
+          "rule": "check-scope",
+          "severity": "warn",
+          "path": "/home/user/project/packages/core/src/c.ts",
+          "reason": "outside the scope of the passing check (packages/web)"
+        }
+      ],
+      "recommendation": "skim"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000123",
+      "text": "Run every task's tests.",
+      "status": "checked",
+      "reason": "nx run-many -t test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/packages/core/src/d.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000128",
+      "text": "Preview the test run.",
+      "status": "unchecked",
+      "reason": "no checks ran",
+      "files": [
+        {
+          "path": "/home/user/project/packages/web/src/e.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 2000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/packages/web/src/e.ts",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 4,
+      "uuid": "00000000-0000-4000-8000-000000000133",
+      "text": "Test the web project by name.",
+      "status": "checked",
+      "reason": "nx run web:test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/packages/web/src/f.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly writing (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    }
+  ],
+  "warnings": []
+}

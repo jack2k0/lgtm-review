@@ -1,0 +1,317 @@
+[
+  {
+    "index": 0,
+    "text": "Fix the core helper and run the suite.",
+    "status": "checked",
+    "reason": "turbo run test passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-02T00:00:01.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit packages/core/src/a.ts (+1 -1)",
+        "startedAt": "2026-01-02T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/packages/core/src/a.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "packages/core/src/a.ts",
+            "ok": true,
+            "ts": "2026-01-02T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/packages/core/src/a.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run turbo run test -> passed",
+        "startedAt": "2026-01-02T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running turbo run test."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "turbo run test",
+            "ok": true,
+            "ts": "2026-01-02T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "turbo run test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Fix the web view and core model, then test web only.",
+    "status": "checked",
+    "reason": "turbo run test --filter ./packages/web passed after last edit (scoped to packages/web)",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-02T00:00:06.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "check-scope",
+        "severity": "warn",
+        "path": "/home/user/project/packages/core/src/c.ts",
+        "reason": "outside the scope of the passing check (packages/web)"
+      }
+    ],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit packages/web/src/b.ts (+1 -1), edit packages/core/src/c.ts (+1 -1)",
+        "startedAt": "2026-01-02T00:00:07.000Z",
+        "durationMs": 4000,
+        "quotes": [
+          "Editing /home/user/project/packages/web/src/b.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "packages/web/src/b.ts",
+            "ok": true,
+            "ts": "2026-01-02T00:00:07.000Z"
+          },
+          {
+            "tool": "Edit",
+            "summary": "packages/core/src/c.ts",
+            "ok": true,
+            "ts": "2026-01-02T00:00:09.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/packages/web/src/b.ts",
+          "/home/user/project/packages/core/src/c.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run turbo run test --filter ./packages/web -> passed",
+        "startedAt": "2026-01-02T00:00:11.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running turbo run test --filter ./packages/web."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "turbo run test --filter ./packages/web",
+            "ok": true,
+            "ts": "2026-01-02T00:00:11.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "turbo run test --filter ./packages/web",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Run every task's tests.",
+    "status": "checked",
+    "reason": "nx run-many -t test passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-02T00:00:13.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit packages/core/src/d.ts (+1 -1)",
+        "startedAt": "2026-01-02T00:00:14.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/packages/core/src/d.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "packages/core/src/d.ts",
+            "ok": true,
+            "ts": "2026-01-02T00:00:14.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/packages/core/src/d.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run nx run-many -t test -> passed",
+        "startedAt": "2026-01-02T00:00:16.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running nx run-many -t test."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "nx run-many -t test",
+            "ok": true,
+            "ts": "2026-01-02T00:00:16.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "nx run-many -t test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Preview the test run.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (50%), 0 checks",
+    "startedAt": "2026-01-02T00:00:18.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/packages/web/src/e.ts",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit packages/web/src/e.ts (+1 -1)",
+        "startedAt": "2026-01-02T00:00:19.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/packages/web/src/e.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "packages/web/src/e.ts",
+            "ok": true,
+            "ts": "2026-01-02T00:00:19.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/packages/web/src/e.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "read",
+        "title": "Run 1 command",
+        "startedAt": "2026-01-02T00:00:21.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running turbo run test --dry."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "turbo run test --dry",
+            "ok": true,
+            "ts": "2026-01-02T00:00:21.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "text": "Test the web project by name.",
+    "status": "checked",
+    "reason": "nx run web:test passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-02T00:00:23.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit packages/web/src/f.ts (+1 -1)",
+        "startedAt": "2026-01-02T00:00:24.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Editing /home/user/project/packages/web/src/f.ts."
+        ],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "packages/web/src/f.ts",
+            "ok": true,
+            "ts": "2026-01-02T00:00:24.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/packages/web/src/f.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run nx run web:test -> passed",
+        "startedAt": "2026-01-02T00:00:26.000Z",
+        "durationMs": 2000,
+        "quotes": [
+          "Running nx run web:test."
+        ],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "nx run web:test",
+            "ok": true,
+            "ts": "2026-01-02T00:00:26.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "nx run web:test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  }
+]

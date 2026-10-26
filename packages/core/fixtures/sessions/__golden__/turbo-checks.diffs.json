@@ -1,0 +1,128 @@
+{
+  "0:/home/user/project/packages/core/src/a.ts": {
+    "path": "/home/user/project/packages/core/src/a.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "return a - b;"
+          },
+          {
+            "t": "+",
+            "s": "return a + b;"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/packages/core/src/c.ts": {
+    "path": "/home/user/project/packages/core/src/c.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "const c = 1;"
+          },
+          {
+            "t": "+",
+            "s": "const c = 2;"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/packages/web/src/b.ts": {
+    "path": "/home/user/project/packages/web/src/b.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "return b - a;"
+          },
+          {
+            "t": "+",
+            "s": "return b + a;"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/packages/core/src/d.ts": {
+    "path": "/home/user/project/packages/core/src/d.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "const d = 1;"
+          },
+          {
+            "t": "+",
+            "s": "const d = 2;"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/packages/web/src/e.ts": {
+    "path": "/home/user/project/packages/web/src/e.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "const e = 1;"
+          },
+          {
+            "t": "+",
+            "s": "const e = 2;"
+          }
+        ]
+      }
+    ]
+  },
+  "4:/home/user/project/packages/web/src/f.ts": {
+    "path": "/home/user/project/packages/web/src/f.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "const f = 1;"
+          },
+          {
+            "t": "+",
+            "s": "const f = 2;"
+          }
+        ]
+      }
+    ]
+  }
+}

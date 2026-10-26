@@ -217,6 +217,87 @@ function isCheckScriptName(name: string, repo: RepoScripts | undefined): boolean
   return CHECK_SCRIPT_NAMES.has(base);
 }
 
+/** Options of the task runners that take a value (needed to find tasks and their scopes). */
+const TURBO_VALUE_OPTS = new Set([
+  "--filter",
+  "-F",
+  "--concurrency",
+  "--cache-dir",
+  "--cache-workers",
+  "--log-order",
+  "--output-logs",
+  "--pkg-inference-root",
+  "--env-mode",
+  "--framework-inference",
+  "--global-deps",
+  "--remote-cache-timeout",
+  "--token",
+  "--team",
+  "--api",
+]);
+const NX_VALUE_OPTS = new Set([
+  "-t",
+  "--targets",
+  "-p",
+  "--projects",
+  "-c",
+  "--configuration",
+  "--parallel",
+  "--max-parallel",
+  "--output-style",
+  "--runner",
+  "--base",
+  "--head",
+  "--exclude",
+  "--files",
+  "--port",
+  "--host",
+  "--project",
+  "--target",
+]);
+
+/** Comma-separated task names from one or more option values, e.g. `-t lint,test`. */
+function taskNames(values: readonly string[]): string[] {
+  return values
+    .flatMap((v) => v.split(","))
+    .map((v) => v.trim())
+    .filter((v) => v !== "");
+}
+
+function matchTurbo(toks: string[], repo: RepoScripts | undefined): boolean {
+  // `--dry` and `--graph` only print the task graph; `--dry=json`/`--dry-run=json` do too.
+  if (toks.some((t) => t === "--dry" || t.startsWith("--dry=") || t === "--dry-run" || t.startsWith("--dry-run=") || t === "--graph" || t.startsWith("--graph="))) return false;
+  const opts = parseArgs(toks, 1, TURBO_VALUE_OPTS);
+  const tasks = opts.pos[0] === "run" ? opts.pos.slice(1) : opts.pos;
+  return tasks.some((t) => isCheckScriptName(t, repo));
+}
+
+function nxTarget(spec: string): string | null {
+  // `nx run <project>:<target>[:<configuration>]`.
+  const colon = spec.indexOf(":");
+  return colon < 0 ? null : spec.slice(colon + 1);
+}
+
+function matchNx(toks: string[], repo: RepoScripts | undefined): boolean {
+  // `nx --graph` writes the project graph instead of running tasks.
+  if (toks.some((t) => t === "--graph" || t.startsWith("--graph="))) return false;
+  const opts = parseArgs(toks, 1, NX_VALUE_OPTS);
+  const command = opts.pos[0];
+  if (command === "run-many" || command === "affected") {
+    return taskNames(valsOf(opts, "-t", "--targets")).some((t) => isCheckScriptName(t, repo));
+  }
+  if (command === "run") {
+    const target = opts.pos[1] === undefined ? null : nxTarget(opts.pos[1] as string);
+    return target !== null && isCheckScriptName(target, repo);
+  }
+  if (command === undefined) return false;
+  return isCheckScriptName(command, repo);
+}
+
+function matchTaskRunner(head: string, toks: string[], repo: RepoScripts | undefined): boolean {
+  return head === "turbo" ? matchTurbo(toks, repo) : matchNx(toks, repo);
+}
+
 function matchPackageManager(pm: string, toks: string[], repo: RepoScripts | undefined): boolean {
   const valueOpts = PM_VALUE_OPTS[pm] ?? new Set<string>();
   let i = 1;
@@ -229,6 +310,7 @@ function matchPackageManager(pm: string, toks: string[], repo: RepoScripts | und
   const word = toks[i];
   if (word === undefined) return false;
   if (word === "exec" || word === "dlx") return matchSegment(toks.slice(i + 1).join(" "), repo);
+  if (word === "turbo" || word === "nx") return matchTaskRunner(word, toks.slice(i), repo);
   if (word === "run" || word === "run-script") {
     i++;
     skipOptions();
@@ -299,6 +381,7 @@ export function matchSegment(raw: string, repo: RepoScripts | undefined): boolea
   if (head === "pnpm" || head === "npm" || head === "yarn" || head === "bun") {
     return matchPackageManager(head, toks, repo);
   }
+  if (head === "turbo" || head === "nx") return matchTaskRunner(head, toks, repo);
   if (head === "make") return matchMake(toks, repo);
   if (SIMPLE_RES.some((re) => re.test(s))) return true;
   return matchScriptFile(toks, repo);
@@ -475,6 +558,16 @@ function pmRoots(head: string, toks: string[]): string[] | null {
   return orDot(roots);
 }
 
+/** A task runner run directly through a package manager (`pnpm turbo …`, `yarn nx …`). */
+function pmTaskRunner(head: string, toks: string[]): { head: string; toks: string[]; idx: number } | null {
+  const valueOpts = new Set([...PM_SCOPE_VALUE_OPTS, ...(PM_VALUE_OPTS[head] ?? [])]);
+  let i = 1;
+  while (i < toks.length && (toks[i] as string).startsWith("-")) i += valueOpts.has(toks[i] as string) ? 2 : 1;
+  const word = toks[i];
+  if (word !== "turbo" && word !== "nx") return null;
+  return { head: word, toks: toks.slice(i), idx: i };
+}
+
 const VITEST_OPTS = new Set(
   "-c --config -r --root --dir --project -t --testNamePattern --reporter --environment --pool --shard --outputFile --mode --bail --maxWorkers --minWorkers --testTimeout --hookTimeout --teardownTimeout --retry --repeats --exclude --include --workspace --setupFiles --env --maxConcurrency".split(
     " ",
@@ -501,10 +594,43 @@ function goRoot(arg: string): string | null {
   return a === "" ? "." : a;
 }
 
+/** Roots of a turbo/nx invocation as written; `null` when they cannot be placed. */
+function taskRunnerRoots(head: string, toks: string[]): string[] | null {
+  if (head === "turbo") {
+    const o = parseArgs(toks, 1, TURBO_VALUE_OPTS);
+    // `--affected` selects projects from git, so the set is unknown without the file system.
+    if (o.flags.has("--affected") || o.vals.has("--affected")) return null;
+    const roots: string[] = [];
+    for (const f of valsOf(o, "--filter", "-F").map(unquote)) {
+      const p = pathFilter(f);
+      if (p === null) return null;
+      roots.push(p);
+    }
+    return orDot(roots);
+  }
+  const o = parseArgs(toks, 1, NX_VALUE_OPTS);
+  const command = o.pos[0];
+  // run-many/affected default to every project; named projects cannot be placed.
+  if (command !== "run-many" && command !== "affected") return null;
+  return valsOf(o, "-p", "--projects").length === 0 ? ["."] : null;
+}
+
 /** Roots of one (prefix-stripped) check segment as written; `null` when they cannot be placed. */
 function segmentRoots(toks: string[], s: string): string[] | null {
   const head = toks[0] as string;
-  if (head === "pnpm" || head === "npm" || head === "yarn" || head === "bun") return pmRoots(head, toks);
+  if (head === "pnpm" || head === "npm" || head === "yarn" || head === "bun") {
+    const pmTask = pmTaskRunner(head, toks);
+    if (pmTask !== null) {
+      const pmBase = pmRoots(head, toks.slice(0, pmTask.idx));
+      const task = taskRunnerRoots(pmTask.head, pmTask.toks);
+      if (pmBase === null || task === null) return null;
+      if (pmBase.length === 1 && pmBase[0] === ".") return task;
+      if (task.length === 1 && task[0] === ".") return pmBase;
+      return null; // `-C dir` plus a filter: the task runner's root is relative to the repo, not to `dir`
+    }
+    return pmRoots(head, toks);
+  }
+  if (head === "turbo" || head === "nx") return taskRunnerRoots(head, toks);
   if (head === "make") {
     const o = parseArgs(toks, 1, MAKE_OPTS);
     const roots = valsOf(o, "-C", "--directory");
