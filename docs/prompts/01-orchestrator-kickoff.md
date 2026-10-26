@@ -102,23 +102,26 @@ Skille z tego etapu zadają mi pytania, więc robisz je sam, w tej sesji.
 
 ## B4. Review, merge, archive
 
-1. `/10x-impl-review` w worktree.
-   - Kod pisał Grok, więc review robisz Ty (zgodność z planem, scope creep, niebezpieczne decyzje).
-   - Przy zmianach dotykających bezpieczeństwa lub redakcji sekretów weź drugi głos od agy (`gemini-3.8-flash-high`). „agy Pro” nie występuje w `agy models`.
+1. Przegląd przed merge według tieru z `REVIEW.md` (tier wypisuje bramka; tabela: `node scripts/gate.mjs --tiers`). Briefy są w `docs/prompts/03-review.md`.
+   - Low: bez recenzenta.
+   - Medium: 1 recenzent, inny model niż implementujący.
+   - High: 2 recenzentów równolegle, potem wzajemna weryfikacja uwag Important. Ścieżki reguły statusu wymagają też audytu PRE/POST na prawdziwych logach (tylko agregaty).
+   - Każda uwaga dostaje werdykt (fixed / rejected / deferred) w `context/changes/<id>/reviews/findings.md`. Najwyżej 2 rundy; potem zmiana podejścia, nie runda 3.
    - Nigdy Grok po Groku.
-2. Raport dla mnie:
+2. `node scripts/gate.mjs --base main --plan context/changes/<id>/plan.md --run-check --merge` kończy się kodem 0 albo 2 (każda pozycja wyjaśniona). Blok bramki idzie do opisu merge (szablon w `REVIEW.md`).
+3. Raport dla mnie:
    - co weszło,
-   - wynik testów (ostatnie linie dosłownie),
-   - uwagi z review,
+   - blok bramki,
+   - uwagi z review i werdykty,
    - Twoja rekomendacja merge.
 
    **BRAMKA:** merge do `main` tylko po moim „merge ok”.
-3. Po merge'u:
+4. Po merge'u:
    - `git worktree remove ../<repo>-<id>`,
    - testy na `main` zielone,
    - `/10x-archive`.
-4. Powtarzalny błąd workera zapisz przez `/10x-lesson`.
-5. Zaktualizuj plik stanu. Zapytaj, czy brać następny slice.
+5. Kategoria uwagi przyjęta drugi raz trafia do `REVIEW.md`, `AGENTS.md` albo `scripts/gate.mjs` („fix at the source”).
+6. Zaktualizuj plik stanu. Zapytaj, czy brać następny slice.
 
 # Równoległość
 

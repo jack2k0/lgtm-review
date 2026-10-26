@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Deterministic pre-merge gate: mechanical checks on a branch plus a risk tier, printed as a short evidence block.
 //
-//   node scripts/gate.mjs [--base main] [--head <ref>] [--plan <plan.md>] [--run-check]
+//   node scripts/gate.mjs [--base main] [--head <ref>] [--plan <plan.md>] [--run-check] [--merge [--findings <findings.md>]]
+//   node scripts/gate.mjs --tiers        (print the tier table; REVIEW.md points here)
 //
 // Run from a worktree. Without --head the working tree is compared (committed + uncommitted + untracked).
 // Exit 0 = pass, 1 = hard fail, 2 = pass but needs a human look. Git is only called read-only with fixed args (no shell).
@@ -12,8 +13,14 @@
 //   allow: ^packages/core/src/(check-patterns|scope)(\.test)?\.ts$
 //   goldens: scoped-checks\.
 //   ```
+//
+// --merge adds the pre-merge review check (REVIEW.md): Low needs no reviewer, Medium one, High two. The ledger is
+// --findings, default <plan dir>/reviews/findings.md, with a `reviewers: a, b` line and a Markdown table whose
+// Verdict column is fixed | rejected | deferred for every row. A missing ledger, too few reviewers or an
+// unanswered finding is a hard fail.
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -28,12 +35,16 @@ export const TIERS = {
     /^\.github\//,
     /(^|\/)package\.json$/,
     /^pnpm-lock\.yaml$/,
-    /^scripts\/smoke-pack\.mjs$/,
+    /^scripts\/(smoke-pack|build-demo|gate)\.mjs$/,
+    /^(REVIEW|AGENTS|CLAUDE)\.md$/,
   ],
   Low: [/\.md$/, /^context\//, /^docs\//, /\.test\.tsx?$/, /(^|\/)__golden__\//],
   Medium: [/^packages\/[^/]+\/src\//, /^scripts\//],
 };
 const RANK = { Low: 0, Medium: 1, High: 2 };
+/** Distinct pre-merge reviewers required per tier (REVIEW.md). */
+export const REVIEWERS = { Low: 0, Medium: 1, High: 2 };
+const VERDICTS = ["fixed", "rejected", "deferred"];
 const LIST_CAP = 15;
 const LABELS_RE = /^packages\/core\/fixtures\/sessions\/[^/]+\.labels\.json$/;
 const DEP_RE = /(^|\/)package\.json$|^pnpm-lock\.yaml$/;
@@ -59,6 +70,22 @@ export function parseGateBlock(text) {
     else if (k === "labels" || k === "deps" || k === "schema") g[k] = v;
   }
   return g;
+}
+
+/** Parse a findings ledger: reviewer names, and one { line, verdict } per table row below the header. */
+export function parseLedger(text) {
+  const rv = /^reviewers\s*:\s*(.*)$/im.exec(text);
+  const reviewers = [...new Set((rv?.[1] ?? "").split(",").map((r) => r.trim().toLowerCase()).filter((r) => r && r !== "none"))];
+  const rows = [];
+  let col = -1;
+  text.split(/\r?\n/).forEach((line, i) => {
+    if (!line.trim().startsWith("|")) return void (col = -1);
+    const cells = line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+    if (col < 0) return void (col = cells.findIndex((c) => /^verdict/i.test(c)));
+    if (cells.every((c) => /^:?-+:?$/.test(c))) return;
+    rows.push({ line: i + 1, verdict: (cells[col] ?? "").toLowerCase().split(/[^a-z]/)[0] });
+  });
+  return { reviewers, rows };
 }
 
 const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
@@ -92,7 +119,13 @@ function short(sha) {
 }
 
 export function run(argv, env = process.env, out = (s) => process.stdout.write(s)) {
-  const { values } = parseArgs({ args: argv, options: { base: { type: "string", default: "main" }, head: { type: "string" }, plan: { type: "string" }, "run-check": { type: "boolean", default: false } } });
+  const { values } = parseArgs({ args: argv, options: { base: { type: "string", default: "main" }, head: { type: "string" }, plan: { type: "string" }, "run-check": { type: "boolean", default: false }, merge: { type: "boolean", default: false }, findings: { type: "string" }, tiers: { type: "boolean", default: false } } });
+  if (values.tiers) {
+    const lines = ["tier   reviewers  paths (first match wins: High, Low, Medium; no match = Medium)"];
+    for (const t of ["High", "Low", "Medium"]) for (const re of TIERS[t]) lines.push(`${t.padEnd(7)}${String(REVIEWERS[t]).padEnd(11)}${re.source}`);
+    out(`${lines.join("\n")}\n`);
+    return 0;
+  }
   const head = values.head ?? "HEAD";
   const baseSha = git(["rev-parse", "--verify", `${values.base}^{commit}`]).trim();
   const headSha = git(["rev-parse", "--verify", `${head}^{commit}`]).trim();
@@ -175,6 +208,20 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
   for (const p of paths) if (RANK[tierOf(p)] > RANK[tier]) tier = tierOf(p);
   if (forceHigh) tier = "High";
 
+  // 10. Pre-merge review (only with --merge; workers run the gate before review exists)
+  const need = REVIEWERS[tier];
+  const ledgerPath = values.findings ?? (values.plan ? join(dirname(values.plan), "reviews", "findings.md") : null);
+  if (!values.merge) add("review", "SKIP", "not checked (no --merge)");
+  else if (need === 0) add("review", "PASS", "tier Low: no reviewer required");
+  else if (!ledgerPath || !existsSync(ledgerPath)) add("review", "FAIL", `tier ${tier} needs ${need} reviewer(s); no findings ledger${ledgerPath ? ` at ${ledgerPath}` : " (--findings or --plan)"}`);
+  else {
+    const { reviewers, rows } = parseLedger(readFileSync(ledgerPath, "utf8"));
+    const open = rows.filter((r) => !VERDICTS.includes(r.verdict)).map((r) => `${ledgerPath}:${r.line}: verdict "${r.verdict}"`);
+    const tally = VERDICTS.map((v) => `${rows.filter((r) => r.verdict === v).length} ${v}`).join(", ");
+    if (reviewers.length < need) add("review", "FAIL", `tier ${tier} needs ${need} reviewer(s), ledger names ${reviewers.length}`);
+    else if (!bad("review", open, "unanswered finding(s) (verdict must be fixed | rejected | deferred)")) add("review", "PASS", `${reviewers.join(" + ")}; ${rows.length} finding(s): ${tally}`);
+  }
+
   const lines = ["## Merge gate", `base ${values.base} ${short(baseSha)} / head ${values.head ?? "worktree"} ${short(headSha)}`, `changed files: ${paths.length}`, `tier: ${tier}`];
   for (const r of results) {
     lines.push(`- ${r.verdict} ${r.name}: ${r.reason}`);
@@ -183,6 +230,7 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
   }
   if (tail) lines.push("check output (last 5 lines):", "```", ...tail, "```");
   const code = results.some((r) => r.verdict === "FAIL") ? 1 : results.some((r) => r.verdict === "EYES") ? 2 : 0;
+  if (values.merge && tier === "High") lines.push("owner: read this block before push (tier High)");
   lines.push(`result: ${["PASS", "FAIL", "NEEDS-EYES"][code]} (exit ${code})`);
   out(`${lines.join("\n")}\n`);
   return code;

@@ -183,6 +183,8 @@ describe("scripts/gate.mjs", () => {
     expect(tier({ "docs/a.md": "y\n", "packages/cli/src/server.ts": "1\n" })).toBe("High");
     expect(tier({ ".github/workflows/ci.yml": "1\n" })).toBe("High");
     expect(tier({ "scripts/smoke-pack.mjs": "1\n" })).toBe("High");
+    expect(tier({ "REVIEW.md": "1\n" })).toBe("High");
+    expect(tier({ "docs/REVIEW.md": "1\n" })).toBe("Low");
   });
 
   test("--run-check runs GATE_CHECK_CMD, prints the last 5 lines, and a non-zero exit is a hard fail", () => {
@@ -196,6 +198,56 @@ describe("scripts/gate.mjs", () => {
     expect(fail.code).toBe(1);
     expect(fail.out).toMatch(/FAIL check: check exited 3/);
     expect(fail.out).toContain("boom");
+  });
+
+  test("without --merge the review check is skipped; Low needs no ledger", () => {
+    const d = repo({}, { "docs/a.md": "hi\n" });
+    expect(gate(d).out).toMatch(/SKIP review: not checked/);
+    const r = gate(d, ["--merge"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/PASS review: tier Low/);
+  });
+
+  test("--merge: Medium/High without a ledger, or with too few reviewers, is a hard fail", () => {
+    const d = repo({}, { "scripts/x.mjs": "1\n" });
+    const none = gate(d, ["--merge"]);
+    expect(none.code).toBe(1);
+    expect(none.out).toMatch(/FAIL review: tier Medium needs 1 reviewer\(s\); no findings ledger \(--findings or --plan\)/);
+    const p = plan(d, "allow: .*");
+    expect(gate(d, ["--merge", "--plan", p]).out).toMatch(/no findings ledger at .*reviews\/findings\.md/);
+    const hi = repo({}, { "packages/cli/src/server.ts": "1\n" });
+    const f = join(tmp, `f${n++}.md`);
+    writeFileSync(f, "reviewers: agy\n");
+    const r = gate(hi, ["--merge", "--findings", f]);
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/FAIL review: tier High needs 2 reviewer\(s\), ledger names 1/);
+    expect(r.out).toMatch(/^owner: read this block before push/m);
+  });
+
+  test("--merge: every finding needs a verdict; the ledger next to the plan is found by default", () => {
+    const d = repo({}, { "packages/cli/src/server.ts": "1\n" });
+    const p = plan(d, "allow: .*");
+    const dir = join(dirname(p), "reviews");
+    mkdirSync(dir, { recursive: true });
+    const ledger = (rows: string) =>
+      writeFileSync(join(dir, "findings.md"), `# Findings\n\nreviewers: Agy, OpenCode, agy\n\n| # | Tag | file:line | Verdict | Evidence |\n|---|---|---|:---:|---|\n${rows}`);
+    ledger("| 1 | Important | a.ts:1 | fixed (abc123) | test |\n| 2 | Nit | b.ts:2 | | |\n| 3 | Nit | c.ts:3 | todo | |\n");
+    const r = gate(d, ["--merge", "--plan", p]);
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/FAIL review: 2 unanswered finding/);
+    expect(r.out).toMatch(/findings\.md:8: verdict ""/);
+    expect(r.out).toMatch(/findings\.md:9: verdict "todo"/);
+    ledger("| 1 | Important | a.ts:1 | fixed (abc123) | test |\n| 2 | Nit | b.ts:2 | Rejected | wrong |\n| 3 | Nit | c.ts:3 | deferred | later |\n");
+    const ok = gate(d, ["--merge", "--plan", p]);
+    expect(ok.code).toBe(0);
+    expect(ok.out).toMatch(/PASS review: agy \+ opencode; 3 finding\(s\): 1 fixed, 1 rejected, 1 deferred/);
+  });
+
+  test("--tiers prints the table with reviewer counts", () => {
+    const r = gate(repo({}, {}), ["--tiers"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/^High   2 +\^\\\.github/m);
+    expect(r.out).toMatch(/^Medium 1 +\^scripts/m);
   });
 
   test("an unknown base is a hard fail with a message on stderr", () => {

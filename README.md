@@ -33,10 +33,11 @@ node packages/cli/dist/cli.js
 Merge gate (run from a worktree; exit 0 pass, 1 hard fail, 2 needs a look):
 
 ```
-node scripts/gate.mjs --base main [--plan <plan.md>] [--run-check]
+node scripts/gate.mjs --base main [--plan <plan.md>] [--run-check] [--merge]
+node scripts/gate.mjs --tiers   # risk tier table
 ```
 
-It checks freshness, scope (a fenced `gate` block in the plan: `allow`, `goldens`, `labels`, `deps`, `schema`), labels, goldens, removed test expectations, dependencies and the schema, and prints a risk tier. The tier table is the `TIERS` constant in the script.
+It checks freshness, scope (a fenced `gate` block in the plan: `allow`, `goldens`, `labels`, `deps`, `schema`), labels, goldens, removed test expectations, dependencies and the schema, and prints a risk tier. With `--merge` it also checks the pre-merge review ledger for that tier. Contributor rules are in [AGENTS.md](AGENTS.md), review rules in [REVIEW.md](REVIEW.md).
 
 The server listens on 127.0.0.1 only, is read-only and requires the per-run token in the printed URL. See packages/cli/README.md for options, the Steps/Diff views and their limits.
 
