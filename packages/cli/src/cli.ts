@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { SessionFile, SessionRoot } from "@lgtm/core/node";
@@ -23,6 +23,37 @@ import { createLauncher, openBrowser, type Launcher } from "./open.js";
 import { startServer } from "./server.js";
 
 const VERSION = "0.0.0";
+
+/** Real path of `p`; when it does not exist yet, the real path of its nearest existing parent plus the rest. */
+function realResolve(p: string): string {
+  let cur = resolve(p);
+  const rest: string[] = [];
+  for (;;) {
+    try {
+      return join(realpathSync(cur), ...rest.reverse());
+    } catch {
+      const parent = dirname(cur);
+      if (parent === cur) return resolve(p);
+      rest.push(basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+function isInside(child: string, parent: string): boolean {
+  const rel = relative(parent, child);
+  return rel === "" || (!rel.startsWith("..") && !rel.startsWith("/") && !/^[A-Za-z]:/.test(rel));
+}
+
+/** Error text when the archive dir would overlap a repository checkout or the Claude Code projects dir; else null. */
+function unsafeArchiveDir(archiveDir: string, projectsDir: string, repoDirs: readonly string[]): string | null {
+  const arch = realResolve(archiveDir);
+  if (isInside(arch, realResolve(projectsDir))) return `archive dir ${archiveDir} is inside the Claude Code projects dir ${projectsDir}`;
+  for (const d of repoDirs) {
+    if (isInside(arch, realResolve(d))) return `archive dir ${archiveDir} is inside the repository ${d}`;
+  }
+  return null;
+}
 
 const HELP = `lgtm-review ${VERSION}
 
@@ -248,6 +279,13 @@ async function main(): Promise<number> {
   const archiveDir = roots[0]!.archiveDir!;
 
   if (archiving) {
+    for (const root of roots) {
+      const bad = unsafeArchiveDir(root.archiveDir!, projectsDir, roots.map((r) => r.dir));
+      if (bad !== null) {
+        console.error(`lgtm-review: ${bad}; choose another --archive-dir`);
+        return 1;
+      }
+    }
     const lines: { text: string; label: string }[] = [];
     for (const [i, root] of roots.entries()) {
       if (i > 0 && !existsSync(root.projectDir)) continue;
