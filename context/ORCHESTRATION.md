@@ -5,7 +5,7 @@ Każda pozycja: akcja → dowód → ile minut.
 - Push lokalnych commitów → bloki bramki w opisach merge od ostatniego pushu (`git log origin/main..main --merges`), High czytać przed pushem → ~5 min na merge High.
 - S-08 LLM: decyzje O-1..O-3 → `context/foundation/prd.md` → ~15 min.
 - Przegląd UI (S-17/S-19/S-21): wstępny przegląd headless zrobiony przez Opusa (`context/archive/prompt-triage/reviews/browser-check-2026-10-26.md`, bez błędów; 4 obserwacje do decyzji: wąskie ekrany, Esc w Steps/Map/Git, szum Git cross-check przy wielu agentach, etykieta worktree niewidoczna bez danych) → zostaje smak/odczucie → ~10 min.
-- Audyt celu ≥97% na prawdziwych logach → skrypty audytu (scratchpad, agregaty) → ~30 min.
+- Audyt ≥97%: ZMIERZONY 2026-10-26 (`scripts/audit/`, raport `context/archive/status-accuracy-2/reviews/audit-2026-10-26.md`): 74,0% bez subagentów, 68,9% ogółem — cel niespełniony; ręczne rozstrzygnięcie: narzędzie myli się w ~45/52. Poprawki w toku (status-accuracy-3). Pytania do właściciela (PRD niejasne, ~5 min): (1) prompt, który tylko merguje/rebase'uje kod, ma być `no-changes` (S-16 mówi tak)? (2) późne/równoległe checki subagentów: kolejność wg czasu, a czy padający check subagenta po zielonym checku wątku głównego daje `failing`? (3) zapis powłoki do nieustalonej ścieżki: liczyć jako kod (dziś) czy pomijać?
 - Nazwa/znak towarowy, publikacja npm → ~?
 
 ## Proces przeglądu (od 2026-10-26, na wzór Anthropic; „chcę mieć system pod review Anthropica”)
@@ -56,6 +56,8 @@ brak
 - 2026-10-26 (cd. 4): testy czasowe (20 MB core, 20 MB e2e HTTP, długie komendy shell) przeniesione bez zmian progów do *.perf.test.ts (sekwencyjnie) — koniec flaky pod obciążeniem; eksport: nagłówek diffu ma liczniki pliku + '(diff truncated)' (S-03 3.2/3.3). Pierwszy merge przez bramkę: NEEDS-EYES, pozycje uzasadnione. Kickoff prompt: bramka w B3 i w briefie workera.
 
 - 2026-10-26 (cd. 5): wdrożony proces przeglądu na wzór Anthropic (AGENTS.md, CLAUDE.md, REVIEW.md, docs/prompts/03-review.md, `gate.mjs --merge`/`--tiers`). Pierwsza zmiana przez pełny proces High: recenzenci Sonnet + Agy, wzajemna weryfikacja, 11 uwag (10 fixed, 1 rejected), 1 runda, rejestr `context/archive/review-process/reviews/findings.md`, merge 25d599e. Nie wypchnięte.
+
+- 2026-10-26 (cd. 6): przegląd UI headless (Chromium/Playwright w scratchpadzie): bez błędów, 4 obserwacje do decyzji. Niezależny audyt statusów odtworzony jako `scripts/audit/` (Sonnet; przegląd Haiku: 1 Important + 2 Nit naprawione; merge 5ebfa85): A 74,0%, B 68,9%; ręczne rozstrzygnięcie (osobny Sonnet): narzędzie źle w ~45/52, trzy luki reguł (mieszane komendy git+doc, checki owinięte `flock`, nieustalone cele zapisów heredoc). Plan status-accuracy-3 (Opus), plan-review Agy (8 uwag, 7 przyjętych), implementacja Sonnet w toku. Nie wypchnięte.
 
 ## Bramki
 - Npm publish: czeka na decyzję właściciela.
