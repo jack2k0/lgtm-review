@@ -200,15 +200,19 @@ export function isConfigPath(rel: string): boolean {
 }
 
 /** File names (lower-cased, optionally with `.txt`) that are documentation wherever they are. */
-const DOC_NAME_RE = /^(?:readme|licen[cs]e|copying|notice|authors|contributors|changelog|changes|history)(?:\.txt)?$/;
+const DOC_NAME_RE =
+  /^(?:readme|licen[cs]e|copying|notice|authors|contributors|changelog|changes|history|contributing|security|code_of_conduct|install|governance|support|maintainers)(?:\.txt)?$/;
 /** Documentation extensions. `.mdx` (compiled by site generators) and other `.txt` files are code on purpose. */
 const DOC_EXT_RE = /\.(?:md|markdown|mdown|mkdn?|rst|adoc|asciidoc)$/;
 
 /** Documentation file (FR-015): edits to it need no check. Decided by the file name only. */
 export function isDocPath(path: string): boolean {
-  const name = (path.replace(/\\/g, "/").split("/").pop() ?? "").toLowerCase();
-  if (name === "") return false;
-  return DOC_EXT_RE.test(name) || DOC_NAME_RE.test(name);
+  const rawName = path.replace(/\\/g, "/").split("/").pop() ?? "";
+  if (rawName === "") return false;
+  const name = rawName.toLowerCase();
+  if (DOC_EXT_RE.test(name)) return true;
+  if (!DOC_NAME_RE.test(name)) return false;
+  return name.endsWith(".txt") || rawName === rawName.toUpperCase();
 }
 
 /** Temporary directories whose files are scratch when they lie outside the session (S-20). */
