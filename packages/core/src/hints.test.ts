@@ -192,6 +192,13 @@ describe("isDocPath", () => {
     ["CHANGES", true],
     ["HISTORY", true],
     ["README", true],
+    ["CONTRIBUTING", true],
+    ["SECURITY", true],
+    ["CODE_OF_CONDUCT.txt", true],
+    ["INSTALL", true],
+    ["scripts/changelog", false],
+    ["bin/authors", false],
+    ["tools/history", false],
     ["readme.txt", true],
     ["LICENSE.txt", true],
     ["C:\\repo\\README.md", true],
@@ -340,6 +347,7 @@ describe("computeHints rules", () => {
     ["large change adds up over edits", [ev("/p/src/a.ts", { changed: 200 }), ev("/p/src/a.ts", { changed: 150 })], ["large-change:/p/src/a.ts"]],
     ["one hint per (rule, path) over several edits", [ev("/p/tests/a.test.ts", { inFix: true }), ev("/p/tests/a.test.ts", { inFix: true })], ["test-modified-during-fix:/p/tests/a.test.ts"]],
     ["doc: sensitive name ignored", [ev("/p/SECURITY.md")], []],
+    ["doc: extensionless SECURITY ignored", [ev("/p/SECURITY")], []],
     ["doc: sensitive directory ignored", [ev("/p/docs/auth/login.md")], []],
     ["doc: unchecked edit ignored", [ev("/p/README.md", { seq: 101 })], []],
     ["doc: README in a test directory gets no test rules", [ev("/p/tests/README.md", { inFix: true, stats: { assertRemoved: 2 } })], []],
@@ -349,6 +357,11 @@ describe("computeHints rules", () => {
     ["code file next to a doc file keeps its hints", [ev("/p/README.md", { seq: 101 }), ev("/p/src/a.ts", { seq: 101 })], ["unchecked-edit:/p/src/a.ts"]],
   ])("%s", (_name, edits, expected) => {
     expect(rules(computeHints({ ...base, edits }))).toEqual(expected);
+  });
+
+  test("a SECURITY-only edit gets no sensitive-path hint", () => {
+    const h = computeHints({ ...base, edits: [ev("/p/SECURITY")] });
+    expect(h).toEqual([]);
   });
 
   test("no completed check: every edited file is unchecked", () => {
