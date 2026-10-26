@@ -395,3 +395,93 @@ describe("misc", () => {
     expect(p.files).toHaveLength(1);
   });
 });
+
+describe("continued agents (SendMessage)", () => {
+  const dir = "/home/user/project/src/";
+  const send = (id: string, to: string, ts: string, extra: Record<string, unknown> = {}): string => toolUse(id, "SendMessage", { to, message: "go on", summary: "s", ...extra }, ts);
+  const sent = (id: string, ts: string, tur: Record<string, unknown> | undefined): string => toolResult(id, "Message sent.", { ts, ...(tur !== undefined ? { toolUseResult: tur } : {}) });
+  const resumed = (id = "A") => ({ success: true, message: "resumed", pin: false, resumedAgentId: id });
+  /** Run 0 edits a.js and passes the check; the continuation message starts the later run. */
+  const run0 = (a: ReturnType<typeof agentLines>): string[] => [a.task(at(1)), ...a.edit("a1", 2, 3, `${dir}a.js`), ...a.check("c0", 4, 5)];
+  const cont = (a: ReturnType<typeof agentLines>, t: number): string => a.task(at(t));
+  const head = (): string[] => [prompt("one", { timestamp: at(0) }), agentCall("ag", at(1)), prompt("two", { timestamp: at(100) })];
+  const analyse = (lines: string[], agent: string[]) => analyzeSession(lines, { subagents: new Map([["ag", tr("A", agent, "Worker")]]) }).prompts;
+
+  test("(a) a continued run without a check belongs to the prompt that continued it", () => {
+    const a = agentLines("A");
+    const lines = [...head(), send("s1", "A", at(101)), sent("s1", at(102), resumed())];
+    const ps = analyse(lines, [...run0(a), cont(a, 101.5), ...a.edit("b1", 103, 104, `${dir}b.js`)]);
+    expect(ps[0]).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit (by subagent Worker)" });
+    expect(ps[0]!.files.map((f) => f.path)).toEqual([`${dir}a.js`]);
+    expect(ps[1]!.status).toBe("unchecked");
+    expect(ps[1]!.files.map((f) => f.path)).toEqual([`${dir}b.js`]);
+    expect(ps.map((p) => p.partial)).toEqual([false, false]);
+  });
+
+  test("(b) a continued run that edits and checks makes the continuing prompt checked", () => {
+    const a = agentLines("A");
+    const lines = [...head(), send("s1", "A", at(101)), sent("s1", at(102), resumed())];
+    const ps = analyse(lines, [...run0(a), cont(a, 101.5), ...a.edit("b1", 103, 104, `${dir}b.js`), ...a.check("c1", 105, 106)]);
+    expect(ps[0]!.status).toBe("checked");
+    expect(ps[1]).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit (by subagent Worker)" });
+    expect(ps[1]!.files.map((f) => f.path)).toEqual([`${dir}b.js`]);
+  });
+
+  test("(c) two sends in prompts 2 and 3 split the transcript into three runs", () => {
+    const a = agentLines("A");
+    const lines = [...head(), send("s1", "A", at(101)), sent("s1", at(102), resumed()), prompt("three", { timestamp: at(200) }), send("s2", "A", at(201)), sent("s2", at(202), resumed())];
+    const agent = [...run0(a), cont(a, 101.5), ...a.edit("b1", 103, 104, `${dir}b.js`), ...a.check("c1", 105, 106), cont(a, 201.5), ...a.edit("c2", 203, 204, `${dir}c.js`)];
+    const ps = analyse(lines, agent);
+    expect(ps.map((p) => p.status)).toEqual(["checked", "checked", "unchecked"]);
+    expect(ps.map((p) => p.files.map((f) => f.path))).toEqual([[`${dir}a.js`], [`${dir}b.js`], [`${dir}c.js`]]);
+  });
+
+  test("(d) a send to a team member or an unknown id changes nothing", () => {
+    const a = agentLines("A");
+    const base = [...head()];
+    const agent = run0(a);
+    const plain = analyse(base, agent);
+    const lines = [...base, send("s1", "team-lead", at(101)), sent("s1", at(102), { success: true, message: "queued", pin: false }), send("s2", "zzz", at(103)), sent("s2", at(104), undefined)];
+    const ps = analyse(lines, agent);
+    expect(JSON.stringify(ps.map((p) => [p.status, p.files, p.partial]))).toBe(JSON.stringify(plain.map((p) => [p.status, p.files, p.partial])));
+    expect(ps.map((p) => p.partial)).toEqual([false, false]);
+  });
+
+  test("(e) without resumedAgentId the input target decides; revivedAgentId counts too", () => {
+    const a = agentLines("A");
+    const agent = [...run0(a), cont(a, 101.5), ...a.edit("b1", 103, 104, `${dir}b.js`)];
+    for (const tur of [{ success: true, message: "m", pin: false }, undefined, { success: true, message: "m", pin: false, revivedAgentId: "A" }]) {
+      const ps = analyse([...head(), send("s1", "A", at(101)), sent("s1", at(102), tur)], agent);
+      expect(ps.map((p) => p.status)).toEqual(["checked", "unchecked"]);
+      expect(ps[1]!.files.map((f) => f.path)).toEqual([`${dir}b.js`]);
+    }
+    // the result's id wins over the input target
+    const ps = analyse([...head(), send("s1", "someone", at(101)), sent("s1", at(102), resumed("A"))], agent);
+    expect(ps[1]!.files).toHaveLength(1);
+  });
+
+  test("a send to an agent whose transcript is missing is partial only when the result says it was continued", () => {
+    const withIds = analyzeSession([...head(), send("s1", "Q", at(101)), sent("s1", at(102), resumed("Q"))]).prompts;
+    expect(withIds.map((p) => p.partial)).toEqual([true, true]); // prompt 1 has the missing Agent call as well
+    const only = (tur: Record<string, unknown> | undefined) =>
+      analyzeSession(
+        [prompt("one", { timestamp: at(0) }), prompt("two", { timestamp: at(100) }), send("s1", "Q", at(101)), sent("s1", at(102), tur)],
+        { subagents: new Map<string, SubagentTranscript>([["x", tr("Z", [])]]) },
+      ).prompts[1]!;
+    expect(only(resumed("Q")).partial).toBe(true);
+    expect(only({ success: true, message: "m", pin: false }).partial).toBe(false);
+  });
+
+  test("the continued run's own sidechain message record is not a prompt", () => {
+    const a = agentLines("A");
+    const ps = analyse([...head(), send("s1", "A", at(101)), sent("s1", at(102), resumed())], [...run0(a), cont(a, 101.5), ...a.edit("b1", 103, 104, `${dir}b.js`)]);
+    expect(ps).toHaveLength(2);
+  });
+
+  test("a send positioned before the Agent call that started the agent is ignored", () => {
+    const a = agentLines("A");
+    const lines = [prompt("one", { timestamp: at(0) }), send("s0", "A", at(0.5)), agentCall("ag", at(1))];
+    const ps = analyse(lines, run0(a));
+    expect(ps[0]).toMatchObject({ status: "checked" });
+  });
+});

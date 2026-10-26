@@ -6,7 +6,7 @@ import { createParser, type Event, type TaskNotificationEvent, type ToolInput, t
 import { agentWorktreeRoot, resolveScope, resolveWorktreeScope, scopeCovers, scopeGaps, type ResolvedScope } from "./scope.js";
 import { ACTIONS_MAX, buildSteps, failureExcerpt, kindOf, oneLine, QUOTES_PER_STEP, type ActionRec } from "./steps.js";
 import { actionPhase, createTimingTracker, parseTs, type TimingTracker } from "./timing.js";
-import { createSubagentCollector, emptyFlags, mergeSubagents, textWeight, type MergeContext, type MergeFlags, type SubagentTranscript } from "./subagents.js";
+import { createSubagentCollector, emptyFlags, mergeSubagents, planContinuations, textWeight, type MergeContext, type MergeFlags, type SubagentTranscript } from "./subagents.js";
 import type { FileChange, FileDiff, PromptAnalysis, PromptDetail, SessionAnalysis, Status, Warning } from "./schema.js";
 
 export interface AnalyzeOptions {
@@ -676,6 +676,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
   function processBuffered(events: readonly Event[]): void {
     let start = 0;
     const ctx: MergeContext = { subagents, used, descriptions: agentDescriptions };
+    planContinuations(events, ctx);
     for (let i = 0; i <= events.length; i++) {
       if (i < events.length && (events[i]!.type !== "prompt" || i === start)) continue;
       const segment = events.slice(start, i);

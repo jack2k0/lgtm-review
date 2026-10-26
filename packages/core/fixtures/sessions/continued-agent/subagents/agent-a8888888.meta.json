@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Fix add",
+  "toolUseId": "p_ag1",
+  "spawnDepth": 1,
+  "model": "synthetic"
+}

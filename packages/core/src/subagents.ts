@@ -12,6 +12,8 @@ import { parseTs } from "./timing.js";
  *   host attach at the start (right after the prompt event), later than the end at the end;
  * - guest timestamps are made monotone within their transcript and floored at the host call's time;
  * - guests of one slot are ordered by (timestamp, host call order, position);
+ * - a `SendMessage` to a finished subagent continues it: the transcript is split into runs (see `planContinuations`),
+ *   run 0 belongs to the `Agent` call, each later run to the `SendMessage` that started it (merged like an `Agent` call);
  * - nested agents (an `Agent` call inside a transcript) are merged recursively up to depth 3;
  * - at most 20,000 non-text guest events per prompt are merged (applied while merging).
  */
@@ -134,6 +136,12 @@ export interface MergeContext {
   used: Set<string>;
   /** agentId -> description of every merged transcript. */
   descriptions: Map<string, string>;
+  /** `SendMessage` tool-use id -> the run of its target subagent that it started (see `planContinuations`). */
+  continuations?: Map<string, SubagentTranscript>;
+  /** `Agent` tool-use id -> run 0 of its transcript, for agents that were continued. */
+  firstRun?: Map<string, SubagentTranscript>;
+  /** `SendMessage` tool-use ids whose result says a subagent was continued but whose transcript is not loaded. */
+  unresolved?: Set<string>;
 }
 
 export function emptyFlags(): MergeFlags {
@@ -176,6 +184,75 @@ function tagged(ev: Event, agentId: string): Event {
   return ev;
 }
 
+/**
+ * Splits the transcripts of continued agents into runs. `events` is the parent's event sequence (all prompts that
+ * can hold a `SendMessage`). A `SendMessage` whose target (`resumedAgentId`, else `input.to`) is a loaded agent
+ * after its `Agent` call starts a run at the first transcript event with a timestamp strictly after the send's;
+ * the run ends where the next send's run starts. Events without a timestamp stay in the current run. Sends are
+ * taken in parent order; sends to anything else (team members, unknown ids) change nothing.
+ */
+export function planContinuations(events: readonly Event[], ctx: MergeContext): void {
+  const continuations = new Map<string, SubagentTranscript>();
+  const firstRun = new Map<string, SubagentTranscript>();
+  const unresolved = new Set<string>();
+  ctx.continuations = continuations;
+  ctx.firstRun = firstRun;
+  ctx.unresolved = unresolved;
+
+  const resumed = new Map<string, string>();
+  const callPos = new Map<string, number>();
+  const sends: { id: string; idx: number; target: string | null }[] = [];
+  events.forEach((ev, idx) => {
+    if (ev.type === "tool_result" && ev.resumedAgentId !== undefined) resumed.set(ev.toolUseId, ev.resumedAgentId);
+    else if (ev.type === "tool_use" && ev.name === "Agent") callPos.set(ev.id, idx);
+    else if (ev.type === "tool_use" && ev.name === "SendMessage") sends.push({ id: ev.id, idx, target: ev.input.to ?? null });
+  });
+  if (sends.length === 0) return;
+
+  const byAgent = new Map<string, { callId: string; tr: SubagentTranscript }>();
+  for (const [callId, tr] of ctx.subagents) {
+    const known = byAgent.get(tr.agentId);
+    if (known === undefined || callId < known.callId) byAgent.set(tr.agentId, { callId, tr });
+  }
+  const hostTs = inheritedTimes(events, -Infinity);
+  const perAgent = new Map<string, { id: string; ts: number }[]>();
+  for (const s of sends) {
+    const r = resumed.get(s.id);
+    const target = r ?? s.target;
+    if (target === null) continue;
+    const agent = byAgent.get(target);
+    if (agent === undefined) {
+      if (r !== undefined) unresolved.add(s.id);
+      continue;
+    }
+    const at = callPos.get(agent.callId);
+    if (at !== undefined && at > s.idx) continue; // a send before the call that started the agent
+    if (hostTs[s.idx]! === -Infinity) continue;
+    const list = perAgent.get(target) ?? [];
+    list.push({ id: s.id, ts: hostTs[s.idx]! });
+    perAgent.set(target, list);
+  }
+
+  for (const [target, list] of perAgent) {
+    const { callId, tr } = byAgent.get(target)!;
+    const evs = tr.events;
+    const bounds: number[] = [];
+    let from = 0;
+    for (const s of list) {
+      let k = from;
+      while (k < evs.length) {
+        const t = parseTs(eventTs(evs[k]!));
+        if (t !== null && t > s.ts) break;
+        k++;
+      }
+      bounds.push(k);
+      from = k;
+    }
+    firstRun.set(callId, { ...tr, events: evs.slice(0, bounds[0]) });
+    list.forEach((s, j) => continuations.set(s.id, { ...tr, events: evs.slice(bounds[j], bounds[j + 1] ?? evs.length) }));
+  }
+}
+
 interface Guest {
   ev: Event;
   slot: number;
@@ -190,9 +267,11 @@ interface Guest {
  * no `Agent` call.
  */
 function mergeLevel(host: readonly Event[], depth: number, minSlot: number, ctx: MergeContext, budget: { left: number }, flags: MergeFlags): Event[] {
+  const isHostCall = (ev: Event): ev is Extract<Event, { type: "tool_use" }> =>
+    ev.type === "tool_use" && (ev.name === "Agent" || ctx.continuations?.has(ev.id) === true || ctx.unresolved?.has(ev.id) === true);
   let hasAgent = false;
   for (const ev of host) {
-    if (ev.type === "tool_use" && ev.name === "Agent") {
+    if (isHostCall(ev)) {
       hasAgent = true;
       break;
     }
@@ -218,8 +297,13 @@ function mergeLevel(host: readonly Event[], depth: number, minSlot: number, ctx:
 
   for (let i = 0; i < host.length; i++) {
     const ev = host[i]!;
-    if (ev.type !== "tool_use" || ev.name !== "Agent") continue;
-    const tr = ctx.subagents.get(ev.id);
+    if (!isHostCall(ev)) continue;
+    // `Agent`: run 0 of its transcript; `SendMessage`: the run it started.
+    let tr: SubagentTranscript | undefined;
+    if (ev.name === "Agent") {
+      tr = ctx.subagents.get(ev.id);
+      if (tr !== undefined) tr = ctx.firstRun?.get(ev.id) ?? tr;
+    } else tr = ctx.continuations?.get(ev.id);
     if (tr === undefined) {
       flags.missing = true;
       out[i] = { ...ev, subagent: "missing" };
@@ -285,6 +369,7 @@ function mergeLevel(host: readonly Event[], depth: number, minSlot: number, ctx:
  */
 export function mergeSubagents(events: readonly Event[], ctx: MergeContext): { events: Event[]; flags: MergeFlags } {
   const flags = emptyFlags();
+  if (ctx.continuations === undefined) planContinuations(events, ctx);
   const merged = mergeLevel(events, 0, 1, ctx, { left: PROMPT_SUBAGENT_EVENTS_MAX }, flags);
   return { events: merged, flags };
 }

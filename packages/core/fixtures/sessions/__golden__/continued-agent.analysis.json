@@ -1,0 +1,70 @@
+{
+  "sessionId": "continued-agent",
+  "title": "Have an agent fix add.js and run the tests.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Have an agent fix add.js and run the tests.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit (by subagent Fix add)",
+      "files": [
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 1000,
+        "checkMs": 4000,
+        "fixMs": 0
+      },
+      "activeMs": 5000,
+      "headline": "Mostly checking (80%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000005",
+      "text": "Now let the same agent fix mul.js too.",
+      "status": "unchecked",
+      "reason": "no checks ran",
+      "files": [
+        {
+          "path": "/home/user/project/src/mul.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 96000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 96000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/mul.js",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    }
+  ],
+  "warnings": []
+}

@@ -24,6 +24,8 @@ const BASH_EDIT_LINES_MAX = 10_000;
 export interface ToolInput {
   command?: string;
   filePath?: string;
+  /** Target of a `SendMessage` call (`input.to`): an agent id or a team member name. */
+  to?: string;
   /** Number of lines of `content` (Write only). */
   contentLines?: number;
   /** Assertion and skip-marker counters of the written content (Write only; first 2000 lines). */
@@ -80,6 +82,8 @@ export type ToolResultEvent = {
   bashEditDiff?: BashEdit[];
   /** The command was started in the background; the exit code is unknown. */
   background: boolean;
+  /** Agent continued by a `SendMessage` call (`toolUseResult.resumedAgentId`, else `revivedAgentId`). */
+  resumedAgentId?: string;
   /** Id of the background task (`toolUseResult.backgroundTaskId`), when the command was started in the background. */
   backgroundTaskId?: string;
   /** Last ~4 KB of the result text; only set when the result is longer than `text` (which keeps the head). */
@@ -280,6 +284,10 @@ function sanitizeInput(name: string, input: unknown, detail: boolean): ToolInput
   }
   const p = str(input.file_path) ?? str(input.notebook_path);
   if (p !== undefined) out.filePath = truncate(p, PATH_MAX);
+  if (name === "SendMessage") {
+    const to = str(input.to);
+    if (to !== undefined) out.to = truncate(to, PATH_MAX);
+  }
   if (name === "Write" && typeof input.content === "string") {
     out.contentLines = countLines(input.content);
     const stats = emptyStats();
@@ -479,6 +487,8 @@ export function createParser(opts: ParserOptions = {}): Parser {
           }
           const be = parseBashEdits(tur.bashEditDiff, detail);
           if (be !== undefined) ev.bashEditDiff = be;
+          const resumed = nonEmptyStr(tur.resumedAgentId) ?? nonEmptyStr(tur.revivedAgentId);
+          if (resumed !== undefined) ev.resumedAgentId = resumed;
           if (tur.backgroundTaskId !== undefined && tur.backgroundTaskId !== null) {
             ev.background = true;
             const taskId = typeof tur.backgroundTaskId === "number" ? String(tur.backgroundTaskId) : nonEmptyStr(tur.backgroundTaskId);

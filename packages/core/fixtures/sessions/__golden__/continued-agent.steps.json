@@ -1,0 +1,135 @@
+[
+  {
+    "index": 0,
+    "text": "Have an agent fix add.js and run the tests.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit (by subagent Fix add)",
+    "headline": "Mostly checking (80%), 1 check",
+    "startedAt": "2026-01-01T00:00:00.000Z",
+    "activeMs": 5000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Delegate to a subagent",
+        "startedAt": "2026-01-01T00:00:01.000Z",
+        "durationMs": 0,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Agent",
+            "summary": "Agent: Fix add",
+            "ok": true,
+            "ts": "2026-01-01T00:00:01.000Z"
+          }
+        ],
+        "files": []
+      },
+      {
+        "n": 2,
+        "phase": "write",
+        "title": "Subagent: Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:05.000Z",
+        "durationMs": 1000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:05.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 3,
+        "phase": "check",
+        "title": "Subagent: Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:08.000Z",
+        "durationMs": 4000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Now let the same agent fix mul.js too.",
+    "status": "unchecked",
+    "reason": "no checks ran",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:01:40.000Z",
+    "activeMs": 96000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/mul.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Use SendMessage",
+        "startedAt": "2026-01-01T00:01:41.000Z",
+        "durationMs": 0,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "SendMessage",
+            "summary": "SendMessage",
+            "ok": true,
+            "ts": "2026-01-01T00:01:41.000Z"
+          }
+        ],
+        "files": []
+      },
+      {
+        "n": 2,
+        "phase": "write",
+        "title": "Subagent: Edit src/mul.js (+1 -1)",
+        "startedAt": "2026-01-01T00:01:45.000Z",
+        "durationMs": 96000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/mul.js",
+            "ok": true,
+            "ts": "2026-01-01T00:01:45.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/mul.js"
+        ]
+      }
+    ]
+  }
+]
