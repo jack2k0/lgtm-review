@@ -269,6 +269,20 @@ describe("scripts/gate.mjs", () => {
     expect(ok.out).toMatch(/2 finding\(s\): 1 fixed, 0 rejected, 1 deferred/);
   });
 
+  test("--merge fails on uncommitted or untracked files; without --merge they only count as changes", () => {
+    const d = repo({}, { "docs/a.md": "hi\n" });
+    writeFileSync(join(d, "docs/a.md"), "changed\n");
+    writeFileSync(join(d, "docs/new.md"), "n\n");
+    const r = gate(d, ["--merge"]);
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/FAIL committed: 2 uncommitted or untracked file/);
+    expect(r.out).toContain("docs/new.md");
+    expect(gate(d).out).not.toMatch(/committed/);
+    git(d, "add", "-A");
+    git(d, "commit", "-qm", "c");
+    expect(gate(d, ["--merge"]).out).toMatch(/PASS committed: worktree clean/);
+  });
+
   test("--tiers prints the table with reviewer counts", () => {
     const r = gate(repo({}, {}), ["--tiers"]);
     expect(r.code).toBe(0);

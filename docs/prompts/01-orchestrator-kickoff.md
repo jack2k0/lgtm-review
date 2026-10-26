@@ -58,6 +58,7 @@ Skille z tego etapu zadają mi pytania, więc robisz je sam, w tej sesji.
    - Skan wielu dużych plików, np. moich prawdziwych sesji w `~/.claude/projects/*/*.jsonl`, deleguj do agy (Flash), w trybie read-only.
    - Dla S-01 obowiązkowy jest spike: agy przegląda 10–20 moich sesji i wypisuje przypadki brzegowe z sekcji 7.1 PROPOSAL.md (exit code, kompaktowanie, resume, subagenty, przerwania, równoległe narzędzia).
    - W planie są fazy, pliki, kryteria done, komendy weryfikacji i non-goals. Jedna faza musi się zmieścić w jednym briefie dla workera.
+   - Plan ma blok ```gate (`allow:` dla plików faz, nowych fixture'ów/goldenów i `^context/(changes|archive)/<id>/`; `goldens:`, `labels:`, `deps:`, `schema:`).
 3. `/10x-plan-review`. Musi go zrobić inny model niż autor planu, więc deleguj do agy. Wynik pokaż mi.
 
 **BRAMKA:** bez mojego „plan ok” nie ma implementacji.
