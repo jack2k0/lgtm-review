@@ -169,7 +169,7 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
 
   // 0. Committed: a merge takes the branch commits, so with --merge the worktree must hold nothing uncommitted.
   if (values.merge && !values.head) {
-    const dirty = git(["status", "--porcelain", "--untracked-files=all"]).split("\n").filter(Boolean).map((l) => l.slice(3));
+    const dirty = git(["status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"]).split("\n").filter(Boolean).map((l) => l.slice(3));
     if (!bad("committed", dirty, "uncommitted or untracked file(s); a merge would leave them out")) add("committed", "PASS", "worktree clean");
   }
 

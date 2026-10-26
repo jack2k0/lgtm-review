@@ -44,5 +44,5 @@ Do not add new findings. Write to <scratchpad>/verify-<id>-<reviewer>.md and rep
 1. Copy every finding into `context/changes/<id>/reviews/findings.md` (table format from `REVIEW.md`), with the `reviewers:` line; `findings: none` when there are none.
 2. Triage confirmed findings first. Check a refuted or unclear one yourself before rejecting it.
 3. Fix accepted findings in the same worktree (a brief per batch), each with a test that fails on the old code.
-4. Fill in every verdict, then run `node scripts/gate.mjs --base main --plan context/changes/<id>/plan.md --run-check --merge`.
+4. Fill in every verdict and commit the ledger on the branch (the gate's `--merge` refuses uncommitted files), then run `node scripts/gate.mjs --base main --plan context/changes/<id>/plan.md --run-check --merge`.
 5. Round 2 only when fixes were non-trivial: diff-only, same reviewers. No round 3; reconsider the approach instead.
