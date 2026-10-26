@@ -11,7 +11,7 @@ Monorepo: packages/core, packages/cli (published), packages/web.
 - S-03 steps per prompt and per-file diffs from the log: done.
 - S-05 review hints per prompt (where to look, Skim / Read flagged / Read all) and `npx lgtm-review --summary`, a markdown summary for a PR description: done.
 
-Not in the MVP: syntax highlighting, split diffs, final git state reconciliation, live refresh, export.
+Not in the MVP: syntax highlighting, split diffs.
 
 ## Run
 

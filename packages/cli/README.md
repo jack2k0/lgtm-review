@@ -5,11 +5,13 @@ CLI. Run `npx lgtm-review`.
 ## Usage
 
 ```
-npx lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>] [--no-worktrees]
+npx lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>] [--no-worktrees] [--version] [--help]
 ```
 
 Without flags the command starts a local web UI for the Claude Code sessions of the current repository, prints its URL and opens it in your browser. Press Ctrl+C to stop.
 
+- `--dir <path>` sets the repository to inspect (default: current directory).
+- `--projects-dir <path>` sets the Claude Code projects directory (default: `~/.claude/projects`).
 - `--archive` mirrors new or updated session logs of this repository to a private local archive (see Archive below).
 - `--archive-dir <path>` sets the local archive root directory (default: `$LGTM_REVIEW_ARCHIVE` or `~/.lgtm-review/archive`).
 - `--list` prints the sessions and their prompt statuses in the terminal instead of starting the UI (`--json` prints the analysis as JSON).
@@ -17,6 +19,8 @@ Without flags the command starts a local web UI for the Claude Code sessions of 
 - `--no-open` prints the URL without opening a browser.
 - `--no-worktrees` shows only the sessions of `--dir`, not of the repository's other git worktrees.
 - `--port <n>` listens on a fixed port instead of a free one.
+- `--version` prints the version.
+- `--help` prints usage help.
 
 Security: the server listens only on 127.0.0.1, is read-only, and checks the Host and Origin headers on every request. The URL carries a random per-run token (in the `#k=` fragment) that the page sends with each API call, so other local sites and processes cannot read your sessions. Treat the URL as a secret and do not share it. The URL is printed to stdout in full; the browser is opened through a short-lived 0600 file in a private temp directory (removed on exit or after about 60 s) so the token never appears in another process's command line.
 
@@ -50,6 +54,7 @@ The **Map** view (per session or per prompt) shows the changed source files and 
 - **Python**: `import a.b` and `from a import b` (relative imports too), resolved to `.py` files or `__init__.py` under the repository root, `src/` and every directory that contains a `manage.py`. Packages outside the repository (stdlib, virtualenv) are not shown. In a Django project each app is its own layer (`backend/shop`, `backend/core`).
 - Extraction is a regular-expression scan, not a parser: unusual syntax can produce a missing or an extra edge. `importlib`/`__import__` and computed specifiers are ignored. In Python files, comments and string literals are blanked before matching.
 - Imports a session's own edits added are **new** edges (solid, highlighted); the rest are **existing** (grey). The legend counts both. Detection reads the `+` lines of each changed file's diff, so imports added by shell edits without a diff are shown as existing.
+- API: `GET /api/sessions/<id>/map` (optional `?prompt=<index>`; token required, ETag/304 like the other routes).
 
 ## Play the change
 
@@ -64,7 +69,7 @@ A prompt's map has a **▶ Play the change** link (only for prompts of this sess
 
 While a Claude Code session is still running, the page keeps itself up to date: every 5 seconds it asks the local API whether the current view changed, using conditional requests. The header shows **Live · updated HH:MM:SS** (the time new data last arrived) and a **Pause**/**Resume** button; the choice is remembered for the tab only (session storage), and live is on by default.
 
-- Each of the four data routes (`/api/sessions`, `/api/sessions/<id>`, `.../prompts/<index>`, `.../diff?path=`) answers with a strong `ETag` derived from the size and modification time of the session files it depends on (all session files of the project for the list, the one file otherwise). Send it back as `If-None-Match` and an unchanged view costs a `304` with no body and no re-analysis, only a `stat` per session file. The routes use `Cache-Control: no-cache, private`; the Host, Origin and token checks run before anything is compared, and a `304` is never sent for a session, prompt or file that does not exist.
+- Each data route (`/api/sessions`, `/api/sessions/<id>`, `.../prompts/<index>`, `.../diff?path=`, `.../map`, `.../play`, `.../git`) answers with a strong `ETag` derived from the size, modification time and subagent transcripts of the session files it depends on (all session files of the project where inheritance applies, the one file otherwise). Send it back as `If-None-Match` and an unchanged view costs a `304` with no body and no re-analysis, only a `stat` per session file. The routes use `Cache-Control: no-cache, private`; the Host, Origin and token checks run before anything is compared, and a `304` is never sent for a session, prompt or file that does not exist.
 - Polling pauses while the tab is hidden and refetches immediately when you come back; it also stops while paused and is cancelled when you leave the view. Requests never overlap.
 - If the server cannot be reached the old data stays on screen with a "Connection lost, retrying" note; retries back off from 5 s to 10 s to 30 s and return to 5 s after a success.
 - Expanded rows (by prompt number), expanded action lists (by step number), "show more" counts and the scroll position survive a refresh.
@@ -79,9 +84,9 @@ Recommendation: `Read all` when there are high-severity hints of at least three 
 Rules (severity):
 
 - `test-modified-during-fix` (high): a test file was edited after a failed check, before the next passing one.
-- `assertions-removed` (high): in test files, more assertion lines (`expect(`, `assert*(`, `self.assert*(`, `.should`) were removed than added.
+- `assertions-removed` (high): net assertion lines (`expect(`, `assert*(`, `self.assert*(`, `.should`) were removed across the prompt's test files, flagging each file with a net removal.
 - `test-skipped` (high): skip markers were added (`.skip(`, `xit(`, `xdescribe(`, `it.todo`, `test.todo`, `@pytest.mark.skip`/`xfail`, `t.Skip(`, `@Disabled`).
-- `sensitive-path` (high; warn for test files): path segments such as `auth`, `login`, `secrets`, `tokens`, `credentials`, `migrations`, `permissions`, `security`, `.env*`, `Dockerfile*`, `.github/workflows/`.
+- `sensitive-path` (high; warn for test files): path segments such as `auth`, `login`, `secrets`, `tokens`, `credentials`, `migrations`, `permissions`, `security`, `.env*` (not `.env.example`/`.sample`/`.template`/`.dist`), `Dockerfile*`, `.github/workflows/`.
 - `unchecked-edit` (warn): the file was edited after the last completed check.
 - `dependency-change` (warn): a manifest or lockfile was edited (`package.json`, lockfiles, `requirements*.txt`, `pyproject.toml`, `go.mod`, `Cargo.toml`, ...).
 - `public-surface` (warn): a package entry `index.ts|js`, or a path with `routes/`, `api/`, `openapi` or `schema`.
@@ -97,17 +102,17 @@ The web UI shows the recommendation in a **Review** column, marks flagged files 
 
 Statuses are heuristics read from the session log, not verdicts. Known limits:
 
-- **Shell edits.** File changes made through Bash are exact only when the log carries a diff for them (Claude Code records one when the session started inside the repository). Without it lgtm-review reads the command text: `sed -i`, `perl -pi`, `tee`, `>`/`>>` redirects, `git apply`, `git mv` and `python - <<` scripts that `open(..., 'w')` count as edits, listed as "may be incomplete" with the target path when it is trivial to parse and `(shell edit)` otherwise, and the reason ends with "(shell edits may be incomplete)". Redirects to `/tmp`, `$TMPDIR`, `.cache`, scratch directories, log files and `/dev/*`, and failed commands, are ignored. Other writers (`mv`, `cp`, `rm`, formatters, package managers, code generators) are not detected.
-- **Git operations.** Edits made by a command whose only mutating parts are `git merge|rebase|pull|checkout|stash|cherry-pick|mv|restore|reset` stay in the file list (marked incomplete) but never change a status or invalidate an earlier passing check. A prompt with only such edits is "no changes".
+- **Shell edits.** File changes made through Bash are exact only when the log carries a diff for them (Claude Code records one when the session started inside the repository). Without it lgtm-review reads the command text: `sed -i`, `perl -pi`, `tee`, `>`/`>>` redirects, `git apply`, `git mv`, `git rm` and `python - <<` scripts that `open(..., 'w')` or call `.write_text()`/`.write_bytes()` count as edits, listed as "may be incomplete" with the target path when it is trivial to parse and `(shell edit)` otherwise, and the reason ends with "(shell edits may be incomplete)". Redirects to `/tmp`, `$TMPDIR`, `.cache`, scratch directories, log files and `/dev/*`, and failed commands, are ignored. Other writers (plain `mv`, `cp`, plain `rm`, formatters, package managers, code generators) are not detected.
+- **Git operations.** Edits made by a command whose only mutating parts are `git merge|rebase|pull|checkout|stash|cherry-pick|mv|rm|restore|reset` stay in the file list (marked incomplete) but never change a status or invalidate an earlier passing check. A prompt with only such edits is "no changes".
 - **Scoped checks.** A checked prompt whose deciding check ran on only part of the repository says "(scoped to <scope>)" in its reason and flags the edited files outside that scope with `check-scope`; the status stays checked.
-- **Documentation edits.** Edits whose files are all documentation (`*.md`, `*.markdown`, `*.mdown`, `*.mkd`, `*.mkdn`, `*.rst`, `*.adoc`, `*.asciidoc`, and files named `README`, `LICENSE`, `LICENCE`, `COPYING`, `NOTICE`, `AUTHORS`, `CONTRIBUTORS`, `CHANGELOG`, `CHANGES` or `HISTORY`, also with `.txt`) stay in the file list, the steps and the diffs but need no check: they never make a prompt unchecked and never invalidate an earlier passing check (the reason then reads "pnpm test passed after last code edit; 1 documentation edit after it"). A prompt that only edited documentation is "no changes" with the reason "no code edits (documentation only)". `.mdx` and other `.txt` files count as code. If your build or tests consume Markdown (doctests, prompt templates), read those files yourself.
+- **Documentation edits.** Edits whose files are all documentation (`*.md`, `*.markdown`, `*.mdown`, `*.mkd`, `*.mkdn`, `*.rst`, `*.adoc`, `*.asciidoc`, and files named `README`, `LICENSE`, `LICENCE`, `COPYING`, `NOTICE`, `AUTHORS`, `CONTRIBUTORS`, `CONTRIBUTING`, `CHANGELOG`, `CHANGES`, `HISTORY`, `SECURITY`, `CODE_OF_CONDUCT`, `INSTALL`, `GOVERNANCE`, `SUPPORT` or `MAINTAINERS`, also with `.txt`) stay in the file list, the steps and the diffs but need no check: they never make a prompt unchecked and never invalidate an earlier passing check (the reason then reads "pnpm test passed after last code edit; 1 documentation edit after it"). A prompt that only edited documentation is "no changes" with the reason "no code edits (documentation only)". `.mdx` and other `.txt` files count as code. If your build or tests consume Markdown (doctests, prompt templates), read those files yourself.
 - **Scratch files.** Files written outside the session's directory in a temporary or scratch location (`/tmp`, `/var/tmp`, macOS `/var/folders`, or a folder whose name starts with `scratch`, such as Claude Code's own scratchpad) are listed but need no check, like documentation: a prompt that only wrote such files is "no changes" ("no code edits (scratch files only)"), and they get no review hints. Files in the tool call's own working directory or in a `.claude/worktrees/` folder are never scratch.
 - **Masked exit codes.** When a check's exit code does not reflect the check (a pipe such as `| tail`, `|| true`, `; echo`), lgtm-review looks for failure signals (for example `2 failed`, `EXIT=1`, `BUILD FAILURE`) in the last 4 KB of the output and reports `failing` when it finds one. Otherwise the reason says "(exit code not verified)". A check followed by `git checkout|restore|stash` on files is marked "(edits may have been reverted)".
 - **Subagents.** Edits and checks from subagent transcripts count toward the prompt that started the subagent, merged by timestamp. A prompt is marked partial only when a transcript is missing or nested deeper than 3 levels; a transcript cut by a cap is named in the reason.
 
 Checks started in the background (`run_in_background`) only confirm the launch, so their result is taken from Claude Code's later task notification. A background run that failed counts as failing; one that was killed or stopped is reported as "check stopped", which leaves the prompt unchecked with no verdict.
 
-To measure how these limits affect your own sessions, run `pnpm build` and then `node scripts/audit-status.mjs [--dir <repo>] [--projects-dir <dir>]` from a checkout of the repository. It runs the built CLI with `--list --json` and prints aggregate counts only: sessions and prompts, the status distribution, the share of partial prompts, the share of prompts with heuristic shell edits, the share of checks with an unverified exit code the share of prompts whose documentation edits were not counted and the share of checked prompts with files outside the check's scope. It never prints prompt text, paths, commands or reasons; add `--json` for machine-readable output.
+To measure how these limits affect your own sessions, run `pnpm build` and then `node scripts/audit-status.mjs [--dir <repo>] [--projects-dir <dir>] [--cli <path>] [--json]` from a checkout of the repository. It runs the built CLI with `--list --json` and prints aggregate counts only: sessions and prompts, the status distribution, the share of partial prompts, the share of prompts with heuristic shell edits, the share of checks with an unverified exit code, the share of prompts whose documentation edits were not counted and the share of checked prompts with files outside the check's scope. It never prints prompt text, paths, commands or reasons; add `--json` for machine-readable output.
 
 ## Resumed and forked sessions
 
@@ -129,9 +134,9 @@ Each session has a **Git cross-check** view (link next to Map; API `GET /api/ses
 npx lgtm-review --summary [--session <id-prefix>] [--no-titles]
 ```
 
-Prints markdown for a PR description: title, branch, date, a table of prompts (status, recommendation, title, file count, `+/-`) and, for every prompt that is unchecked, failing or has hints, its reason and hints (severity, rule, path). Paths below the repository are relative. A footer states that statuses are heuristic. `--summary` cannot be combined with `--list` or `--json` (exit 1).
+Prints markdown for a PR description: title, branch, date, a table of prompts (status, recommendation, title, file count, `+/-`) and, for every prompt that is unchecked, failing or has hints, its reason and hints (severity, rule, path; repeated warn/info hints of one rule collapse over 3). Paths below the repository are relative. A footer states that statuses are heuristic. `--summary` cannot be combined with `--list` or `--json` (exit 1).
 
-The summary contains no command output (a failing check shows only `<command> failed`), no file contents and no full prompt text. Titles are the first line of the prompt cut to 80 characters, with token-like text (API keys, `Bearer ...`, `password=...`, long hex or base64-like strings) replaced by `[redacted]`; this is best effort.
+The summary contains no command output (a failing check shows only `<command> failed`), no file contents and no full prompt text. Titles are the prompt text with newlines collapsed to spaces and cut to 80 characters, with token-like text (API keys, `Bearer ...`, `password=...`, long hex or base64-like strings) replaced by `[redacted]`; this is best effort.
 
 Privacy: prompt titles and file paths can still reveal internal names, so read the text before you paste it into a public PR, or use `--no-titles` to print "Prompt N" instead of titles. Markdown-special characters (`|`, backticks, `*`, `_`, brackets, `<`, `>`) in titles and paths are escaped and newlines are collapsed.
 
@@ -172,7 +177,7 @@ Limits: diffs are included up to 5 MB of text in total (later diffs are left out
 Claude Code automatically deletes session logs older than `cleanupPeriodDays` (default 30 days). A review from last month then disappears. `lgtm-review --archive` mirrors the current repository's session logs and their subagent transcripts into a private local archive:
 
 ```
-npx lgtm-review --archive [--dir <path>] [--projects-dir <path>] [--archive-dir <path>]
+npx lgtm-review --archive [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--no-worktrees]
 ```
 
 - **Where it goes:** `--archive-dir <path>`, else env `LGTM_REVIEW_ARCHIVE`, else `~/.lgtm-review/archive`. Sessions for the repository are stored under `<archiveRoot>/<project-dir-name>/`.
