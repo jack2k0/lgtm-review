@@ -10,7 +10,7 @@ import {
   type MergeContext,
   type SubagentTranscript,
 } from "./subagents.js";
-import { at, bash, edit, prompt, resetIds, toolUse } from "./testing/records.js";
+import { at, bash, edit, prompt, resetIds, toolResult, toolUse } from "./testing/records.js";
 
 beforeEach(resetIds);
 
@@ -115,11 +115,11 @@ describe("merge order", () => {
     expect(out).toEqual(["prompt", "P:ag", "P:p1", "A:g1", "A:g2", "P:p2", "A:g3"]);
   });
 
-  test("guest events earlier than the prompt attach right after it; later than the end attach at the end", () => {
+  test("guest events earlier than the Agent call attach right after it; later than the end attach at the end", () => {
     const a = agentLines("A");
     const host = parentOf([prompt("q", { timestamp: at(10) }), agentCall("ag", at(11)), toolUse("p1", "Read", { file_path: "/x" }, at(12))]);
     const t = tr("A", [a.use("early", "Read", { file_path: "/x" }, at(1)), a.use("late", "Read", { file_path: "/x" }, at(99))]);
-    expect(mergeSubagents(host, ctxOf(new Map([["ag", t]]))).events.map(describeEv)).toEqual(["prompt", "A:early", "P:ag", "P:p1", "A:late"]);
+    expect(mergeSubagents(host, ctxOf(new Map([["ag", t]]))).events.map(describeEv)).toEqual(["prompt", "P:ag", "A:early", "P:p1", "A:late"]);
   });
 
   test("events without a timestamp inherit the previous one (guest and host)", () => {
@@ -151,7 +151,7 @@ describe("merge order", () => {
     expect(out).toEqual(["prompt", "P:ag", "P:p1", "P:p2", "A:g1", "P:p3"]);
   });
 
-  test("two agents interleave by timestamp, ties by agent id; each keeps its own order", () => {
+  test("two agents interleave by timestamp, ties by parent call order; each keeps its own order", () => {
     const a = agentLines("A");
     const b = agentLines("B");
     const host = parentOf([prompt("q", { timestamp: at(0) }), agentCall("agB", at(1)), agentCall("agA", at(1))]);
@@ -159,7 +159,8 @@ describe("merge order", () => {
     const tb = tr("B", [b.use("b1", "Read", { file_path: "/x" }, at(4)), b.use("b2", "Read", { file_path: "/x" }, at(5))]);
     const out = mergeSubagents(host, ctxOf(new Map([["agA", ta], ["agB", tb]]))).events.map(describeEv);
     // A's second event has a smaller ts but cannot overtake a1 (monotone within a transcript).
-    expect(out.slice(3)).toEqual(["B:b1", "A:a1", "A:a2", "B:b2"]);
+    // B was called before A in the host, so on tie at ts=5 B:b2 precedes A:a1 and A:a2.
+    expect(out.slice(3)).toEqual(["B:b1", "B:b2", "A:a1", "A:a2"]);
   });
 });
 
@@ -172,6 +173,43 @@ describe("effects on the analysis", () => {
     const p = analyzeSession(lines, { subagents: new Map([["ag", tr("A", [a.task(), ...a.edit("s1", 60, 61, `${dir}b.js`)], "Write b")]]) }).prompts[0]!;
     expect(p).toMatchObject({ status: "unchecked", partial: false, reason: "1 edit after last check (by subagent Write b)" });
     expect(p.files.map((f) => f.path)).toEqual(["/home/user/project/src/add.js", `${dir}b.js`]);
+  });
+
+  test("finding 2.1: subagent edit with clock skew (ts earlier than parent check) cannot slot before its Agent call", () => {
+    const a = agentLines("A");
+    // Parent check at 20, Agent call at 50; subagent edit has ts=5 (earlier than the check).
+    const lines = [
+      prompt("q", { timestamp: at(0) }),
+      toolUse("b1", "Bash", { command: "pnpm test" }, at(20)),
+      toolResult("b1", "ok", { toolUseResult: { stdout: "ok" }, ts: at(21) }),
+      agentCall("ag", at(50)),
+    ];
+    const p = analyzeSession(lines, { subagents: new Map([["ag", tr("A", [a.task(), ...a.edit("s1", 5, 6, `${dir}b.js`)], "Write b")]]) }).prompts[0]!;
+    // Subagent edit is floored at the call time (50) and slotted after the Agent call, remaining after the check.
+    expect(p).toMatchObject({ status: "unchecked", partial: false, reason: "1 edit after last check (by subagent Write b)" });
+    expect(p.files.map((f) => f.path)).toEqual([`${dir}b.js`]);
+  });
+
+  test("finding 1.2: parallel subagents sharing timestamp are ordered by parent call order, not agentId", () => {
+    const makeRun = (editAgentId: string, testAgentId: string) => {
+      const ed = agentLines(editAgentId);
+      const te = agentLines(testAgentId);
+      const lines = [
+        prompt("q", { timestamp: at(0) }),
+        agentCall("agEdit", at(10)),
+        agentCall("agTest", at(10)),
+      ];
+      const tEdit = tr(editAgentId, [...ed.edit("e1", 20, 21, `${dir}b.js`)], "editor");
+      const tTest = tr(testAgentId, te.check("c1", 20, 21), "tester");
+      return analyzeSession(lines, { subagents: new Map([["agEdit", tEdit], ["agTest", tTest]]) }).prompts[0]!;
+    };
+    // Whether edit agent is "A" or "Z", call order (agEdit before agTest) ensures the check is after the edit.
+    const resAZ = makeRun("A", "Z");
+    const resZA = makeRun("Z", "A");
+    expect(resAZ.status).toBe("checked");
+    expect(resAZ.reason).toBe("pnpm test passed after last edit (by subagent tester)");
+    expect(resZA.status).toBe("checked");
+    expect(resZA.reason).toBe("pnpm test passed after last edit (by subagent tester)");
   });
 
   test("subagent check after the parent's edit => checked; failed subagent check => failing", () => {
