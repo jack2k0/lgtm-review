@@ -50,6 +50,7 @@ schema: no
 - A3 (#4, #5): wrappers are parsed word by word, not with one regex: `flock` takes any number of option words (`-nx`, `-w10`, `-w 10`, `--wait=10`, `-E 1`, `--conflict-exit-code 1`), then a lockfile or fd number, then the command; `flock <lock> -c '<cmd>'` / `-c "<cmd>"` unquotes `<cmd>`. Same approach for `ionice`, `setsid`, `stdbuf`.
 - A4 (#6): `pythonWrites` follows one level of variable binding: `p = sys.argv[N]`, `p = Path(sys.argv[N])`, `p = "lit"`, `p = Path("lit")`.
 - A5 (#7): the directory test for an extensionless `git mv` target happens in `analyze.ts` against the diff paths; `shell-edits.ts` only reports the git-moved targets.
+- A6 (orchestrator, during phase 3): the existing expectation `shell-edits.test.ts:33` (`Path('a').write_text('x')` → `(shell edit)`) changes to `["a"]`: a literal `Path(...)` receiver is exactly what R resolves; the status does not change (`a` is still a code path). This is the only existing expectation this slice may change.
 - Rejected #3: a file a merge brings in after a check is git-made and never counts as a code edit (S-11), so the plain edit's order is the only one that matters.
 
 ## Phase 1: Wrapped checks (W)
