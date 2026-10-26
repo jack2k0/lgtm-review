@@ -1,0 +1,21 @@
+{
+  "fixture": "wrapped-checks",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "flock-wrapped check script passes after the edit"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "checked",
+      "note": "flock -w wrapped script runs in the background; passing notification"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "failing",
+      "note": "ionice + nice wrapped test fails"
+    }
+  ]
+}

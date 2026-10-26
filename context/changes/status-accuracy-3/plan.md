@@ -57,7 +57,7 @@ schema: no
 - `check-patterns.ts`: add the wrappers to `PREFIXES`; `flock -c "<cmd>"` form.
 - Tests in `check-patterns.test.ts`: each wrapper with a test command, a script check (`scripts/check.sh`), and a non-check (`flock /tmp/l ls`); a wrapped `sed -i` in `shell-edits.test.ts` stays an edit.
 - New fixture `wrapped-checks.jsonl` + `.labels.json` + goldens: prompt 1 edit code, `flock /tmp/x.lock ./scripts/check.sh` passes → checked; prompt 2 edit, `flock -w 600 lock bash scripts/verify-all.sh` in the background with a passing notification → checked; prompt 3 edit, `ionice -c3 nice pnpm test` failing → failing.
-- [ ] done when: tests and the fixture pass; `pnpm check` green; gate exit 0/2.
+- [x] done when: tests and the fixture pass; `pnpm check` green; gate exit 0/2.
 
 ## Phase 2: Git attribution in mixed commands (G)
 

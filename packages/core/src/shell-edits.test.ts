@@ -12,6 +12,8 @@ describe("classifyShellMutation: edits", () => {
     ["sed --in-place 's/a/b/' x.js", ["x.js"]],
     ["sed -i 's/a/b/' \"my file.js\"", ["my file.js"]],
     ["sed -i 's/a/b/' src/*.js", [SHELL_EDIT_FILE]],
+    ["flock -w 10 /tmp/l sed -i 's/a/b/' src/x.js", ["src/x.js"]],
+    ["ionice -c3 nice sed -i 's/a/b/' src/x.js", ["src/x.js"]],
     ["find . -name '*.js' | xargs sed -i 's/a/b/'", [SHELL_EDIT_FILE]],
     ["perl -pi -e 's/a/b/' lib/a.pl", ["lib/a.pl"]],
     ["perl -i.bak -pe 's/a/b/' lib/a.pl", ["lib/a.pl"]],
