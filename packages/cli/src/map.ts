@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, sep } from "node:path";
 import {
   createPythonResolver,
@@ -252,8 +252,9 @@ export async function planImportMap(
       fp.update(`${p}:${st.mtimeMs}:${st.size}\0`);
     }
   }
-  // tsconfig files feed the resolver
-  for (const p of ["tsconfig.json", "tsconfig.base.json"]) {
+  // tsconfig and workspace manifests feed the resolver
+  const manifests = (listed ?? []).filter((p) => /^(?:[^/]+\/){1,2}package\.json$/.test(p.replaceAll("\\", "/"))).sort();
+  for (const p of ["tsconfig.json", "tsconfig.base.json", "package.json", "pnpm-workspace.yaml", ...manifests]) {
     const st = safeStat(p);
     fp.update(`${p}:${st === null ? "-" : `${st.mtimeMs}:${st.size}`}\0`);
   }
@@ -285,6 +286,17 @@ export async function planImportMap(
         readJson: (rel) => {
           const text = readText(rel);
           return text === null ? undefined : text;
+        },
+        // Real directories only (a symlinked dir reports isDirectory() false), so nothing can escape the repo.
+        listDirs: (rel) => {
+          try {
+            return readdirSync(rel === "" ? root : `${root}/${rel}`, { withFileTypes: true })
+              .filter((e) => e.isDirectory())
+              .map((e) => e.name)
+              .sort();
+          } catch {
+            return [];
+          }
         },
       };
       const tsResolver = createResolver({ host, aliases: loadTsconfigAliases("", host) });

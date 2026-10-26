@@ -23,6 +23,8 @@ export interface MapHost {
   exists(path: string): boolean;
   /** Parsed JSON, a raw JSON string (comments tolerated), or undefined when unreadable. */
   readJson?(path: string): unknown;
+  /** Names of the real (non-symlink) child directories of a repo-relative directory ("" = root). */
+  listDirs?(dir: string): string[];
 }
 
 export interface TsconfigAlias {
@@ -210,7 +212,16 @@ function normalizeTarget(target: string): string {
   return normalizePath(target.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, ""));
 }
 
-function aliasesOf(config: Record<string, unknown>): TsconfigAlias[] {
+/** `compilerOptions.baseUrl` as a repo-relative directory ("" = root), or null when unset or escaping the root. */
+function baseUrlOf(config: Record<string, unknown>, configDir: string): string | null {
+  const co = config["compilerOptions"];
+  if (!isObj(co) || typeof co["baseUrl"] !== "string") return null;
+  const base = normalizePath(joinPath(configDir, co["baseUrl"].replace(/\\/g, "/")));
+  if (!insideRoot(base)) return null;
+  return base === "." ? "" : base;
+}
+
+function aliasesOf(config: Record<string, unknown>, baseUrl: string | null): TsconfigAlias[] {
   const co = config["compilerOptions"];
   if (!isObj(co)) return [];
   const paths = co["paths"];
@@ -221,7 +232,7 @@ function aliasesOf(config: Record<string, unknown>): TsconfigAlias[] {
     const targets: string[] = [];
     for (const t of value) {
       if (typeof t !== "string" || t === "" || starCount(t) > 1) continue;
-      const normalized = normalizeTarget(t);
+      const normalized = baseUrl === null ? normalizeTarget(t) : normalizePath(joinPath(baseUrl, normalizeTarget(t)));
       if (insideRoot(normalized)) targets.push(normalized);
     }
     if (targets.length > 0) out.push({ pattern, targets });
@@ -234,12 +245,15 @@ function configFile(path: string): string {
 }
 
 /**
- * Loads `compilerOptions.paths` from `<root>/tsconfig.base.json` and `<root>/tsconfig.json`
+ * Loads `compilerOptions.paths` (targets relative to `baseUrl` when set) from `<root>/tsconfig.base.json` and `<root>/tsconfig.json`
  * (one `extends` level, JSON-with-comments tolerated). Any unreadable or malformed file is ignored.
+ * A `baseUrl` also yields a trailing catch-all `*` alias so bare specifiers resolve under it (TypeScript
+ * behaviour); the resolver only accepts it when the file exists, otherwise the import stays external.
  */
 export function loadTsconfigAliases(root: string, host: MapHost): TsconfigAlias[] {
   const byPattern = new Map<string, TsconfigAlias>();
   const seen = new Set<string>();
+  let baseFallback: string | null = null;
   const rootPrefix = root === "" ? "" : `${root.replace(/\/+$/, "")}/`;
   const withinRoot = (path: string): boolean => (rootPrefix === "" ? insideRoot(path) : path.startsWith(rootPrefix));
 
@@ -252,12 +266,95 @@ export function loadTsconfigAliases(root: string, host: MapHost): TsconfigAlias[
     if (typeof parent === "string" && parent !== "") {
       add(configFile(normalizePath(joinPath(root, parent))), depth + 1);
     }
-    for (const alias of aliasesOf(config)) byPattern.set(alias.pattern, alias);
+    const baseUrl = baseUrlOf(config, dirOf(configPath));
+    if (baseUrl !== null) baseFallback = baseUrl;
+    for (const alias of aliasesOf(config, baseUrl)) byPattern.set(alias.pattern, alias);
   };
 
   add(configFile(normalizePath(joinPath(root, "tsconfig.base.json"))), 0);
   add(configFile(normalizePath(joinPath(root, "tsconfig.json"))), 0);
+  if (baseFallback !== null && !byPattern.has("*")) {
+    byPattern.set("*", { pattern: "*", targets: [normalizePath(joinPath(baseFallback, "*"))] });
+  }
   return [...byPattern.values()];
+}
+
+// --- workspace packages -----------------------------------------------------------------------
+
+export interface WorkspacePackage {
+  /** Repo-relative package directory. */
+  dir: string;
+  /** Parsed package.json. */
+  manifest: Record<string, unknown>;
+}
+
+/** `packages:` globs of a pnpm-workspace.yaml (simple block list only). */
+function pnpmWorkspaceGlobs(yaml: string): string[] {
+  const out: string[] = [];
+  let inPackages = false;
+  for (const line of yaml.split(/\r?\n/)) {
+    if (/^\s*(#.*)?$/.test(line)) continue;
+    if (/^packages\s*:/.test(line)) {
+      inPackages = true;
+      continue;
+    }
+    if (!inPackages) continue;
+    const m = /^\s+-\s*(["']?)([^"'#]+?)\1\s*(?:#.*)?$/.exec(line);
+    if (m === null) {
+      if (/^\S/.test(line)) inPackages = false;
+      continue;
+    }
+    out.push(m[2]!);
+  }
+  return out;
+}
+
+/**
+ * Maps workspace package names to their directory and manifest. Globs come from pnpm-workspace.yaml
+ * `packages:`, else root package.json `workspaces` (array or `{ packages }`), else `packages/*`, `apps/*`,
+ * `libs/*`. Only literal dirs and a trailing `/*` are supported. Each package.json is read once; first
+ * directory (sorted) wins on duplicate names. Needs `host.readJson` and `host.listDirs`.
+ */
+export function loadWorkspacePackages(root: string, host: MapHost): Map<string, WorkspacePackage> {
+  const out = new Map<string, WorkspacePackage>();
+  if (host.readJson === undefined) return out;
+  const prefix = root === "" ? "" : `${root.replace(/\/+$/, "")}/`;
+  const globs: string[] = [];
+  const yaml = host.readJson(`${prefix}pnpm-workspace.yaml`);
+  if (typeof yaml === "string") globs.push(...pnpmWorkspaceGlobs(yaml));
+  if (globs.length === 0) {
+    const ws = readJson(host, `${prefix}package.json`)?.["workspaces"];
+    const list = Array.isArray(ws) ? ws : isObj(ws) && Array.isArray(ws["packages"]) ? ws["packages"] : [];
+    for (const g of list) if (typeof g === "string") globs.push(g);
+  }
+  if (globs.length === 0) globs.push("packages/*", "apps/*", "libs/*");
+
+  const dirs = new Set<string>();
+  for (const raw of globs) {
+    if (raw.startsWith("!")) continue;
+    const glob = normalizePath(raw.replace(/^\.\//, "").replace(/\/+$/, ""));
+    if (!insideRoot(glob) || glob === ".") continue;
+    if (glob.endsWith("/*") || glob === "*") {
+      const parent = glob === "*" ? "" : glob.slice(0, -2);
+      if (parent.includes("*")) continue;
+      let names: string[] = [];
+      try {
+        names = host.listDirs?.(`${prefix}${parent}`) ?? [];
+      } catch {
+        names = [];
+      }
+      for (const n of names) if (n !== "node_modules" && !n.startsWith(".")) dirs.add(parent === "" ? n : `${parent}/${n}`);
+    } else if (!glob.includes("*")) {
+      dirs.add(glob);
+    }
+  }
+  for (const dir of [...dirs].sort()) {
+    const manifest = readJson(host, `${prefix}${dir}/package.json`);
+    const name = manifest?.["name"];
+    if (manifest === null || typeof name !== "string" || name === "" || out.has(name)) continue;
+    out.set(name, { dir, manifest });
+  }
+  return out;
 }
 
 // --- resolver (plan M7) -----------------------------------------------------------------------
@@ -267,6 +364,8 @@ export interface ResolverOptions {
   /** Prefix passed to `host.exists`; returned paths stay repo-relative. */
   root?: string;
   aliases?: readonly TsconfigAlias[];
+  /** Workspace packages by name; default: discovered lazily (once) from the host via `loadWorkspacePackages`. */
+  packages?: ReadonlyMap<string, WorkspacePackage>;
 }
 
 export interface Resolver {
@@ -296,11 +395,32 @@ function aliasBase(specifier: string, aliases: readonly TsconfigAlias[]): string
   return bases;
 }
 
+/** NodeNext: a `.js`-style specifier names the emitted file; the source is tried in this order. */
+const NODENEXT_REWRITES: readonly (readonly [string, readonly string[]])[] = [
+  [".js", [".ts", ".tsx"]],
+  [".mjs", [".mts"]],
+  [".cjs", [".cts"]],
+  [".jsx", [".tsx"]],
+];
+
+const PACKAGE_INDEX_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mts"] as const;
+
+/** String leaves of a package.json `exports` entry, `types` condition first. */
+function collectExportTargets(value: unknown, out: string[], depth: number): void {
+  if (typeof value === "string") out.push(value);
+  else if (isObj(value) && depth < 4) {
+    if ("types" in value) collectExportTargets(value["types"], out, depth + 1);
+    for (const [k, v] of Object.entries(value)) if (k !== "types") collectExportTargets(v, out, depth + 1);
+  }
+}
+
 /**
  * Creates a resolver for relative specifiers and tsconfig path aliases.
  *
  * Resolution order (M7): exact path, then the eight TS/JS extensions, then `/index.<ext>`, then the
- * NodeNext `.js` -> `.ts` rewrite. Bare specifiers hit no alias are treated as external packages.
+ * NodeNext rewrite (`.js` -> `.ts`/`.tsx`, `.mjs` -> `.mts`, `.cjs` -> `.cts`, `.jsx` -> `.tsx`). Bare
+ * specifiers try tsconfig aliases (incl. the `baseUrl` catch-all), then workspace packages (entry or
+ * `name/subpath`, preferring `src/`); anything else is an external package.
  */
 export function createResolver(opts: ResolverOptions): Resolver {
   const aliases = opts.aliases ?? [];
@@ -322,11 +442,53 @@ export function createResolver(opts: ResolverOptions): Resolver {
       const index = `${base.replace(/\/+$/, "")}/index${ext}`;
       if (exists(index)) return index;
     }
-    if (base.endsWith(".js")) {
-      const rewritten = `${base.slice(0, -3)}.ts`;
-      if (exists(rewritten)) return rewritten;
+    const swap = NODENEXT_REWRITES.find(([from]) => base.endsWith(from));
+    if (swap !== undefined) {
+      for (const to of swap[1]) {
+        const rewritten = base.slice(0, -swap[0].length) + to;
+        if (exists(rewritten)) return rewritten;
+      }
     }
     return null;
+  };
+
+  let packages = opts.packages;
+  const resolvePackage = (pkg: WorkspacePackage, subpath: string): string | null => {
+    const dir = pkg.dir;
+    if (subpath !== "") {
+      return resolveBase(normalizePath(`${dir}/src/${subpath}`)) ?? resolveBase(normalizePath(`${dir}/${subpath}`));
+    }
+    for (const prefix of [`${dir}/src/index`, `${dir}/index`]) {
+      for (const ext of PACKAGE_INDEX_EXTENSIONS) if (exists(prefix + ext)) return prefix + ext;
+    }
+    const targets: string[] = [];
+    const manifest = pkg.manifest;
+    if (typeof manifest["types"] === "string") targets.push(manifest["types"]);
+    collectExportTargets(isObj(manifest["exports"]) && "." in manifest["exports"] ? manifest["exports"]["."] : manifest["exports"], targets, 0);
+    if (typeof manifest["main"] === "string") targets.push(manifest["main"]);
+    for (const raw of targets) {
+      const target = normalizeTarget(raw);
+      if (!insideRoot(target)) continue;
+      const m = /^dist\/(.*?)(?:\.d\.[mc]?ts|\.[mc]?jsx?)$/.exec(target);
+      if (m !== null) {
+        for (const ext of [".ts", ".tsx", ".mts"]) {
+          const src = `${dir}/src/${m[1]}${ext}`;
+          if (exists(src)) return src;
+        }
+      }
+      const direct = normalizePath(`${dir}/${target}`);
+      if (exists(direct)) return direct;
+    }
+    return null;
+  };
+  const workspaceBase = (specifier: string): { pkg: WorkspacePackage; subpath: string } | null => {
+    packages ??= loadWorkspacePackages(root, opts.host);
+    if (packages.size === 0) return null;
+    const parts = specifier.split("/");
+    const nameLen = specifier.startsWith("@") ? 2 : 1;
+    if (parts.length < nameLen) return null;
+    const pkg = packages.get(parts.slice(0, nameLen).join("/"));
+    return pkg === undefined ? null : { pkg, subpath: parts.slice(nameLen).join("/") };
   };
 
   return {
@@ -341,7 +503,8 @@ export function createResolver(opts: ResolverOptions): Resolver {
         const resolved = resolveBase(base);
         if (resolved !== null) return resolved;
       }
-      return null;
+      const ws = workspaceBase(clean);
+      return ws === null ? null : resolvePackage(ws.pkg, ws.subpath);
     },
   };
 }
