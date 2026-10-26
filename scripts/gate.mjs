@@ -2,6 +2,7 @@
 // Deterministic pre-merge gate: mechanical checks on a branch plus a risk tier, printed as a short evidence block.
 //
 //   node scripts/gate.mjs [--base main] [--head <ref>] [--plan <plan.md>] [--run-check] [--merge [--findings <findings.md>]]
+//   With --merge the worktree must be clean (everything committed), since the merge takes only commits.
 //   node scripts/gate.mjs --tiers        (print the tier table; REVIEW.md points here)
 //
 // Run from a worktree. Without --head the working tree is compared (committed + uncommitted + untracked).
@@ -165,6 +166,12 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
   const results = []; // { name, verdict: PASS|FAIL|EYES|SKIP, reason, items }
   const add = (name, verdict, reason, items = []) => results.push({ name, verdict, reason, items });
   const bad = (name, list, reason, verdict = "FAIL") => (list.length ? add(name, verdict, `${list.length} ${reason}`, list) : null);
+
+  // 0. Committed: a merge takes the branch commits, so with --merge the worktree must hold nothing uncommitted.
+  if (values.merge && !values.head) {
+    const dirty = git(["status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"]).split("\n").filter(Boolean).map((l) => l.slice(3));
+    if (!bad("committed", dirty, "uncommitted or untracked file(s); a merge would leave them out")) add("committed", "PASS", "worktree clean");
+  }
 
   // 1. Up to date
   if (mb === baseSha) add("up-to-date", "PASS", `merge-base is ${values.base} head`);

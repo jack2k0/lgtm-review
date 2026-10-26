@@ -269,6 +269,33 @@ describe("scripts/gate.mjs", () => {
     expect(ok.out).toMatch(/2 finding\(s\): 1 fixed, 0 rejected, 1 deferred/);
   });
 
+  test("--merge fails on uncommitted or untracked files; without --merge they only count as changes", () => {
+    const d = repo({}, { "docs/a.md": "hi\n" });
+    writeFileSync(join(d, "docs/a.md"), "changed\n");
+    writeFileSync(join(d, "docs/new.md"), "n\n");
+    const r = gate(d, ["--merge"]);
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/FAIL committed: 2 uncommitted or untracked file/);
+    expect(r.out).toContain("docs/new.md");
+    expect(gate(d).out).not.toMatch(/committed/);
+    git(d, "add", "-A");
+    git(d, "commit", "-qm", "c");
+    expect(gate(d, ["--merge"]).out).toMatch(/PASS committed: worktree clean/);
+  });
+
+  test("--merge sees a dirty submodule even when .gitmodules says ignore = all", () => {
+    const sub = repo({}, {});
+    const d = repo({}, {});
+    git(d, "-c", "protocol.file.allow=always", "submodule", "add", "-q", sub, "libs/x");
+    git(d, "config", "-f", ".gitmodules", "submodule.libs/x.ignore", "all");
+    git(d, "add", "-A");
+    git(d, "commit", "-qm", "sub");
+    writeFileSync(join(d, "libs/x/README.md"), "dirty\n");
+    const r = gate(d, ["--merge"]);
+    expect(r.out).toMatch(/FAIL committed: 1 uncommitted/);
+    expect(r.out).toContain("libs/x");
+  });
+
   test("--tiers prints the table with reviewer counts", () => {
     const r = gate(repo({}, {}), ["--tiers"]);
     expect(r.code).toBe(0);
