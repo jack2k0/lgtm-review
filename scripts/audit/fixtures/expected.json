@@ -1,0 +1,146 @@
+{
+ "prompts": [
+  {
+   "label": "edit then test passes",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "edit and no check",
+   "status": "unchecked",
+   "reason": "u-nocheck"
+  },
+  {
+   "label": "edit then test fails",
+   "status": "failing",
+   "reason": "f-failed"
+  },
+  {
+   "label": "edit, test, edit again",
+   "status": "unchecked",
+   "reason": "u-after"
+  },
+  {
+   "label": "edit, test, doc edit",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "only documentation",
+   "status": "no-changes",
+   "reason": "nc-doc"
+  },
+  {
+   "label": "shell-written documentation",
+   "status": "no-changes",
+   "reason": "nc-doc"
+  },
+  {
+   "label": "scratch file only",
+   "status": "no-changes",
+   "reason": "nc-scratch"
+  },
+  {
+   "label": "masked failure text",
+   "status": "failing",
+   "reason": "f-failed"
+  },
+  {
+   "label": "masked pass",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "check then merge",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "only git operations",
+   "status": "no-changes",
+   "reason": "nc-git"
+  },
+  {
+   "label": "heredoc write then check in one command",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "check then write in one command",
+   "status": "unchecked",
+   "reason": "u-after"
+  },
+  {
+   "label": "failed edit does not count",
+   "status": "no-changes",
+   "reason": "nc-none"
+  },
+  {
+   "label": "no edits at all",
+   "status": "no-changes",
+   "reason": "nc-none"
+  },
+  {
+   "label": "failed check then fix, no recheck",
+   "status": "unchecked",
+   "reason": "u-after"
+  },
+  {
+   "label": "lint and typecheck scripts",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "syntax-only shell check is not a check",
+   "status": "unchecked",
+   "reason": "u-nocheck"
+  },
+  {
+   "label": "python heredoc writes a markdown file",
+   "status": "no-changes",
+   "reason": "nc-doc"
+  },
+  {
+   "label": "git mv and sed on markdown in one command",
+   "status": "no-changes",
+   "reason": "nc-doc"
+  },
+  {
+   "label": "code edit, check, then markdown heredoc write",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "check, then markdown write in the same command",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "background check completes",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "background check never reports",
+   "status": "unchecked",
+   "reason": "u-incomplete"
+  },
+  {
+   "label": "slash command turn",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "delegate to subagent",
+   "status": "checked",
+   "reason": "c-passed"
+  }
+ ],
+ "fork": {
+  "session": "22222222-2222-4222-8222-222222222222",
+  "newPrompt": {
+   "status": "checked",
+   "reason": "c-passed"
+  }
+ }
+}
