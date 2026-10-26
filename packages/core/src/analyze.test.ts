@@ -594,6 +594,9 @@ describe("scoped checks (FR-017)", () => {
   const P = "/home/user/project";
   const WEB = `${P}/packages/web/src/a.ts`;
   const CORE = `${P}/packages/core/src/b.ts`;
+  const WEB_INDEX = `${P}/packages/web/src/index.ts`;
+  const CORE_INDEX = `${P}/packages/core/src/index.ts`;
+  const BILLING = `${P}/packages/billing/api/handler.ts`;
 
   const withCwd = (line: string, cwd: string): string => {
     const o = JSON.parse(line) as Record<string, unknown>;
@@ -677,6 +680,61 @@ describe("scoped checks (FR-017)", () => {
     expect(p.reason).toBe("pnpm test passed after last code edit (scoped to packages/web); 1 documentation edit after it");
     expect(scoped(p)).toEqual([CORE]);
     expect(p.hints.some((h) => (h.path ?? "").endsWith("README.md"))).toBe(false);
+  });
+
+  test("SC-9: a cd inside a subshell does not leak into a later full run", () => {
+    const p = one([prompt("q"), ...edit("e1", WEB), ...edit("e2", CORE), ...bash("b1", "(cd packages/web && pnpm test) && pnpm test")]);
+    expect(p.status).toBe("checked");
+    expect(p.reason).toBe("pnpm test + pnpm test passed after last edit");
+    expect(scoped(p)).toEqual([]);
+  });
+
+  test("SC-10: one-file eslint/tsc runs only cover that file", () => {
+    for (const command of ["eslint packages/web/src/index.ts", "tsc --noEmit packages/web/src/index.ts"]) {
+      const p = one([prompt("q"), ...edit("e1", CORE_INDEX), ...bash("b1", command)]);
+      expect(p.status).toBe("checked");
+      expect(p.reason).toBe(`${command} passed after last edit (scoped to packages/web/src/index.ts)`);
+      expect(scoped(p)).toEqual([CORE_INDEX]);
+    }
+  });
+
+  test("SC-11: a test-package root does not cover a sibling package", () => {
+    const p = one([prompt("q"), ...edit("e1", CORE), ...bash("b1", "pnpm exec vitest run packages/e2e")]);
+    expect(p.status).toBe("checked");
+    expect(p.reason).toBe("vitest run packages/e2e passed after last edit (scoped to packages/e2e)");
+    expect(scoped(p)).toEqual([CORE]);
+  });
+
+  test("SC-12: a root-level test directory does not cover a sibling package's directory", () => {
+    const p = one([prompt("q"), ...edit("e1", BILLING), ...bash("b1", "pnpm exec vitest run tests/api")]);
+    expect(p.status).toBe("checked");
+    expect(p.reason).toBe("vitest run tests/api passed after last edit (scoped to tests/api)");
+    expect(scoped(p)).toEqual([BILLING]);
+  });
+
+  test("SC-13: pnpm -r is unscoped even from a package cwd", () => {
+    const p = one([prompt("q"), ...edit("e1", CORE), ...bashFrom("b1", `${P}/packages/web`, "pnpm -r test")]);
+    expect(p.status).toBe("checked");
+    expect(p.reason).toBe("pnpm -r test passed after last edit");
+    expect(scoped(p)).toEqual([]);
+  });
+
+  test("SC-14: a glob package filter is not used as a literal scope", () => {
+    const p = one([prompt("q"), ...edit("e1", WEB), ...edit("e2", CORE), ...bash("b1", "pnpm --filter './packages/*' test")]);
+    expect(p.status).toBe("checked");
+    expect(p.reason).toBe("pnpm --filter './packages/*' test passed after last edit");
+    expect(scoped(p)).toEqual([]);
+  });
+
+  test("SC-15: npm --prefix after the script and make -C<dir> are scoped", () => {
+    const npm = one([prompt("q"), ...edit("e1", CORE), ...bash("b1", "npm test --prefix packages/web")]);
+    expect(npm.status).toBe("checked");
+    expect(npm.reason).toBe("npm test --prefix packages/web passed after last edit (scoped to packages/web)");
+    expect(scoped(npm)).toEqual([CORE]);
+    const make = one([prompt("q"), ...edit("e1", CORE), ...bash("b1", "make -Cpackages/web test")]);
+    expect(make.status).toBe("checked");
+    expect(make.reason).toBe("make -Cpackages/web test passed after last edit (scoped to packages/web)");
+    expect(scoped(make)).toEqual([CORE]);
   });
 });
 
