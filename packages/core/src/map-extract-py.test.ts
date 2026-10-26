@@ -165,6 +165,19 @@ describe("extractPythonImports", () => {
     ]);
   });
 
+  test("consumes CRLF line continuation inside a string (S-20 review fix)", () => {
+    const src = 's = "query = \\\r\nimport fake\r\n"';
+    expect(extractPythonImports(src)).toEqual([]);
+  });
+
+  test("extracts normal imports from a CRLF file (S-20 review fix)", () => {
+    const src = ["import os", "from sys import path"].join("\r\n");
+    expect(extractPythonImports(src)).toEqual([
+      { module: "os", names: [], line: 1 },
+      { module: "sys", names: ["path"], line: 2 },
+    ]);
+  });
+
   test("extracts imports inside indented scopes (functions, TYPE_CHECKING)", () => {
     const src = [
       "if TYPE_CHECKING:",
