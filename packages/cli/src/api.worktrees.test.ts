@@ -142,3 +142,76 @@ describe("sessions across worktrees", () => {
     expect(r.json.sessions[0].worktree).toBeUndefined();
   });
 });
+
+describe("worktree labels and the analysis cache", () => {
+  let root: string;
+  let repoDir: string;
+  let wtDir: string;
+  let projectsDir: string;
+  let labelSrv: RunningServer;
+  let mainFile: string;
+
+  beforeAll(async () => {
+    root = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-api-label-")));
+    repoDir = join(root, "repo");
+    wtDir = join(root, "wt");
+    projectsDir = join(root, "projects");
+    mkdirSync(repoDir);
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repoDir });
+    write(repoDir, "src/main.ts", "export const m = 1;\n");
+    git(repoDir, "add", "-A");
+    git(repoDir, "commit", "-q", "-m", "init");
+    git(repoDir, "worktree", "add", "-q", wtDir, "-b", "feature");
+
+    // Only the linked worktree has a session at start-up.
+    const wtProjects = projectDirFor(wtDir, projectsDir);
+    mkdirSync(wtProjects, { recursive: true });
+    writeFileSync(join(wtProjects, "label-wt.jsonl"), session("label-wt", wtDir, "worktree work", "src/main.ts"));
+    mainFile = join(projectDirFor(repoDir, projectsDir), "label-main.jsonl");
+
+    const roots = await sessionRoots(wtDir, projectsDir, null, { worktrees: true });
+    labelSrv = await startServer({ dir: wtDir, projectsDir, roots, webRoot: join(root, "no-web") });
+  });
+
+  afterAll(async () => {
+    await labelSrv?.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("a label change refreshes cached analyses and summaries", async () => {
+    // One contributing root: no label yet. These responses prime the cache.
+    const before = await get(labelSrv, "/api/sessions");
+    expect(before.status).toBe(200);
+    expect(before.json.sessions).toHaveLength(1);
+    expect(before.json.sessions[0]).toMatchObject({ id: "label-wt" });
+    expect(before.json.sessions[0].worktree).toBeUndefined();
+    const beforeDetail = await get(labelSrv, "/api/sessions/label-wt");
+    expect(beforeDetail.status).toBe(200);
+    expect(beforeDetail.json.worktree).toBeUndefined();
+
+    // A session in the main checkout makes the linked worktree a second root.
+    mkdirSync(dirname(mainFile), { recursive: true });
+    writeFileSync(mainFile, session("label-main", repoDir, "main work", "src/main.ts"));
+
+    const after = await get(labelSrv, "/api/sessions");
+    expect(after.status).toBe(200);
+    const byId = Object.fromEntries(after.json.sessions.map((x: any) => [x.id, x]));
+    expect(byId["label-main"].worktree).toBe(".");
+    expect(byId["label-wt"].worktree).toBe("../wt");
+    const afterDetail = await get(labelSrv, "/api/sessions/label-wt");
+    expect(afterDetail.status).toBe(200);
+    expect(afterDetail.json.worktree).toBe("../wt");
+
+    // Removing the main session drops the label again; the cached analysis must drop it too.
+    rmSync(mainFile);
+    const removed = await get(labelSrv, "/api/sessions");
+    expect(removed.status).toBe(200);
+    expect(removed.json.sessions).toHaveLength(1);
+    expect(removed.json.sessions[0].worktree).toBeUndefined();
+    expect("worktree" in removed.json.sessions[0]).toBe(false);
+    const removedDetail = await get(labelSrv, "/api/sessions/label-wt");
+    expect(removedDetail.status).toBe(200);
+    expect(removedDetail.json.worktree).toBeUndefined();
+    expect("worktree" in removedDetail.json).toBe(false);
+  });
+});
