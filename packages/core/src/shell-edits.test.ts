@@ -132,44 +132,6 @@ describe("classifyShellMutation: order and paths", () => {
     expect(classifyShellMutation("sed -i s/a/b/ x.js").hasCd).toBe(false);
   });
 
-  test("hasHidingGitOp detects in-command hiding git operations", () => {
-    const hiding = [
-      "git commit -m msg",
-      "git commit -am fix",
-      "git stash",
-      "git stash pop",
-      "git checkout main",
-      "git checkout -b feat",
-      "git switch feat",
-      "git restore src/a.ts",
-      "git reset --hard",
-      "git rebase main",
-      "git merge feat",
-      "git cherry-pick 123abc4",
-      "git am fix.patch",
-      "git apply fix.patch",
-      "sed -i s/a/b/ x.js && git commit -am m",
-    ];
-    for (const cmd of hiding) {
-      expect(classifyShellMutation(cmd).hasHidingGitOp, cmd).toBe(true);
-    }
-
-    const nonHiding = [
-      "git apply --check fix.patch",
-      "git apply --stat fix.patch",
-      "git status",
-      "git log",
-      "git diff",
-      "git add file.js",
-      "mvn compile | tee output.txt",
-      "pnpm test",
-      "sed -i s/a/b/ x.js",
-    ];
-    for (const cmd of nonHiding) {
-      expect(classifyShellMutation(cmd).hasHidingGitOp, cmd).toBe(false);
-    }
-  });
-
   test("resolveTarget", () => {
     expect(resolveTarget("src/x.js", "/home/u/p", false)).toBe("/home/u/p/src/x.js");
     expect(resolveTarget("./src/../x.js", "/home/u/p", false)).toBe("/home/u/p/x.js");

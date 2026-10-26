@@ -113,8 +113,8 @@
   {
     "index": 3,
     "text": "Write a file with a heredoc, then test, in one command.",
-    "status": "no-changes",
-    "reason": "no edits",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit (shell edits may be incomplete)",
     "headline": "Mostly checking (100%), 1 check",
     "startedAt": "2026-01-01T00:00:10.000Z",
     "activeMs": 2000,
@@ -137,7 +137,9 @@
             "ts": "2026-01-01T00:00:11.000Z"
           }
         ],
-        "files": [],
+        "files": [
+          "/home/user/project/src/new.js"
+        ],
         "check": {
           "command": "cat > src/new.js <<'EOF' export const x = 1; EOF pnpm test",
           "exitCode": 0,

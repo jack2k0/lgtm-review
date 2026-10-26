@@ -19,8 +19,8 @@
     },
     {
       "index": 3,
-      "expectedStatus": "no-changes",
-      "note": "heredoc write before check without in-command git ops, empty bashEditDiff is trusted: no edits"
+      "expectedStatus": "checked",
+      "note": "heredoc write before the check in one command, empty diff: the edit precedes the check"
     },
     {
       "index": 4,

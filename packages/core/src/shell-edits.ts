@@ -28,27 +28,11 @@ export interface ShellMutation {
   order: "before-check" | "after-check" | "unknown";
   /** The command changes directory: relative targets cannot be resolved against the session cwd. */
   hasCd: boolean;
-  /** The command contains a git operation that can hide edits (commit, stash, checkout/switch/restore, reset, rebase, merge, cherry-pick, am, apply). */
-  hasHidingGitOp: boolean;
 }
 
-const NONE: ShellMutation = { edits: [], gitOnly: false, order: "unknown", hasCd: false, hasHidingGitOp: false };
+const NONE: ShellMutation = { edits: [], gitOnly: false, order: "unknown", hasCd: false };
 const FILES_MAX = 20;
 const GIT_OPS = new Set(["merge", "rebase", "pull", "checkout", "stash", "cherry-pick", "mv", "restore", "reset"]);
-/** Git operations that can hide file modifications from the working-tree snapshot. */
-export const HIDING_GIT_OPS = new Set([
-  "commit",
-  "stash",
-  "checkout",
-  "switch",
-  "restore",
-  "reset",
-  "rebase",
-  "merge",
-  "cherry-pick",
-  "am",
-  "apply",
-]);
 
 interface Word {
   text: string;
@@ -363,7 +347,6 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
     let anyMutating = false;
     let anyPlain = false;
     let hasCd = false;
-    let hasHidingGitOp = false;
     let prevCheck = false;
     let prevPipe = false;
     segs.forEach((seg, i) => {
@@ -371,14 +354,6 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
       const { words, redirects } = parseWords(normalizeFirstToken(stripPrefixes(seg.text)));
       const head = words[0]?.text;
       if (head === "cd" || head === "pushd") hasCd = true;
-      const git = gitSub(words);
-      if (
-        git !== null &&
-        HIDING_GIT_OPS.has(git.sub) &&
-        (git.sub !== "apply" || !git.args.some((w) => GIT_APPLY_READONLY.has(w.text)))
-      ) {
-        hasHidingGitOp = true;
-      }
       const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, command);
       prevCheck = isCheck;
       prevPipe = seg.op === "|";
@@ -396,13 +371,13 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
         edits.push({ file: f, gitOp: m.gitOp });
       }
     });
-    if (!anyMutating) return { edits: [], gitOnly: false, order: "unknown", hasCd, hasHidingGitOp };
+    if (!anyMutating) return NONE;
     let order: ShellMutation["order"] = "unknown";
     if (checkIdx.length > 0 && plainIdx.length > 0) {
       const lastCheck = checkIdx[checkIdx.length - 1] as number;
       order = plainIdx.some((i) => i > lastCheck) ? "after-check" : "before-check";
     }
-    return { edits, gitOnly: !anyPlain, order, hasCd, hasHidingGitOp };
+    return { edits, gitOnly: !anyPlain, order, hasCd };
   } catch {
     return NONE;
   }
