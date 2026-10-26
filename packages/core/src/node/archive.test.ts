@@ -1,10 +1,10 @@
 import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
-import { stat } from "node:fs/promises";
+import { lstat, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { archiveDirFor, archiveSessions, defaultArchiveRoot } from "./archive.js";
-import { discoverAllSessions } from "./discover.js";
+import { discoverAllSessions, discoverRootSessions } from "./discover.js";
 import { analyzeFile } from "./read.js";
 
 function withTmp<T>(fn: (dir: string) => Promise<T> | T): Promise<T> {
@@ -245,5 +245,139 @@ describe("discoverAllSessions", () => {
       expect(found).toHaveLength(1);
       expect(found[0].id).toBe("old-sess");
       expect(found[0].archived).toBe(true);
+    }));
+});
+
+describe("archiveSessions safety", () => {
+  const setup = (dir: string) => {
+    const projectDir = join(dir, "live");
+    const archiveDir = join(dir, "archive");
+    mkdirSync(projectDir, { recursive: true });
+    return { projectDir, archiveDir };
+  };
+
+  test("skips a symlinked <id> directory and a symlinked subagents directory", () =>
+    withTmp(async (dir) => {
+      const { projectDir, archiveDir } = setup(dir);
+      const outside = join(dir, "outside");
+      mkdirSync(join(outside, "subagents"), { recursive: true });
+      writeFileSync(join(outside, "subagents", "agent-x.jsonl"), "secret\n");
+      writeFileSync(join(projectDir, "a1.jsonl"), "{}\n");
+      symlinkSync(outside, join(projectDir, "a1"));
+      writeFileSync(join(projectDir, "b1.jsonl"), "{}\n");
+      mkdirSync(join(projectDir, "b1"));
+      symlinkSync(join(outside, "subagents"), join(projectDir, "b1", "subagents"));
+
+      const r = await archiveSessions(projectDir, archiveDir);
+      expect(r.copied).toBe(2);
+      expect(r.warnings.some((w) => w.includes("a1: symlink skipped"))).toBe(true);
+      expect(r.warnings.some((w) => w.includes("b1/subagents: symlink skipped"))).toBe(true);
+      expect(readdirSync(archiveDir).sort()).toEqual(["a1.jsonl", "b1.jsonl"]);
+    }));
+
+  test("never replaces a larger archived copy with a smaller source", () =>
+    withTmp(async (dir) => {
+      const { projectDir, archiveDir } = setup(dir);
+      writeFileSync(join(projectDir, "s.jsonl"), "line1\nline2\nline3\n");
+      await archiveSessions(projectDir, archiveDir);
+      writeFileSync(join(projectDir, "s.jsonl"), "line1\n");
+      const r = await archiveSessions(projectDir, archiveDir);
+      expect(r.copied).toBe(0);
+      expect(r.warnings.some((w) => w.includes("larger than the source"))).toBe(true);
+      expect(readFileSync(join(archiveDir, "s.jsonl"), "utf8")).toBe("line1\nline2\nline3\n");
+    }));
+
+  test("skips invalid session ids and subagent names", () =>
+    withTmp(async (dir) => {
+      const { projectDir, archiveDir } = setup(dir);
+      writeFileSync(join(projectDir, "...jsonl"), "{}\n");
+      writeFileSync(join(projectDir, ".jsonl"), "{}\n");
+      writeFileSync(join(projectDir, "a b.jsonl"), "{}\n");
+      writeFileSync(join(projectDir, "ok-1_x.jsonl"), "{}\n");
+      const r = await archiveSessions(projectDir, archiveDir);
+      expect(r.copied).toBe(1);
+      expect(r.warnings.filter((w) => w.includes("invalid session id"))).toHaveLength(3);
+      expect(readdirSync(archiveDir)).toEqual(["ok-1_x.jsonl"]);
+      expect(readdirSync(dir).sort()).toEqual(["archive", "live"]);
+    }));
+
+  test("refuses to write through symlinked destination directories and files", () =>
+    withTmp(async (dir) => {
+      const { projectDir, archiveDir } = setup(dir);
+      const outside = join(dir, "outside");
+      mkdirSync(outside);
+      mkdirSync(archiveDir);
+      for (const id of ["d1", "d2"]) {
+        writeFileSync(join(projectDir, `${id}.jsonl`), "{}\n");
+        mkdirSync(join(projectDir, id, "subagents"), { recursive: true });
+        writeFileSync(join(projectDir, id, "subagents", "agent-a.jsonl"), "x\n");
+      }
+      symlinkSync(outside, join(archiveDir, "d1"));
+      mkdirSync(join(archiveDir, "d2"));
+      symlinkSync(outside, join(archiveDir, "d2", "subagents"));
+      writeFileSync(join(dir, "target.jsonl"), "keep\n");
+      writeFileSync(join(projectDir, "f1.jsonl"), "{}\n");
+      symlinkSync(join(dir, "target.jsonl"), join(archiveDir, "f1.jsonl"));
+
+      const r = await archiveSessions(projectDir, archiveDir);
+      expect(readdirSync(outside)).toEqual([]);
+      expect(readFileSync(join(dir, "target.jsonl"), "utf8")).toBe("keep\n");
+      expect(r.warnings.filter((w) => w.includes("symlink")).length).toBeGreaterThanOrEqual(3);
+    }));
+
+  test.skipIf(process.platform === "win32")("temp file is created 0600 (not chmod'ed afterwards)", () =>
+    withTmp(async (dir) => {
+      const { projectDir, archiveDir } = setup(dir);
+      writeFileSync(join(projectDir, "s.jsonl"), "{}\n", { mode: 0o644 });
+      const oldMask = process.umask(0);
+      try {
+        await archiveSessions(projectDir, archiveDir);
+      } finally {
+        process.umask(oldMask);
+      }
+      expect((await lstat(join(archiveDir, "s.jsonl"))).mode & 0o777).toBe(0o600);
+      // the temp file must already be 0600 when created: umask 0 would make copyFile produce 0644
+      const src = readFileSync(new URL("./archive.ts", import.meta.url), "utf8");
+      expect(src).toContain("0o600)");
+      expect(src).not.toContain("copyFile");
+    }));
+
+  test("does not archive a subagent transcript whose meta.json cannot be copied, copies metas", () =>
+    withTmp(async (dir) => {
+      const { projectDir, archiveDir } = setup(dir);
+      writeFileSync(join(projectDir, "s.jsonl"), "{}\n");
+      const sub = join(projectDir, "s", "subagents");
+      mkdirSync(sub, { recursive: true });
+      writeFileSync(join(sub, "agent-a.jsonl"), "a\n");
+      writeFileSync(join(sub, "agent-a.meta.json"), "{}");
+      writeFileSync(join(sub, "agent-b.jsonl"), "b\n");
+      writeFileSync(join(sub, "agent-b.meta.json"), "{}");
+      // block agent-b's meta copy: archive-side symlink
+      mkdirSync(join(archiveDir, "s", "subagents"), { recursive: true });
+      writeFileSync(join(dir, "t"), "x");
+      symlinkSync(join(dir, "t"), join(archiveDir, "s", "subagents", "agent-b.meta.json"));
+
+      const r = await archiveSessions(projectDir, archiveDir);
+      const got = readdirSync(join(archiveDir, "s", "subagents")).sort();
+      expect(got).toEqual(["agent-a.jsonl", "agent-a.meta.json", "agent-b.meta.json"]);
+      expect(r.warnings.some((w) => w.includes("agent-b.jsonl: meta.json not archived"))).toBe(true);
+    }));
+});
+
+describe("discoverRootSessions live vs archived", () => {
+  test("a live session in a later root wins over an archived copy in an earlier root", () =>
+    withTmp(async (dir) => {
+      const mk = (n: string) => ({ dir: join(dir, n), worktree: n, projectDir: join(dir, "pd", n), archiveDir: join(dir, "ad", n) });
+      const a = mk("a");
+      const b = mk("b");
+      mkdirSync(a.archiveDir, { recursive: true });
+      mkdirSync(b.projectDir, { recursive: true });
+      writeFileSync(join(a.archiveDir, "s1.jsonl"), "{}\n");
+      writeFileSync(join(b.projectDir, "s1.jsonl"), "{}\n");
+      mkdirSync(a.projectDir, { recursive: true });
+      const r = await discoverRootSessions([a, b]);
+      expect(r).toHaveLength(1);
+      expect(r[0]?.root).toBe(b.dir);
+      expect(r[0]?.archived).toBeUndefined();
     }));
 });

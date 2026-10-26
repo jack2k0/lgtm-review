@@ -108,14 +108,12 @@ export async function discoverAllSessions(
   return combined.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-/** Sessions of every root: live and archived (`discoverAllSessions` per root), tagged with `root`; an id seen in an earlier root wins; newest first like `discoverSessions`. */
+/** Sessions of every root: live and archived (`discoverAllSessions` per root), tagged with `root`; a live session wins over an archived one of the same id in any root, otherwise an id seen in an earlier root wins; newest first like `discoverSessions`. */
 export async function discoverRootSessions(
   roots: readonly SessionRoot[],
   warnings?: string[],
 ): Promise<SessionFile[]> {
-  const seen = new Set<string>();
-  const out: SessionFile[] = [];
-  let contributing = 0;
+  const byId = new Map<string, SessionFile>();
   for (const [i, root] of roots.entries()) {
     let files: SessionFile[];
     try {
@@ -126,16 +124,14 @@ export async function discoverRootSessions(
       warnings?.push(`${root.projectDir}: unreadable (${err instanceof Error ? err.message : "error"})`);
       continue;
     }
-    let added = 0;
     for (const f of files) {
-      if (seen.has(f.id)) continue;
-      seen.add(f.id);
-      out.push({ ...f, root: root.dir, worktree: root.worktree });
-      added++;
+      const prev = byId.get(f.id);
+      if (prev && !(prev.archived && !f.archived)) continue;
+      byId.set(f.id, { ...f, root: root.dir, worktree: root.worktree });
     }
-    if (added > 0) contributing++;
   }
-  if (contributing < 2) for (const f of out) delete f.worktree;
+  const out = [...byId.values()];
+  if (new Set(out.map((f) => f.root)).size < 2) for (const f of out) delete f.worktree;
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 

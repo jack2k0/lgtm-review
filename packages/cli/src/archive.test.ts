@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { symlinkSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -240,6 +240,38 @@ describe("E2E archive mirroring and reader integration", () => {
       } finally {
         await srv.close();
       }
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("--archive refuses unsafe archive dirs", () => {
+  test("archive dir inside the repository or the projects dir exits 1", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "lgtm-archive-unsafe-"));
+    try {
+      const repo = join(tmp, "repo");
+      const projectsDir = join(tmp, "projects");
+      mkdirSync(repo, { recursive: true });
+      mkdirSync(projectDirFor(repo, projectsDir), { recursive: true });
+      const base = ["--archive", "--no-worktrees", "--dir", repo, "--projects-dir", projectsDir];
+
+      let r = run([...base, "--archive-dir", join(repo, "nested", "arch")]);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("inside the repository");
+      expect(existsSync(join(repo, "nested"))).toBe(false);
+
+      r = run([...base, "--archive-dir", projectsDir]);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("projects dir");
+
+      // a symlink into the repo is resolved
+      symlinkSync(repo, join(tmp, "link"));
+      r = run([...base, "--archive-dir", join(tmp, "link", "arch")]);
+      expect(r.status).toBe(1);
+
+      r = run([...base, "--archive-dir", join(tmp, "ok-archive")]);
+      expect(r.status).toBe(0);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
