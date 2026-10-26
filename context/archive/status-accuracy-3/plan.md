@@ -91,7 +91,7 @@ POST after phases 1-3: A 85.5%, B 83.5% (from 74.0% / 68.9%); 27 disagreements l
 `scripts/audit/truth.py`: unwrap `flock` (and the other wrappers) for every runner, not only scripts; `git diff <file>` is not a check; a wait loop (`pgrep`/`sleep`/`until`) is not a check; expand `cd $VAR` from same-command assignments. One synthetic fixture case each in `scripts/audit/fixtures`, self-test green.
 - [x] done when: `node --test scripts/audit/audit.test.mjs` passes; gate exit 0/2.
 
-## Phase 4: Real-log audit (orchestrator only)
+## Phase 4: Real-log audit (orchestrator only) — done, see reviews/audit.md
 
 - PRE = main before this change, POST = branch: `node scripts/audit/compare.mjs` (aggregates only) and status transitions PRE→POST (counts only).
 - Target: A >= 95%, no category of the adjudication still above 2 rows; record in `context/changes/status-accuracy-3/reviews/audit.md`.
