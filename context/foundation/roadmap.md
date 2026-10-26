@@ -377,7 +377,7 @@ Moved out of Parked on 2026-10-25 (v0.3 extension):
 - **Parallel worktrees** (was: the MVP chain is strictly sequential; parallel pairs post-MVP, capped at 2 by review capacity) → superseded by "Parallel work rules (v0.3)": at most two slices in flight, schema-first rule.
 
 ## Done
-- **Review round S-12/S-13/S-14 and import map (2026-10-26)** — fixes incl. fork ownership on real logs and workspace-package imports in the map. Open: continued agents (SendMessage) attributed to the first prompt — needs a real-log format check.
+- **Review round S-12/S-13/S-14 and import map (2026-10-26)** — fixes incl. fork ownership on real logs and workspace-package imports in the map. Continued agents (SendMessage) now count in the continuing prompt (verified on real logs, 2026-10-26).
 - **v0.2 review round (2026-10-26)** — reviews of S-06 (redaction/export), S-15 (archive), S-16 (doc names) and fixes; no new FR. See `context/ORCHESTRATION.md`.
 - **v0.3 review round (2026-10-26)** — read-only reviews of S-17..S-21 and fixes (no new FR); `turbo`/`nx` task runners recognized as checks (FR-002). See `context/ORCHESTRATION.md`.
 
