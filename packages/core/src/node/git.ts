@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { isAbsolute, relative } from "node:path";
 import type { GitCrosscheckResponse, GitFileEntry } from "../schema.js";
 
 export type RunGit = (dir: string, args: readonly string[]) => Promise<string | null>;
@@ -37,30 +37,53 @@ export function parseStatusZ(out: string): { path: string; status: string }[] {
   return entries;
 }
 
-/** `git log --name-status --format=%x01%H`: a line starting with \x01 starts a commit; other non-empty lines are `<status>\t<path>` or `<R|C><score>\t<old>\t<new>` (the last field is the path, the first letter the status). The first occurrence of a path (newest commit) wins. */
+/** `git log -z --name-status --format=%x01%H`: NUL-separated tokens; a token starting with \x01 starts a commit; file entries are `<status>\0<path>` or for renames/copies (`R`/`C`) `<status>\0<old>\0<new>` (the new path is taken, the first letter is the status). Status tokens may have leading newlines from the commit format separator. The first occurrence of a path (newest commit) wins. */
 export function parseLogNameStatus(out: string): { commits: number; files: { path: string; status: string }[] } {
   if (out === "") return { commits: 0, files: [] };
   let commits = 0;
   const files: { path: string; status: string }[] = [];
   const seen = new Set<string>();
 
-  const lines = out.split(/\r?\n/);
-  for (const line of lines) {
-    if (line.startsWith("\x01")) {
-      commits++;
+  const parts = out.split("\0");
+  let i = 0;
+  while (i < parts.length) {
+    const token = parts[i];
+    if (token === "") {
+      i++;
       continue;
     }
-    if (line === "") continue;
-    const tabIdx = line.indexOf("\t");
-    if (tabIdx === -1) continue;
-    const firstField = line.slice(0, tabIdx);
-    const lastTabIdx = line.lastIndexOf("\t");
-    const path = line.slice(lastTabIdx + 1);
-    const status = firstField.charAt(0);
-    if (!status || !path) continue;
-    if (!seen.has(path)) {
-      seen.add(path);
-      files.push({ path, status });
+    if (token.startsWith("\x01")) {
+      commits++;
+      i++;
+      continue;
+    }
+    const trimmed = token.replace(/^[\r\n]+/, "");
+    if (trimmed === "") {
+      i++;
+      continue;
+    }
+    const status = trimmed.charAt(0);
+    const isRenameOrCopy = status === "R" || status === "C";
+    if (isRenameOrCopy) {
+      i++; // skip status, move to old path
+      if (i >= parts.length) break;
+      i++; // move to new path
+      if (i >= parts.length) break;
+      const path = parts[i];
+      i++; // move past new path
+      if (path && !seen.has(path)) {
+        seen.add(path);
+        files.push({ path, status });
+      }
+    } else {
+      i++; // skip status, move to path
+      if (i >= parts.length) break;
+      const path = parts[i];
+      i++; // move past path
+      if (path && !seen.has(path)) {
+        seen.add(path);
+        files.push({ path, status });
+      }
     }
   }
 
@@ -177,6 +200,7 @@ export async function gitCrosscheck(
       "-c",
       "core.quotePath=false",
       "log",
+      "-z",
       "--no-merges",
       "--name-status",
       "--format=%x01%H",
@@ -209,6 +233,31 @@ export async function gitCrosscheck(
     }
   } catch {
     // keep top
+  }
+  try {
+    const realTop = realpathSync(top);
+    const realDir = realpathSync(input.dir);
+    const rel = relative(realTop, realDir);
+    if (!rel.startsWith("..") && !isAbsolute(rel)) {
+      const normDir = input.dir === "/" ? "/" : input.dir.replace(/\/+$/, "");
+      if (rel === "") {
+        if (!roots.includes(normDir)) {
+          roots.push(normDir);
+        }
+      } else if (normDir.endsWith("/" + rel)) {
+        const logicalTop = normDir.slice(0, -("/" + rel).length) || "/";
+        if (!roots.includes(logicalTop)) {
+          roots.push(logicalTop);
+        }
+      } else if (normDir === rel) {
+        const logicalTop = "/";
+        if (!roots.includes(logicalTop)) {
+          roots.push(logicalTop);
+        }
+      }
+    }
+  } catch {
+    // keep existing roots
   }
 
   let outsideRepo = 0;
