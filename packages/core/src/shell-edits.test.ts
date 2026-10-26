@@ -29,7 +29,9 @@ describe("classifyShellMutation: edits", () => {
     ["python3 - <<'EOF'\nopen('src/a.py', 'w').write('x')\nEOF", ["src/a.py"]],
     ["python3 - <<'EOF'\nwith open(path, \"w\") as f:\n    f.write('x')\nEOF", [SHELL_EDIT_FILE]],
     ["python - <<EOF\nfrom pathlib import Path\nPath('a').write_text('x')\nEOF", [SHELL_EDIT_FILE]],
-    ["git mv a.js b.js", ["b.js"]],
+    ["git mv a.js b.js", ["a.js", "b.js"]],
+    ["git rm src/a.ts", ["src/a.ts"]],
+    ["git rm -r src/a.ts src/b.ts", ["src/a.ts", "src/b.ts"]],
   ])("%s", (cmd, expected) => {
     expect(files(cmd)).toEqual(expected);
   });
@@ -66,6 +68,8 @@ describe("classifyShellMutation: edits", () => {
     "echo \"a > b\"",
     "echo 'x' | grep '>'",
     "if [ 1 -gt 0 ]; then echo ok; fi",
+    "git rm --cached a.js",
+    "git rm -r --cached src/",
   ])("no edit: %s", (cmd) => {
     expect(files(cmd)).toEqual([]);
   });
@@ -96,6 +100,8 @@ describe("classifyShellMutation: git operations", () => {
     "git stash",
     "git cherry-pick abc",
     "git mv a b",
+    "git rm a b",
+    "git rm -r src/",
     "git restore x",
     "git reset --hard",
     "git fetch && git merge origin/main",
@@ -111,8 +117,18 @@ describe("classifyShellMutation: git operations", () => {
     },
   );
 
-  test("git mv carries the gitOp flag", () => {
-    expect(classifyShellMutation("git mv a.js b.js").edits).toEqual([{ file: "b.js", gitOp: true }]);
+  test("git mv carries the gitOp flag and kinds", () => {
+    expect(classifyShellMutation("git mv a.js b.js").edits).toEqual([
+      { file: "a.js", gitOp: true, kind: "D" },
+      { file: "b.js", gitOp: true, kind: "A" },
+    ]);
+  });
+
+  test("git rm records files as deleted (D) unless --cached", () => {
+    expect(classifyShellMutation("git rm src/a.ts").edits).toEqual([{ file: "src/a.ts", gitOp: true, kind: "D" }]);
+    expect(classifyShellMutation("git rm -r src/").edits).toEqual([{ file: "src/", gitOp: true, kind: "D" }]);
+    expect(classifyShellMutation("git rm --cached src/a.ts").edits).toEqual([]);
+    expect(classifyShellMutation("git rm -r --cached src/").edits).toEqual([]);
   });
 });
 

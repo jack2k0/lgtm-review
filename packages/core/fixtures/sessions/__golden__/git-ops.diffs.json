@@ -254,9 +254,9 @@
   },
   "6:/home/user/project/src/f.js": {
     "path": "/home/user/project/src/f.js",
-    "kind": "M",
+    "kind": "D",
     "truncated": false,
-    "maybeIncomplete": false,
+    "maybeIncomplete": true,
     "hunks": [
       {
         "header": "@@ -1,1 +1,1 @@",
@@ -275,7 +275,7 @@
   },
   "6:/home/user/project/src/g.js": {
     "path": "/home/user/project/src/g.js",
-    "kind": "M",
+    "kind": "A",
     "truncated": false,
     "maybeIncomplete": true,
     "hunks": []

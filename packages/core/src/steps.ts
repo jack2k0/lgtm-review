@@ -209,7 +209,12 @@ function mixTitle(acts: ActionRec[], cwd: string | null, fix: boolean): string {
       if (list.length <= 2) {
         for (const f of list) {
           const verb = f.kind === "A" ? "create" : f.kind === "D" ? "delete" : "edit";
-          const stats = f.kind === "A" ? `+${f.added}` : f.kind === "D" ? `-${f.removed}` : `+${f.added} -${f.removed}`;
+          const stats =
+            f.kind === "A" && f.removed === 0
+              ? `+${f.added}`
+              : f.kind === "D" && f.added === 0
+                ? `-${f.removed}`
+                : `+${f.added} -${f.removed}`;
           parts.push(`${verb} ${relPath(f.path, cwd)} (${stats})`);
         }
       } else {
