@@ -1,5 +1,5 @@
 import { isEnvFilePath, redact } from "@lgtm/core";
-import type { FileDiff, Hint, PromptAnalysis, PromptDetail, RedactOptions, Recommendation, SessionAnalysis, Severity, Status, Step, TimeSplit } from "@lgtm/core";
+import type { FileChange, FileDiff, Hint, PromptAnalysis, PromptDetail, RedactOptions, Recommendation, SessionAnalysis, Severity, Status, Step, TimeSplit } from "@lgtm/core";
 import { inheritedInfo, inheritedOthers } from "./format.js";
 import { EXPORT_CSS } from "./export-css.js";
 
@@ -185,15 +185,15 @@ export function renderExport(input: ExportInput, opts: ExportOptions): ExportRes
     return out.join("");
   }
 
-  function diffHtml(d: FileDiff): string {
+  function diffHtml(d: FileDiff, f?: FileChange): string {
     const env = isEnvFilePath(d.path);
-    let added = 0;
-    let removed = 0;
+    let hunkAdded = 0;
+    let hunkRemoved = 0;
     const hunks: string[] = [];
     for (const h of d.hunks) {
       for (const l of h.lines) {
-        if (l.t === "+") added++;
-        else if (l.t === "-") removed++;
+        if (l.t === "+") hunkAdded++;
+        else if (l.t === "-") hunkRemoved++;
       }
       // Redact the hunk as one text so multi-line constructs (private key blocks) are caught; the line count is preserved.
       let body = red(h.lines.map((l) => l.s).join("\n"), { envFile: env });
@@ -211,9 +211,13 @@ export function renderExport(input: ExportInput, opts: ExportOptions): ExportRes
       const rows = h.lines.map((l, i) => `<span class="dl ${l.t === "+" ? "dl-add" : l.t === "-" ? "dl-del" : "dl-ctx"}"><span class="dp">${l.t}</span>${escapeHtml(lines[i]!)}</span>`);
       hunks.push(`<span class="dl dl-hunk">${t(h.header)}</span>${rows.join("")}`);
     }
+    const added = f !== undefined ? f.added : hunkAdded;
+    const removed = f !== undefined ? f.removed : hunkRemoved;
+    const isTruncated = d.hunks.length > 0 && (hunkAdded < added || hunkRemoved < removed);
+    const truncatedNote = isTruncated ? " (diff truncated)" : "";
     const flags = [d.maybeIncomplete ? "may be incomplete (shell edits, removals and moves may be missing)" : "", d.truncated ? "truncated (lines or characters beyond the limits are not shown)" : ""].filter((x) => x !== "");
     return (
-      `<details class="diff-file"><summary><span class="kind kind-${d.kind}">${KIND_LABEL[d.kind]}</span> <code>${t(d.path)}</code> <span class="muted">${plural(d.hunks.length, "hunk")} +${added} -${removed}</span></summary>` +
+      `<details class="diff-file"><summary><span class="kind kind-${d.kind}">${KIND_LABEL[d.kind]}</span> <code>${t(d.path)}</code> <span class="muted">${plural(d.hunks.length, "hunk")} +${added} -${removed}${truncatedNote}</span></summary>` +
       `<p class="muted">Agent edits as recorded in the log, not the final git state.${flags.length > 0 ? " " + flags.join("; ") + "." : ""}</p>` +
       (d.hunks.length === 0 ? `<p class="muted">No changed lines were recorded for this file.</p>` : `<pre class="diff" tabindex="0"><span class="diff-body">${hunks.join("")}</span></pre>`) +
       `</details>`
@@ -225,7 +229,12 @@ export function renderExport(input: ExportInput, opts: ExportOptions): ExportRes
     const have = input.diffs.get(p.index) ?? [];
     const byPath = new Map(have.map((d) => [d.path, d]));
     const missing = p.files.filter((f) => !byPath.has(f.path)).length;
-    const parts = p.files.map((f) => byPath.get(f.path)).filter((d): d is FileDiff => d !== undefined).map(diffHtml);
+    const parts = p.files
+      .map((f) => {
+        const d = byPath.get(f.path);
+        return d !== undefined ? diffHtml(d, f) : undefined;
+      })
+      .filter((s): s is string => s !== undefined);
     const note = missing === 0 ? "" : `<p class="note">${opts.diffsCapped === true ? "Diffs omitted (size cap)" : "Diff not available"} for ${plural(missing, "file")}.</p>`;
     return `<h4>Diffs</h4>${parts.join("")}${note}`;
   }
