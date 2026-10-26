@@ -1,6 +1,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach } from "vitest";
+import { resetLastListRoute } from "../viewmodel";
 
 // React 19: mark the environment so act() flushes renders and effects.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -38,4 +39,5 @@ afterEach(async () => {
     m.container.remove();
   }
   window.location.hash = "";
+  resetLastListRoute();
 });

@@ -121,8 +121,44 @@ export function nextLimit(limit: number, total: number): number {
   return Math.min(total, limit + PROMPT_PAGE);
 }
 
+export type ListRoute = { kind: "list"; show?: "attention"; worktree?: string };
+
+let currentListRoute: ListRoute = { kind: "list" };
+let reachedFromList = false;
+
+export function getLastListRoute(): ListRoute {
+  return currentListRoute;
+}
+
+export function setLastListRoute(r: ListRoute): void {
+  currentListRoute = r;
+  reachedFromList = true;
+}
+
+export function resetLastListRoute(): void {
+  currentListRoute = { kind: "list" };
+  reachedFromList = false;
+}
+
+export function wasReachedFromList(): boolean {
+  return reachedFromList;
+}
+
+export function lastListHref(): string {
+  return routeHref(currentListRoute);
+}
+
+export function navigateToList(): void {
+  const href = lastListHref();
+  if (reachedFromList && typeof window !== "undefined" && window.location.replace) {
+    window.location.replace(href);
+  } else if (typeof window !== "undefined") {
+    window.location.hash = href;
+  }
+}
+
 export type Route =
-  | { kind: "list"; show?: "attention"; worktree?: string }
+  | ListRoute
   | { kind: "session"; id: string; show?: "attention" }
   | { kind: "steps"; id: string; index: number }
   | { kind: "diff"; id: string; index: number; path: string }
@@ -167,13 +203,16 @@ function parseListQuery(query: string): Route {
   };
 }
 
-/** Hash routes: `#/session/<id>`, `#/session/<id>/map`, `#/session/<id>/prompt/<index>[/map|play]`, `#/session/<id>/prompt/<index>/diff?path=<file>`; the list is `#/` or `#/?show=attention&worktree=<label>`; `?show=attention` also on the session route. Anything else is the list. */
+/** Hash routes: `#/session/<id>`, `#/session/<id>/map`, `#/session/<id>/prompt/<index>[/map|play]`, `#/session/<id>/prompt/<index>/diff?path=<file>`; the list is `#/` or `#/?show=attention&worktree=<label>`; `?show=attention` also on the session route (other queries default to show='all'). Anything else is the list. */
 export function parseRoute(hash: string): Route {
   if (hash.startsWith("#/?")) return parseListQuery(hash.slice(3));
-  const session = /^#\/session\/([^/?]+)\?show=attention$/.exec(hash);
+  const session = /^#\/session\/([^/?]+)(?:[?]([^#]*))?$/.exec(hash);
   if (session) {
     const id = decode(session[1]!);
-    return id === null ? { kind: "list" } : { kind: "session", id, show: "attention" };
+    if (id === null) return { kind: "list" };
+    return session[2] === "show=attention"
+      ? { kind: "session", id, show: "attention" }
+      : { kind: "session", id };
   }
   const m = /^#\/session\/([^/?]+)(?:\/prompt\/([^/?]+))?(?:\/(map|diff|play|git)(?:[?]([^#]*))?)?$/.exec(hash);
   if (!m) return { kind: "list" };
