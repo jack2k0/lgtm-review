@@ -61,6 +61,8 @@ brak
 
 - 2026-10-26 (cd. 7): status-accuracy-3 zmergowane (317f2f5, tier High): owinięte checki (`flock`/`ionice`/`setsid`/`stdbuf`), przypisanie plików gitowi w komendach mieszanych (z ostrożnym powrotem do starej reguły, gdy segment może pisać), cele zapisów heredoc/`$VAR`. Plan Opus, plan-review Agy, impl Sonnet, poprawki skryptu prawdy osobny Sonnet; przegląd Agy + Haiku z wzajemną weryfikacją, 2 rundy, 19 uwag (14 fixed, 3 rejected, 2 deferred). Audyt: 74,0%→90,8% (A), 68,9%→90,2% (B); ostrożność kosztowała ~4 pkt. Wpadka: rejestr i raport zostały niezacommitowane, a bramka liczyła worktree — naprawione u źródła: `gate.mjs --merge` odmawia przy niezacommitowanych plikach (gate-clean, 7b9564e, High, Haiku + Agy). Nie wypchnięte.
 
+- 2026-10-27: drobne niezablokowane pozycje (Agy, Gemini 3.8 Flash; 401 raz, ponowienie OK): README zgodne z CLI (0e65a79, Low, docs), statusy F-01/S-01..S-03 w roadmapie (41b0f5e), 10 nowych testów luk w core (35e92fb, Low, tylko testy, żaden nie padł = brak nowych błędów). Nie wypchnięte.
+
 ## Bramki
 - Npm publish: czeka na decyzję właściciela.
 
