@@ -252,8 +252,9 @@ export async function planImportMap(
       fp.update(`${p}:${st.mtimeMs}:${st.size}\0`);
     }
   }
-  // tsconfig files feed the resolver
-  for (const p of ["tsconfig.json", "tsconfig.base.json"]) {
+  // tsconfig and workspace manifests feed the resolver
+  const manifests = (listed ?? []).filter((p) => /^(?:[^/]+\/){1,2}package\.json$/.test(p.replaceAll("\\", "/"))).sort();
+  for (const p of ["tsconfig.json", "tsconfig.base.json", "package.json", "pnpm-workspace.yaml", ...manifests]) {
     const st = safeStat(p);
     fp.update(`${p}:${st === null ? "-" : `${st.mtimeMs}:${st.size}`}\0`);
   }
