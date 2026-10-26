@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, test } from "vitest";
 import { PromptTable } from "./PromptTable";
+import { SessionList } from "./SessionList";
 import { click, mount, press } from "./testing/dom";
-import { makePrompt, makeSession } from "./testing/fixtures";
+import { makePrompt, makeSession, makeSummary } from "./testing/fixtures";
 
 const inh = { inheritedFrom: "abcdef0123456789", status: "unchecked" as const };
 const warn = { rule: "config-change" as const, severity: "warn" as const, path: null, reason: "config" };
@@ -108,5 +109,20 @@ describe("prompt table triage", () => {
     expect(c.querySelector(".keys")?.textContent).toContain("Esc back to sessions");
     const d = await mount(<PromptTable session={clean()} show="attention" />);
     expect(d.querySelector(".keys")).toBeNull();
+  });
+
+  test("P9 Escape restores list filters from prior list view", async () => {
+    window.location.hash = "#/?show=attention&worktree=X";
+    const s1 = makeSummary({ id: "sess-own", worktree: "X", statusCounts: { checked: 0, unchecked: 1, failing: 0, "no-changes": 0 }, attentionCount: 1 });
+    const sMain = makeSummary({ id: "sess-main", worktree: ".", statusCounts: { checked: 1, unchecked: 0, failing: 0, "no-changes": 0 }, attentionCount: 0 });
+    const list = await mount(<SessionList data={{ dir: "/repo", sessions: [s1, sMain] }} show="attention" worktree="X" />);
+    const link = list.querySelector<HTMLAnchorElement>('a[href="#/session/sess-own"]')!;
+    expect(link).not.toBeNull();
+    await click(link);
+    window.location.hash = "#/session/sess-own";
+
+    await mount(<PromptTable session={session()} />);
+    await press("Escape", {}, document.body);
+    expect(window.location.hash).toBe("#/?show=attention&worktree=X");
   });
 });

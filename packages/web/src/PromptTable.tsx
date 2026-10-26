@@ -4,7 +4,7 @@ import { HintList, ReviewCell, RuleMarkers } from "./Hints";
 import { StatusTag } from "./StatusDot";
 import { TimeBar, TimeLegend } from "./TimeBar";
 import { attentionPrompts, escapeToList, needText, rowKey, type Show } from "./triage";
-import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, plural, routeHref, retainKeys, rulesByPath, shortPath, toggleKey, visiblePrompts, splitInherited } from "./viewmodel";
+import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, navigateToList, plural, routeHref, retainKeys, rulesByPath, shortPath, toggleKey, visiblePrompts, splitInherited } from "./viewmodel";
 
 /** Changed files of a prompt; each path links to its diff (the link carries the exact path from the list). */
 export function FileList({ sessionId, p }: { sessionId: string; p: PromptAnalysis }) {
@@ -126,7 +126,7 @@ export function PromptTable({ session, show = "all" }: { session: SessionAnalysi
     const on = (e: KeyboardEvent) => {
       if (escapeToList(e)) {
         e.preventDefault();
-        window.location.hash = routeHref({ kind: "list" });
+        navigateToList();
       }
     };
     window.addEventListener("keydown", on);

@@ -12,7 +12,7 @@ import { SessionList } from "./SessionList";
 import { StepsView } from "./StepsView";
 import { sessionStore } from "./token";
 import type { Show } from "./triage";
-import { parseRoute, routeHref, type Route } from "./viewmodel";
+import { lastListHref, parseRoute, routeHref, setLastListRoute, type Route } from "./viewmodel";
 
 function Status<T>({ res, back, backLabel = "← Back to steps", children }: { res: Load<T>; back?: string; backLabel?: string; children: (data: T) => React.ReactNode }) {
   const link = back ? <p><a href={back}>{backLabel}</a></p> : null;
@@ -31,7 +31,7 @@ function SessionView({ token, id, show }: { token: string | null; id: string; sh
   return (
     <>
       <p>
-        <a href={routeHref({ kind: "list" })}>&larr; All sessions</a>{" · "}
+        <a href={lastListHref()}>&larr; All sessions</a>{" · "}
         <a href={routeHref({ kind: "map", id, index: null })}>Map</a>{" · "}
         <a href={routeHref({ kind: "git", id })}>Git cross-check</a>
       </p>
@@ -123,9 +123,17 @@ function Routed({ token, route }: { token: string | null; route: Route }) {
 }
 
 export function App({ token }: { token: string | null }) {
-  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
+  const [route, setRoute] = useState<Route>(() => {
+    const r = parseRoute(window.location.hash);
+    if (r.kind === "list") setLastListRoute(r);
+    return r;
+  });
   useEffect(() => {
-    const on = () => setRoute(parseRoute(window.location.hash));
+    const on = () => {
+      const r = parseRoute(window.location.hash);
+      if (r.kind === "list") setLastListRoute(r);
+      setRoute(r);
+    };
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);

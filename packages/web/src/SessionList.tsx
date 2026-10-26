@@ -1,10 +1,15 @@
 import type { SessionsResponse } from "@lgtm/core";
 import { StatusDot } from "./StatusDot";
 import { needText, sessionAttention, type Show } from "./triage";
-import { formatStarted, plural, routeHref, statusCountItems } from "./viewmodel";
+import { formatStarted, plural, routeHref, setLastListRoute, statusCountItems } from "./viewmodel";
 import { hasWorktrees, worktreeLabels, worktreeName } from "./worktree";
 
 export function SessionList({ data, show = "all", worktree }: { data: SessionsResponse; show?: Show; worktree?: string }) {
+  setLastListRoute({
+    kind: "list",
+    ...(show === "attention" ? { show: "attention" } : {}),
+    ...(worktree !== undefined ? { worktree } : {}),
+  });
   if (data.sessions.length === 0) {
     return <p className="empty">No sessions found for {data.dir}</p>;
   }

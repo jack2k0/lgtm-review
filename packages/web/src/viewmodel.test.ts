@@ -2,7 +2,8 @@ import { describe, expect, test } from "vitest";
 import type { PromptAnalysis } from "@lgtm/core";
 import {
   PROMPT_PAGE, actionsLabel, checkOutcome, fileTotals, filesText, formatClock, formatDuration, formatStarted, formatStepDuration,
-  incompleteMarkers, nextLimit, parseRoute, phaseLabel, promptHeading, routeHref, statusCountItems, statusLabel, stepTitle,
+  getLastListRoute, incompleteMarkers, lastListHref, nextLimit, parseRoute, phaseLabel, promptHeading, resetLastListRoute,
+  routeHref, setLastListRoute, statusCountItems, statusLabel, stepTitle,
   retainKeys, splitInherited, timeBarText, timeSegments, toggleKey, visiblePrompts,
 } from "./viewmodel";
 
@@ -112,8 +113,20 @@ describe("attention routing", () => {
     expect(parseRoute("#/session/abc")).toStrictEqual({ kind: "session", id: "abc" });
   });
 
-  test("other queries and bad encodings fall back to the list", () => {
-    for (const h of ["#/session/x?show=all", "#/session/x?show=attention&y=1", "#/?show=bogus", "#/session/%E0%A4%A?show=attention"]) {
+  test("unknown session queries open the session with show=all (tolerant session query)", () => {
+    for (const h of [
+      "#/session/x?show=all",
+      "#/session/x?show=xyz",
+      "#/session/x?ref=x",
+      "#/session/x?",
+      "#/session/x?show=attention&y=1",
+    ]) {
+      expect(parseRoute(h), h).toStrictEqual({ kind: "session", id: "x" });
+    }
+  });
+
+  test("bad encodings and unknown list queries fall back to the list", () => {
+    for (const h of ["#/?show=bogus", "#/session/%E0%A4%A?show=attention", "#/session/%E0%A4%A?show=all"]) {
       expect(parseRoute(h), h).toStrictEqual({ kind: "list" });
     }
   });
@@ -299,8 +312,19 @@ describe("worktree routing", () => {
     ]) expect(parseRoute(h), h).toStrictEqual({ kind: "list" });
   });
 
-  test("session routes do not take the worktree parameter", () => {
-    expect(parseRoute("#/session/abc?worktree=.")).toStrictEqual({ kind: "list" });
+  test("session routes ignore the worktree parameter and open with show=all", () => {
+    expect(parseRoute("#/session/abc?worktree=.")).toStrictEqual({ kind: "session", id: "abc" });
+  });
+
+  test("remembering list route defaults to root list href and updates with filters", () => {
+    resetLastListRoute();
+    expect(getLastListRoute()).toStrictEqual({ kind: "list" });
+    expect(lastListHref()).toBe("#/");
+    setLastListRoute({ kind: "list", show: "attention", worktree: "wt-1" });
+    expect(getLastListRoute()).toStrictEqual({ kind: "list", show: "attention", worktree: "wt-1" });
+    expect(lastListHref()).toBe("#/?show=attention&worktree=wt-1");
+    resetLastListRoute();
+    expect(lastListHref()).toBe("#/");
   });
 });
 
