@@ -30,6 +30,9 @@ const NOT_CHECK: CommandClass = { isCheck: false, label: "", unreliable: false, 
 
 const CHECK_SCRIPT_NAMES = new Set(["test", "t", "lint", "typecheck", "check", "build", "tsc"]);
 const MAKE_TARGETS = new Set(["test", "check", "lint", "build"]);
+const JUST_RECIPES = new Set(["test", "check", "lint"]);
+/** Check tools that package managers run directly (`pnpm vitest`, `yarn eslint`, `bun tsc`). */
+const PM_CHECK_BINS = new Set(["tsc", "vitest", "jest", "eslint", "pytest", "py.test", "mypy", "ruff", "flake8", "golangci-lint", "biome", "bats", "shellcheck", "hadolint"]);
 /** Script names that count as checks by name alone (no repo listing needed; sessions often start outside the repo). */
 const SCRIPT_FILE_RE = /(^|\/)(check|test|lint|ci|verify|validate|gate|mutation|smoke)[^/\s]*\.sh$/;
 const LABEL_MAX = 80;
@@ -192,7 +195,9 @@ function tokens(s: string): string[] {
 }
 
 function hasHelpFlag(toks: string[]): boolean {
-  return toks.some((t) => t === "--help" || t === "-h" || t === "--version" || t === "-V");
+  // `-v` is the version flag of tsc and vitest only (pytest -v is verbose).
+  const lowerV = toks[0] === "tsc" || toks[0] === "vitest";
+  return toks.some((t) => t === "--help" || t === "-h" || t === "--version" || t === "-V" || (lowerV && t === "-v"));
 }
 
 /** `--dry-run` (and `make -n`) prints what would run instead of running it. */
@@ -202,7 +207,14 @@ function isDryRun(toks: string[]): boolean {
 
 /** `gh run watch` only fails the command with `--exit-status`; `ruff check --fix` edits files instead of checking. */
 function isExcludedForm(s: string, toks: string[]): boolean {
-  if (/^ruff\s+check\b/.test(s)) return toks.some((t) => t === "--fix" || t.startsWith("--fix-only") || t.startsWith("--fix="));
+  if (/^(?:python3?(?:\.\d+)?\s+(?:-\S+\s+)*-m\s+)?ruff\s+check\b/.test(s)) return toks.some((t) => t === "--fix" || t.startsWith("--fix-only") || t.startsWith("--fix="));
+  if (/^deno\s+lint\b/.test(s)) return toks.includes("--fix");
+  // Listing and collecting commands do not run any test.
+  if (/^(?:pytest|py\.test)(?:\s|$)/.test(s) || /^python3?(?:\.\d+)?\s+(?:-\S+\s+)*-m\s+pytest\b/.test(s)) return toks.some((t) => t === "--collect-only" || t === "--co");
+  if (/^jest(?:\s|$)/.test(s)) return toks.includes("--listTests");
+  if (/^vitest(?:\s|$)/.test(s)) return toks.slice(1).find((t) => !t.startsWith("-")) === "list";
+  if (/^cargo\s/.test(s)) return toks.includes("--no-run");
+  if (/^dotnet\s+test\b/.test(s)) return toks.includes("--list-tests");
   return false;
 }
 
@@ -309,7 +321,12 @@ function matchPackageManager(pm: string, toks: string[], repo: RepoScripts | und
   skipOptions();
   const word = toks[i];
   if (word === undefined) return false;
-  if (word === "exec" || word === "dlx") return matchSegment(toks.slice(i + 1).join(" "), repo);
+  if (word === "exec" || word === "dlx") {
+    i++;
+    if (toks[i] === "--") i++;
+    return matchSegment(toks.slice(i).join(" "), repo);
+  }
+  if (pm !== "npm" && PM_CHECK_BINS.has(word) && !repo?.packageScripts.includes(word)) return matchSegment(toks.slice(i).join(" "), repo);
   if (word === "turbo" || word === "nx") return matchTaskRunner(word, toks.slice(i), repo);
   if (word === "run" || word === "run-script") {
     i++;
@@ -335,6 +352,20 @@ function matchMake(toks: string[], repo: RepoScripts | undefined): boolean {
   return false;
 }
 
+function matchJust(toks: string[]): boolean {
+  const valueOpts = new Set(["-d", "-f", "--working-directory", "--justfile", "--chooser", "--color", "--shell"]);
+  for (let i = 1; i < toks.length; i++) {
+    const t = toks[i] as string;
+    if (t.startsWith("-")) {
+      if (valueOpts.has(t)) i++;
+      continue;
+    }
+    if (t.includes("=")) continue; // variable override (`just x=1 test`)
+    return JUST_RECIPES.has(t); // the first recipe decides; later words are its arguments
+  }
+  return false;
+}
+
 function matchScriptFile(toks: string[], repo: RepoScripts | undefined): boolean {
   let i = 0;
   if (/^(?:bash|sh|zsh)$/.test(toks[0] ?? "")) {
@@ -356,7 +387,8 @@ const SIMPLE_RES: RegExp[] = [
   /^(?:tsc|vitest|jest|eslint|pytest|py\.test|mypy|flake8|golangci-lint)(?:\s|$)/,
   /^biome\s+(?:check|lint|ci)\b/,
   /^node\s+(?:\S+\s+)*--test\b/,
-  /^python3?(?:\.\d+)?\s+(?:-\S+\s+)*-m\s+(?:pytest|unittest|mypy)\b/,
+  /^python3?(?:\.\d+)?\s+(?:-\S+\s+)*-m\s+(?:(?:pytest|unittest|mypy|flake8|pylint)\b|ruff\s+(?:check\b|format\s+(?:\S+\s+)*--check\b)|black\s+(?:\S+\s+)*--check\b)/,
+  /^deno\s+(?:test|lint|check)\b/,
   /^ruff\s+(?:check\b|format\s+(?:\S+\s+)*--check\b)/,
   /^go\s+(?:test|vet|build)\b/,
   /^cargo\s+(?:\+\S+\s+)?(?:test|check|clippy|build|nextest)\b/,
@@ -383,6 +415,7 @@ export function matchSegment(raw: string, repo: RepoScripts | undefined): boolea
   }
   if (head === "turbo" || head === "nx") return matchTaskRunner(head, toks, repo);
   if (head === "make") return matchMake(toks, repo);
+  if (head === "just") return matchJust(toks);
   if (SIMPLE_RES.some((re) => re.test(s))) return true;
   return matchScriptFile(toks, repo);
 }
@@ -580,6 +613,17 @@ function pmTaskRunner(head: string, toks: string[]): { head: string; toks: strin
   return { head: word, toks: toks.slice(i), idx: i };
 }
 
+/** A check binary run through a package manager (`pnpm vitest …`, `bun -C dir tsc`). */
+function pmBinary(head: string, toks: string[]): { toks: string[]; idx: number } | null {
+  if (head === "npm") return null;
+  const valueOpts = new Set([...PM_SCOPE_VALUE_OPTS, ...(PM_VALUE_OPTS[head] ?? [])]);
+  let i = 1;
+  while (i < toks.length && (toks[i] as string).startsWith("-")) i += valueOpts.has(toks[i] as string) ? 2 : 1;
+  const word = toks[i];
+  if (word === undefined || !PM_CHECK_BINS.has(word)) return null;
+  return { toks: toks.slice(i), idx: i };
+}
+
 const VITEST_OPTS = new Set(
   "-c --config -r --root --dir --project -t --testNamePattern --reporter --environment --pool --shard --outputFile --mode --bail --maxWorkers --minWorkers --testTimeout --hookTimeout --teardownTimeout --retry --repeats --exclude --include --workspace --setupFiles --env --maxConcurrency".split(
     " ",
@@ -640,6 +684,15 @@ function segmentRoots(toks: string[], s: string): string[] | null {
       if (task.length === 1 && task[0] === ".") return pmBase;
       return null; // `-C dir` plus a filter: the task runner's root is relative to the repo, not to `dir`
     }
+    const pmBin = pmBinary(head, toks);
+    if (pmBin !== null) {
+      const pmBase = pmRoots(head, toks.slice(0, pmBin.idx));
+      const inner = segmentRoots(pmBin.toks, pmBin.toks.join(" "));
+      if (pmBase === null || inner === null) return null;
+      if (pmBase.length === 1 && pmBase[0] === ".") return inner;
+      if (inner.length === 1 && inner[0] === ".") return pmBase;
+      return null; // `-C dir` plus paths: the tool's paths are relative to `dir`
+    }
     return pmRoots(head, toks);
   }
   if (head === "turbo" || head === "nx") return taskRunnerRoots(head, toks);
@@ -649,6 +702,10 @@ function segmentRoots(toks: string[], s: string): string[] | null {
     // GNU make also accepts the attached form (`-Cpackages/web`).
     for (const t of toks) if (t.startsWith("-C") && t.length > 2) roots.push(t.slice(2));
     return orDot(roots);
+  }
+  if (head === "just") {
+    const o = parseArgs(toks, 1, new Set(["-d", "-f", "--working-directory", "--justfile"]));
+    return orDot(valsOf(o, "-d", "--working-directory"));
   }
   if (head === "gh") return null;
   if (!SIMPLE_RES.some((re) => re.test(s))) return null; // a script file: the script decides
@@ -712,6 +769,8 @@ function segmentRoots(toks: string[], s: string): string[] | null {
     case "ruff":
     case "pyright":
     case "flake8":
+    case "pylint":
+    case "black":
     case "biome":
     case "shellcheck":
     case "hadolint":
@@ -786,6 +845,9 @@ const TRACEBACK_LINES = 12;
 
 const EXIT_NUM = "(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d?)";
 const FAILURE_SIGNALS: RegExp[] = [
+  /^\s*FAIL(?:[\s:]|$)/, // jest/vitest `FAIL src/x.test.ts`, go `FAIL\tpkg` and a bare `FAIL`
+  /^\s*--- FAIL:/,
+  /^(?:Killed|Terminated)(?:[\s:]|$)/,
   /\b[1-9]\d* (?:failed|failures?|errors?)\b/,
   new RegExp(`(?:^|\\s)(?:EXIT|exit|rc)[=:]\\s*${EXIT_NUM}\\b`),
   new RegExp(`\\b[Ee]xit code[=:]?\\s*${EXIT_NUM}\\b`),
