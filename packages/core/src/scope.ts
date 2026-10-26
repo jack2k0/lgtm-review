@@ -6,6 +6,8 @@ export interface ResolvedScope {
   roots: string[];
   /** Roots relative to the session root ("…/a/b" for roots outside it), at most two then "+N", <= 60 chars. */
   label: string;
+  /** Root of the agent worktree the check ran in; it covers only files under that worktree. */
+  worktree?: string;
 }
 
 /** Folder names that hold tests; a root made only of these is the whole test suite. */
@@ -41,12 +43,36 @@ export function resolveScope(raw: readonly string[] | null, base: string | null,
     }
     if (!roots.includes(root)) roots.push(root);
   }
+  return { roots, label: labelOf(roots, sessionPrefix) };
+}
+
+function labelOf(roots: readonly string[], sessionPrefix: string): string {
   const parts = roots.map((root) => (root.startsWith(sessionPrefix) ? root.slice(sessionPrefix.length) : outsideLabel(root)));
   const extra = parts.length - 2;
   let label = parts.slice(0, 2).join(", ");
   if (extra > 0) label += ` +${extra}`;
   if (label.length > SCOPE_LABEL_MAX) label = `${label.slice(0, SCOPE_LABEL_MAX - 1)}…`;
-  return { roots, label };
+  return label;
+}
+
+/** Root of the agent worktree (`<repo>/.claude/worktrees/<id>`) that contains `path`, or null outside every one. */
+export function agentWorktreeRoot(path: string | null): string | null {
+  if (path === null || !isAbs(path)) return null;
+  const m = /^(.*?\/\.claude\/worktrees\/[^/]+)(?:\/|$)/.exec(normalizePath(path));
+  return m === null ? null : (m[1] as string);
+}
+
+/**
+ * Scope of a check that ran inside an agent worktree: the worktree root, or the directories inside
+ * it the command named. The worktree never held the main checkout's files, so it covers none of them.
+ */
+export function resolveWorktreeScope(raw: readonly string[] | null, base: string, worktree: string, sessionRoot: string | null): ResolvedScope {
+  const inner = resolveScope(raw, base, worktree);
+  const prefix = childPrefix(worktree);
+  const roots = inner === null ? [] : inner.roots.filter((r) => r.startsWith(prefix));
+  if (roots.length === 0) roots.push(worktree);
+  const session = sessionRoot !== null && isAbs(sessionRoot) ? childPrefix(normalizePath(sessionRoot)) : "/";
+  return { roots, label: labelOf(roots, session), worktree };
 }
 
 /** Last two segments of a path outside the session root, shown with a leading ellipsis. */

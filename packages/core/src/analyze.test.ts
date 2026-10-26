@@ -987,3 +987,45 @@ describe("background notifications across files (pinned)", () => {
     expect(a.finish().prompts[0]).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit" });
   });
 });
+
+describe("checks inside an agent worktree", () => {
+  const P = "/home/user/project";
+  const WT = `${P}/.claude/worktrees/wt-123`;
+  const inWt = (lines: string[]): string[] =>
+    lines.map((l) => {
+      const o = JSON.parse(l) as Record<string, unknown>;
+      o.cwd = WT;
+      return JSON.stringify(o);
+    });
+  // Built after the parent lines so the subagent records are the later ones.
+  const run = (parentEdit: string | null, sub: () => string[]) => {
+    const a = createAnalyzer();
+    const main = [prompt("go"), ...(parentEdit === null ? [] : edit("e1", parentEdit)), toolUse("ag", "Agent", { description: "d", isolation: "worktree" }), toolResult("ag", "done")];
+    for (const l of main) a.push(l);
+    a.addSubagent("ag", sub(), { agentId: "a1", description: "d" });
+    return a.finish().prompts[0]!;
+  };
+
+  test("a passing check in the worktree does not cover a main-checkout edit", () => {
+    const p = run(`${P}/src/auth.ts`, () => inWt([prompt("task"), ...bash("sb", "pnpm test")]));
+    expect(p.status).toBe("unchecked");
+    expect(p.reason).not.toContain("worktrees");
+  });
+
+  test("an edit inside the worktree checked there stays checked", () => {
+    const p = run(null, () => inWt([prompt("task"), ...edit("s1", `${WT}/src/x.ts`), ...bash("sb", "pnpm test")]));
+    expect(p.status).toBe("checked");
+  });
+
+  test("a worktree check covering some edits behaves like a scoped check", () => {
+    const p = run(`${P}/src/auth.ts`, () => inWt([prompt("task"), ...edit("s1", `${WT}/src/x.ts`), ...bash("sb", "pnpm test")]));
+    expect(p.status).toBe("checked");
+    expect(p.hints.filter((h) => h.rule === "check-scope").map((h) => h.path)).toEqual([`${P}/src/auth.ts`]);
+  });
+
+  test("an ordinary scoped check in the main checkout is unchanged", () => {
+    const p = one([prompt("q"), ...edit("e1", `${P}/packages/web/src/a.ts`), ...edit("e2", `${P}/src/auth.ts`), ...bash("b1", "pnpm -C packages/web test")]);
+    expect(p.status).toBe("checked");
+    expect(p.hints.filter((h) => h.rule === "check-scope").map((h) => h.path)).toEqual([`${P}/src/auth.ts`]);
+  });
+});
