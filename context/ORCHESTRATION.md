@@ -33,6 +33,8 @@ brak
 
 - 2026-10-26 (cd. 2): przegląd serwera S-02/S-10 (Agy, prompt neutralny): brak uwag (loopback, token 256 bit we fragmencie + timingSafeEqual, Host/Origin, statyczne pliki z realpath, limity, ogólne błędy, CSP). S-05 hinty (Agy): przyjęte 1.1-1.6 (komentarze/stringi, asercje netto w prompcie, .env.example, migration/, .snap, lockfile'i), impl Agy, zweryfikowane. Odłożone: S-03 kroki/diffy 2.1 (rm bez bashEditDiff), 2.2 (mv/git mv), 3.1-3.3 (drobne liczniki w tytułach/eksporcie). Wszystkie slice'y przejrzane przynajmniej raz.
 
+- 2026-10-26 (cd. 3): S-03 (Agy): git mv/git rm w heurystyce jako D+A/D, tytuły kroków z oboma licznikami; zwykłe rm/mv celowo pominięte (real logs: 161 rm bez bashEditDiff, głównie sprzątanie). SendMessage zagnieżdżony w subagencie: 0 przypadków na real logs — odłożone. Proces na wzór Anthropic ('Solving code review at Anthropic', analiza Opus xhigh: scratchpad anthropic-process-analysis.md): zrobiony krok 1 z 3 — `scripts/gate.mjs` (bramka przed merge: zakres z bloku ```gate w plan.md, zakaz zmian istniejących *.labels.json, goldeny, usunięte oczekiwania testów, zależności, schema, opcjonalnie pnpm check, tier Low/Medium/High). Od teraz: uruchamiać `node scripts/gate.mjs --base main` przed każdym merge i wklejać blok do opisu merge. AGENTS.md/REVIEW.md i przegląd przed merge wg tieru CZEKAJĄ na decyzje właściciela (publiczność plików, akceptacja High, język, Sonnet jako zapasowy recenzent, lista High).
+
 ## Bramki
 - Npm publish: czeka na decyzję właściciela.
 
