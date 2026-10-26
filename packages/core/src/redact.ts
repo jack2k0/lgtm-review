@@ -119,16 +119,17 @@ const TOKEN_PATTERNS: { re: RegExp; gate: string[]; kind: string; guard?: (m: st
   { re: new RegExp(`${NB}(?:AKIA|ASIA|AGPA|AIDA|AROA|ANPA)[0-9A-Z]{16}(?![A-Za-z0-9])`, "g"), gate: ["AKIA", "ASIA", "AGPA", "AIDA", "AROA", "ANPA"], kind: "aws-key-id" },
   { re: new RegExp(`${NB}AIza[0-9A-Za-z_-]{35}`, "g"), gate: ["AIza"], kind: "google-key" },
   { re: new RegExp(`${NB}ya29\\.[A-Za-z0-9_-]{20,}`, "g"), gate: ["ya29."], kind: "google-oauth" },
-  { re: new RegExp(`${NB}(?:xox[abprse]-[A-Za-z0-9-]{10,}|xapp-[0-9]-[A-Za-z0-9_-]{10,})`, "g"), gate: ["xox", "xapp-"], kind: "slack-token" },
+  { re: new RegExp(`${NB}(?:xox(?:[abprscd]-|e\\.xoxp-)[A-Za-z0-9._-]{10,}|xapp-[0-9]-[A-Za-z0-9_-]{10,})`, "g"), gate: ["xox", "xapp-"], kind: "slack-token" },
   { re: new RegExp(`${NB}[sr]k_(?:live|test)_[A-Za-z0-9]{10,}`, "g"), gate: ["k_live_", "k_test_"], kind: "stripe-key" },
+  { re: new RegExp(`${NB}whsec_[A-Za-z0-9]{10,}`, "g"), gate: ["whsec_"], kind: "stripe-webhook" },
   { re: new RegExp(`${NB}eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]*`, "g"), gate: ["eyJ"], kind: "jwt" },
 ];
 
 // ---------------------------------------------------------------- headers, URLs, cookies
 
-const URL_CREDS = /(?<![A-Za-z0-9+.-])([a-z][a-z0-9+.-]{1,20}:\/\/)([^\s/@:"'<>]{1,200}):([^\s/@"'<>]{1,200})@/gi;
+const URL_CREDS = /(?<![A-Za-z0-9+.-])([a-z][a-z0-9+.-]{1,20}:\/\/)([^\s/@:"'<>]{0,200}):([^\s"'<>]{1,200})@(?=[^\s/?#]+(?:[:/?#]|$))/gi;
 
-const AUTH_HEADER = /(?<![A-Za-z0-9])(authorization["']?[ \t]{0,3}[:=][ \t]{0,3}["']?(?:(?:bearer|basic|token|digest|negotiate)[ \t]{1,8})?)([A-Za-z0-9._~+/=-]{8,})/gi;
+const AUTH_HEADER = /(?<![A-Za-z0-9])(authorization["']?[ \t]{0,3}[:=][ \t]{0,3}["']?)([^\r\n]{1,4096})/gi;
 const BEARER = /(?<![A-Za-z0-9])(bearer[ \t]{1,8})([A-Za-z0-9._~+/=-]{16,})/gi;
 const AZURE_KEY = /(?<![A-Za-z0-9])((?:Account|SharedAccess)Key[ \t]{0,3}=[ \t]{0,3})([A-Za-z0-9+/]{20,}={0,2})/g;
 
@@ -152,11 +153,52 @@ function redactCookie(g: Groups, st: State): string | null {
   return (g[1] as string) + out.join(";");
 }
 
+const AUTH_SCHEMES = new Set(["bearer", "basic", "token", "digest", "negotiate", "bot"]);
+const AUTH_SCHEME = /^([A-Za-z][A-Za-z0-9_-]{0,31})[ \t]+([\s\S]*)$/;
+const AUTH_TOKEN = /^[A-Za-z0-9._~+/=-]{8,}/;
+
+/**
+ * Redacts one `Authorization` header value. The whole value is credential material, but a value that is prose
+ * (`Authorization: required for this endpoint`) must stay; a recognized scheme followed by a token-like run is
+ * treated as a credential. Digest carries named parameters, so its whole value is replaced.
+ */
+function redactAuthHeader(g: Groups): string | null {
+  const raw = g[2] as string;
+  const value = raw.trimStart();
+  if (value === "" || isPlaceholder(value)) return null;
+
+  const scheme = AUTH_SCHEME.exec(value);
+  if (scheme !== null) {
+    const name = scheme[1]!.toLowerCase();
+    const rest = scheme[2]!;
+    if (isPlaceholder(rest)) return null;
+    const prefix = value.slice(0, value.length - rest.length);
+    if (name === "digest") {
+      const quote = (g[1] as string).endsWith('"') && raw.endsWith('"') ? '"' : "";
+      return `${g[1]}${prefix}${ph("auth-header")}${quote}`;
+    }
+    const token = AUTH_TOKEN.exec(rest);
+    if (token === null) return null;
+    const t = token[0];
+    if (/^[a-z]+$/.test(t) && t.length < 16) return null;
+    if (!AUTH_SCHEMES.has(name) && t.length < 16 && !/[0-9]/.test(t) && !/[A-Z]/.test(t)) return null;
+    return `${g[1]}${prefix}${ph("auth-header")}${rest.slice(t.length)}`;
+  }
+
+  // No scheme: preserve the old guard that keeps ordinary lowercase prose such as `Authorization: required` intact.
+  const token = AUTH_TOKEN.exec(value);
+  if (token === null || /^[a-z]+$/.test(token[0])) return null;
+  const t = token[0];
+  if (t.length < 16 && !/[0-9]/.test(t) && !/[A-Z]/.test(t)) return null;
+  return `${g[1]}${ph("auth-header")}${value.slice(t.length)}`;
+}
+
 // ---------------------------------------------------------------- key = value assignments
 
 const ASSIGN =
   /(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|((?:[^\s"',;)}\]]|;(?=\S)){6,300}))/gi;
-const SECRET_WORD = /token(?!s|iz)|secret|passw(?:or)?d|api[_-]?key|credential|private[_-]?key/;
+const SECRET_WORD =
+  /token(?!s|iz)|secret|passw(?:or)?d|api[_-]?key|credential|private[_-]?key|(?:stripe|webhook|signing)[_-]?(?:key|secret|token|signature)/;
 const NOT_SECRET_SUFFIX = /[_.-](?:file|path|dir|name|url|uri|type|count|limit|length|len|id|ttl|usage|budget|expires?|expiry)$/;
 const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VALUE_STOPLIST = new Set([
@@ -169,13 +211,14 @@ function isSecretKey(ident: string): boolean {
   return SECRET_WORD.test(k) && !NOT_SECRET_SUFFIX.test(k);
 }
 
-/** Values that are references, types or masks rather than literals. */
-function isNonLiteral(v: string, quoted: boolean): boolean {
-  if (isPlaceholder(v) || UUID_VALUE.test(v)) return true;
+/** Values that are references, types or masks rather than literals. A secret-like key disables the UUID and quoted-prose exemptions. */
+function isNonLiteral(v: string, quoted: boolean, secretContext = false): boolean {
+  if (isPlaceholder(v)) return true;
+  if (!secretContext && UUID_VALUE.test(v)) return true;
   if (VALUE_STOPLIST.has(v.toLowerCase())) return true;
   if (/^[*x\u2022.]+$/i.test(v)) return true;
   if (/^(?:\$|%|<|\{\{|\{|\()/.test(v)) return true;
-  if (quoted) return /\s/.test(v) && v.length > 40;
+  if (quoted && !secretContext) return /\s/.test(v) && v.length > 40;
   if (/[([{]/.test(v)) return true;
   if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(v)) return true;
   if (/^[A-Z][A-Z_]*_[A-Z_]*$/.test(v)) return true;
@@ -201,20 +244,20 @@ function redactAssign(g: Groups, st: State): string | null {
   if (!isSecretKey(g[2] as string)) return redactInner(g, st);
   const q = g[1] as string;
   const head = q + (g[2] as string) + q + (g[3] as string);
-  if (g[4] !== undefined) return isNonLiteral(g[4], true) || g[4].length < 3 ? null : `${head}"${ph("secret")}"`;
-  if (g[5] !== undefined) return isNonLiteral(g[5], true) || g[5].length < 3 ? null : `${head}'${ph("secret")}'`;
+  if (g[4] !== undefined) return isNonLiteral(g[4], true, true) || g[4].length < 3 ? null : `${head}"${ph("secret")}"`;
+  if (g[5] !== undefined) return isNonLiteral(g[5], true, true) || g[5].length < 3 ? null : `${head}'${ph("secret")}'`;
   const v = g[6] as string;
-  return isNonLiteral(v, false) ? null : head + ph("secret");
+  return isNonLiteral(v, false, true) ? null : head + ph("secret");
 }
 
 /** `--password hunter2xyz` style flags (space separated). */
-const CLI_FLAG = /(?<![A-Za-z0-9-])(--?[A-Za-z][A-Za-z-]{0,30}[ \t]+)(?:"([^"\r\n]{4,300})"|'([^'\r\n]{4,300})'|([^\s"'\-/.~$<(\[{][^\s"']{7,200}))/g;
+const CLI_FLAG = /(?<![A-Za-z0-9-])(--?[A-Za-z][A-Za-z-]{0,30}[ \t]+)(?:"([^"\r\n]{4,300})"|'([^'\r\n]{4,300})'|([^\s"'\-/.~$<(\[{][^\s"']{3,200}))/g;
 
 function redactFlag(g: Groups): string | null {
   const flag = (g[1] as string).trim();
   if (!isSecretKey(flag.replace(/^-+/, ""))) return null;
   const v = g[2] ?? g[3] ?? (g[4] as string);
-  if (isNonLiteral(v, g[4] === undefined)) return null;
+  if (isNonLiteral(v, g[4] === undefined, true)) return null;
   const q = g[2] !== undefined ? '"' : g[3] !== undefined ? "'" : "";
   return `${g[1]}${q}${ph("secret")}${q}`;
 }
@@ -424,10 +467,36 @@ function redactEntropy(text: string, st: State): string {
 
 // ---------------------------------------------------------------- entry point
 
+/**
+ * JSON escaping hides secrets from every rule (`\"`, `\u0022`, `\u005f`). Decodes the printable-ASCII JSON escapes in
+ * one linear pass; control escapes such as `\n` and `\r` stay so line structure is preserved. Used only on a copy:
+ * `redact` keeps the original spelling unless the decoded copy reveals more secrets.
+ */
+const JSON_PRINTABLE_ESCAPE = /\\(?:u00([2-7][0-9a-f])|(["\/]))/gi;
+
+function normalizeJsonEscapes(text: string): string {
+  if (!text.includes("\\")) return text;
+  return text.replace(JSON_PRINTABLE_ESCAPE, (m, hex: string | undefined, chr: string | undefined) => {
+    if (hex === undefined) return chr as string;
+    const code = parseInt(hex, 16);
+    return code <= 0x7e ? String.fromCharCode(code) : m;
+  });
+}
+
 export function redact(input: string, opts: RedactOptions = {}): RedactResult {
   // A later rule can create the context an earlier one needs (e.g. `<user>` becoming a flag value), so the
   // pipeline is repeated until the text is stable; this is what makes the function idempotent. The normal case is
   // one productive round plus one that finds nothing.
+  const plain = redactStable(input, opts);
+  // Escaped text (`{\"password\": \"x\"}`) is redacted in decoded form, but only when decoding reveals a secret the
+  // escaped spelling hid; otherwise code such as `"say \"hi\""` keeps its backslashes.
+  const decoded = normalizeJsonEscapes(plain.text);
+  if (decoded === plain.text) return plain;
+  const again = redactStable(decoded, opts);
+  return again.count > 0 ? { text: again.text, count: plain.count + again.count } : plain;
+}
+
+function redactStable(input: string, opts: RedactOptions): RedactResult {
   const st: State = { count: 0 };
   let t = input;
   for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -451,7 +520,7 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
     t = pass(t, st, p.re, p.gate, false, (g) => (p.guard && !p.guard(g[0] as string) ? null : ph(p.kind)));
   }
 
-  t = pass(t, st, AUTH_HEADER, ["authorization"], true, (g) => (isPlaceholder(g[2] as string) || /^[a-z]+$/.test(g[2] as string) ? null : `${g[1]}${ph("auth-header")}`));
+  t = pass(t, st, AUTH_HEADER, ["authorization"], true, redactAuthHeader);
   t = pass(t, st, BEARER, ["bearer"], true, (g) => (/\d/.test(g[2] as string) ? `${g[1]}${ph("bearer")}` : null));
   t = pass(t, st, AZURE_KEY, ["accountkey", "sharedaccesskey"], true, (g) => `${g[1]}${ph("azure-key")}`);
 

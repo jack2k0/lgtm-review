@@ -35,6 +35,11 @@ function sample(name: string, secret: string, wrap: (s: string) => string, kind?
 
 const id = (s: string): string => s;
 const b = (n: number, seed: number, alphabet?: string): string => body(n, seed, alphabet);
+/** Lowercase-only body (for a bearer token with no digits or uppercase letters). */
+const lower = (n: number, seed: number): string => body(n, seed, "abcdefghijklmnopqrstuvwxyz").toLowerCase().replace(/[^a-z]/g, "q");
+
+// Example UUID used as an npm automation token; not a real credential.
+const NPM_UUID = "123e4567-e89b-12d3-a456-426614174000";
 
 const POSITIVES: Sample[] = [
   // vendor tokens
@@ -103,6 +108,24 @@ const POSITIVES: Sample[] = [
   sample("cli flag equals", b(24, 61), (s) => `tool --api-key=${s}`, "secret"),
   sample("azure account key", b(44, 62, ALNUM) + "==", (s) => `DefaultEndpointsProtocol=https;AccountName=x;AccountKey=${s};EndpointSuffix=core`, "azure-key", []),
   sample("x-api-key lowercase json", b(28, 63), (s) => `{"x-api-key": "${s}"}`, "secret"),
+  // review 2026-10-26 (S-06 F3-F7, F9-F11)
+  sample("slack client xoxc", "xo" + "xc-" + "123456789012-1234567890123-" + b(24, 90), (s) => `excerpt ${s}`, "slack-token"),
+  sample("slack xoxd", "xo" + "xd-" + "123456789012-1234567890123-" + b(24, 91), id, "slack-token"),
+  sample("slack rotated xoxe.xoxp", "xo" + "xe.xo" + "xp-1-" + b(40, 92), id, "slack-token"),
+  sample("stripe webhook secret", "wh" + "sec_" + b(28, 93), (s) => `signing ${s}`, "stripe-webhook"),
+  sample("stripe key name", b(28, 94), (s) => `STRIPE_KEY=${s}`, "secret"),
+  sample("url credentials empty user", "S3" + "cret" + b(8, 95), (s) => `redis://:${s}@127.0.0.1:6379/0`, "url-credentials"),
+  sample("url credentials slash in password", b(10, 96) + "/" + b(10, 97), (s) => `https://admin:${s}@127.0.0.1:5432/app`, "url-credentials"),
+  sample("url credentials at in password", "p" + "@ss" + b(8, 98), (s) => `postgres://admin:${s}@db.example.test/app`, "url-credentials"),
+  sample("authorization lowercase bearer", lower(26, 99), (s) => `Authorization: Bearer ${s}`, "auth-header"),
+  sample("authorization bot", b(24, 100) + "." + b(26, 101), (s) => `Authorization: Bot ${s}`, "auth-header"),
+  sample("authorization digest response", b(32, 102, HEXCH), (s) => `Authorization: Digest username="admin", realm="x", nonce="abc123", response="${s}"`, "auth-header"),
+  sample("npm authToken uuid", NPM_UUID, (s) => `//registry.npmjs.org/:_authToken=${s}`, "secret"),
+  sample("long quoted passphrase", "correct horse battery staple " + b(30, 103), (s) => `password = "${s}"`, "secret"),
+  sample("short cli flag value", "hun" + "ter2", (s) => `pytest -q --password ${s}`, "secret"),
+  sample("json escaped quotes", b(16, 104), (s) => `{\\"password\\": \\"${s}\\"}`, "secret"),
+  sample("json unicode quotes", b(16, 105), (s) => `{\\u0022api_key\\u0022: \\u0022${s}\\u0022}`, "secret"),
+  sample("json escaped underscore", "gh" + "p\\u005f" + b(36, 106), id, undefined, ["gh" + "p_" + b(36, 106)]),
   // entropy with context
   sample("hex with context", b(40, 64, HEXCH), (s) => `the token is ${s}`, "secret"),
   sample("hex64 with context", b(64, 65, HEXCH), (s) => `secret: ${s}`, "secret"),
@@ -234,10 +257,23 @@ describe("redact: negative samples", () => {
     expect(redact(`secret = ${h}`).text).not.toContain(h);
   });
 
-  test("uuid is never redacted, even next to a secret word", () => {
+  test("uuid is not redacted next to a secret word, only as the value of a secret key", () => {
     const u = "3f2b8c1e-9d4a-4b7e-8a61-2c5d7e9f0a1b";
-    expect(redact(`secret: ${u}`).text).toContain(u);
     expect(redact(`api key ${u}`).text).toContain(u);
+    expect(redact(`request_id=${u}`).text).toContain(u);
+    // npm automation tokens and some client secrets are UUIDs (review 2026-10-26, F7)
+    expect(redact(`secret: ${u}`).text).not.toContain(u);
+  });
+
+  test("escaped code keeps its backslashes when it hides no secret", () => {
+    const code = 'const s = "say \\"hi\\"" + "\\u0041";';
+    expect(redact(code)).toEqual({ text: code, count: 0 });
+  });
+
+  test("short or prose-like auth values stay", () => {
+    for (const text of ["Bearer authentication-required-header is described", "pytest --password abc", "Authorization: Bearer"]) {
+      expect(redact(text).text).toBe(text);
+    }
   });
 
   test("data url payload is never redacted", () => {
