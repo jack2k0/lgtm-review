@@ -1,0 +1,16 @@
+{
+  "fixture": "heredoc-targets",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "heredoc writes a doc through python3 - $R: documentation tail, check holds"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "note": "heredoc writes a code file after the check"
+    }
+  ]
+}

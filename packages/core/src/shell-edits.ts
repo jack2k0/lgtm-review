@@ -221,21 +221,52 @@ function teeFiles(args: Word[]): string[] {
 const GIT_APPLY_READONLY = new Set(["--check", "--stat", "--numstat", "--summary"]);
 
 const PY_OPEN_RE = /\bopen\s*\(\s*([^,()]+?)\s*,\s*(?:mode\s*=\s*)?(['"])[wax][bt+]*\2/g;
-const PY_WRITE_RE = /\.write_(?:text|bytes)\s*\(/;
+const PY_WRITE_RE = /\.write_(?:text|bytes)\s*\(/g;
+const PY_STR = String.raw`(?:"[^"\n]*"|'[^'\n]*')`;
+const PY_ARGV = String.raw`sys\.argv\[\s*\d+\s*\]`;
+const PY_VALUE = String.raw`(?:${PY_STR}|${PY_ARGV})`;
+const PY_BIND_RE = new RegExp(String.raw`(?:^|[;\n])[ \t]*(\w+)[ \t]*=(?!=)[ \t]*(?:(?:pathlib\.)?Path\(\s*(${PY_VALUE})\s*\)|(${PY_VALUE}))[ \t]*(?=$|[;\n#])`, "gm");
+const PY_RECEIVER_RE = new RegExp(String.raw`(?:\b(?:pathlib\.)?Path\(\s*(${PY_VALUE}|\w+)\s*\)|\b(\w+))\s*$`);
 
-/** Files written by the Python code of a heredoc (`open(path, 'w')`, `.write_text(`). */
-function pythonWrites(command: string): string[] {
+/** Resolves a Python expression to a path: a string literal, `sys.argv[N]`, or a name bound to one of them; null otherwise. */
+function pyValue(expr: string, bound: Map<string, string | null>, argv: (string | null)[]): string | null {
+  const e = expr.trim();
+  const lit = /^(['"])([^'"\n]*)\1$/.exec(e);
+  if (lit) return lit[2] === "" ? null : (lit[2] as string);
+  const arg = /^sys\.argv\[\s*(\d+)\s*\]$/.exec(e);
+  if (arg) return argv[Number(arg[1]) - 1] ?? null;
+  return bound.get(e) ?? null;
+}
+
+/**
+ * Files written by the Python code of a heredoc (`open(path, 'w')`, `.write_text(`). A path resolves when it is a
+ * string literal, `sys.argv[N]` (of `python3 - args`, an argument being a literal or a shell variable assigned a
+ * literal earlier in the command), or a name bound to one of those by `name = "x"` / `name = Path("x")`.
+ */
+function pythonWrites(command: string, argv: (string | null)[]): string[] {
   const out: string[] = [];
   let unknown = false;
+  const names = new Map<string, string | null>();
+  for (const m of command.matchAll(PY_BIND_RE)) {
+    const name = m[1] as string;
+    const v = pyValue((m[2] ?? m[3]) as string, names, argv);
+    // Rebinding to a different value leaves the name unresolved.
+    names.set(name, names.has(name) && names.get(name) !== v ? null : v);
+  }
+  const note = (path: string | null): void => {
+    if (path === null) unknown = true;
+    else if (!isIgnoredPath(path)) out.push(path);
+  };
   for (const m of command.matchAll(PY_OPEN_RE)) {
-    const arg = (m[1] as string).trim();
-    const lit = /^(['"])([^'"\n]*)\1$/.exec(arg);
-    if (lit && lit[2] !== undefined && lit[2] !== "") {
-      if (!isIgnoredPath(lit[2])) out.push(lit[2]);
-    } else unknown = true;
+    note(pyValue(m[1] as string, names, argv));
     if (out.length >= FILES_MAX) break;
   }
-  if (PY_WRITE_RE.test(command)) unknown = true;
+  for (const m of command.matchAll(PY_WRITE_RE)) {
+    const prefix = command.slice(Math.max(0, (m.index ?? 0) - 200), m.index ?? 0);
+    const r = PY_RECEIVER_RE.exec(prefix);
+    note(r === null ? null : pyValue((r[1] ?? r[2]) as string, names, argv));
+    if (out.length >= FILES_MAX) break;
+  }
   if (unknown) out.push(SHELL_EDIT_FILE);
   return out;
 }
@@ -250,6 +281,29 @@ interface SegMut {
   /** A history-moving git operation (`GIT_OPS`), as opposed to `git rm` / `git apply`. */
   history: boolean;
   files: MutFile[];
+}
+
+/** A command-line argument as a literal: itself, or `$VAR` / `"$VAR"` / `${VAR}` assigned a literal earlier; null otherwise. */
+function shellArg(w: Word, vars: ReadonlyMap<string, string>): string | null {
+  const ref = /^\$(?:\{(\w+)\}|(\w+))$/.exec(w.text);
+  if (ref) return vars.get((ref[1] ?? ref[2]) as string) ?? null;
+  return w.dynamic ? null : w.text;
+}
+
+const ASSIGN_RE = /^(?:export\s+)?([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|"'`$]*)(?=\s|$)\s*/;
+
+/** Literal `NAME=value` assignments at the start of a segment (also `export NAME=value` and inline env prefixes). */
+function collectAssignments(seg: string, vars: Map<string, string>): void {
+  let s = seg.trim();
+  for (let guard = 0; guard < 10; guard++) {
+    const m = ASSIGN_RE.exec(s);
+    if (!m) return;
+    const raw = m[2] as string;
+    const v = /^(["'])([\s\S]*)\1$/.test(raw) ? raw.slice(1, -1) : raw;
+    if (v.includes("$") || v.includes("`") || v === "") vars.delete(m[1] as string);
+    else vars.set(m[1] as string, v);
+    s = s.slice(m[0].length);
+  }
 }
 
 const XARGS_VALUE_OPTS = new Set(["-I", "-n", "-P", "-d", "-L", "-s", "-E", "-a", "-J"]);
@@ -268,6 +322,7 @@ function segmentMutation(
   isCheck: boolean,
   pipedFromCheck: boolean,
   command: string,
+  vars: ReadonlyMap<string, string>,
 ): SegMut | null {
   const words = unwrapXargs(rawWords);
   const head = words[0]?.text ?? "";
@@ -337,7 +392,9 @@ function segmentMutation(
     mutating = f.length > 0;
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
   } else if (/^python[\d.]*$/.test(head) && command.includes("<<")) {
-    const f = pythonWrites(command);
+    const dash = words.findIndex((w) => w.text === "-");
+    const argv = dash < 0 ? [] : words.slice(dash + 1).map((w) => shellArg(w, vars));
+    const f = pythonWrites(command, argv);
     mutating = f.length > 0;
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
   }
@@ -393,12 +450,14 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
     let hasHistoryGitOp = false;
     let prevCheck = false;
     let prevPipe = false;
+    const vars = new Map<string, string>();
     segs.forEach((seg, i) => {
+      collectAssignments(seg.text, vars);
       const isCheck = matchSegment(seg.text, repo);
       const { words, redirects } = parseWords(normalizeFirstToken(stripPrefixes(seg.text)));
       const head = words[0]?.text;
       if (head === "cd" || head === "pushd") hasCd = true;
-      const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, command);
+      const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, command, vars);
       prevCheck = isCheck;
       prevPipe = seg.op === "|";
       if (isCheck) checkIdx.push(i);

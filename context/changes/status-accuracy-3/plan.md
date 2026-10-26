@@ -73,7 +73,7 @@ schema: no
 - `shell-edits.ts` `pythonWrites` (and its caller for the `python3 - args` form).
 - Tests: `p = "docs/x.md"; open(p, "w")` → `docs/x.md`; `Path("a/b.md").write_text(…)`; `p = Path("a.md"); p.write_text`; `python3 - "$R" <<EOF … open(sys.argv[1], "w")` with `R=context/plan.md &&` before; `open(f"{x}.md", "w")` → `(shell edit)`; a literal under the scratchpad → ignored.
 - New fixture `heredoc-targets` with goldens: code edit + passing check, then a heredoc doc write → checked with the documentation tail; a heredoc code write after the check → unchecked.
-- [ ] done when: tests pass; `pnpm check` green; gate exit 0/2.
+- [x] done when: tests pass; `pnpm check` green; gate exit 0/2.
 
 ## Phase 4: Real-log audit (orchestrator only)
 
