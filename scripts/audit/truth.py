@@ -66,7 +66,7 @@ class Ctx:
     def __init__(self, root):
         self.root = root or "/"
 
-    def classify(self, path, call_cwd, var_scratch=(), unk_scratch=False):
+    def classify(self, path, call_cwd, var_scratch=(), unk_scratch=False, resolve_cwd=None):
         """Return 'doc' | 'scratch' | 'code' | 'ignore'."""
         if not path:
             return "code"
@@ -85,7 +85,7 @@ class Ctx:
         if p.startswith("-") or p in ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty"):
             return "ignore"
         if not p.startswith("/"):
-            p = posixpath.join(call_cwd or self.root, p)
+            p = posixpath.join(resolve_cwd or call_cwd or self.root, p)
         p = posixpath.normpath(p)
         if p.startswith("/dev/"):
             return "ignore"
@@ -184,6 +184,19 @@ def words_of(seg):
     return w
 
 
+def _skip_wrapper(base, w):
+    """Drop `flock [opts] <lock>`, `ionice [opts]`, `nice [-n N]`, `stdbuf [opts]`, `setsid [opts]` and the program-name word itself."""
+    rest = w[1:]
+    argopts = {"flock": {"-w", "-E", "--timeout", "--conflict-exit-code"}, "ionice": {"-c", "-n", "-p", "-P", "-u"}, "nice": {"-n", "--adjustment"}, "chrt": set(), "taskset": set(), "stdbuf": set(), "setsid": set()}[base]
+    i = 0
+    while i < len(rest) and rest[i].startswith("-"):
+        i += 2 if rest[i] in argopts else 1
+    rest = rest[i:]
+    if base in ("flock", "chrt", "taskset") and rest:
+        rest = rest[1:]  # lock file / priority / cpu mask
+    return rest
+
+
 def unwrap(words, var_assign=None):
     """Strip env assignments, wrappers and runners; returns the effective argv (first word is the program)."""
     w = list(words)
@@ -198,6 +211,9 @@ def unwrap(words, var_assign=None):
         base = posixpath.basename(w[0])
         if base in WRAPPERS:
             w = w[1:]
+            continue
+        if base in ("flock", "ionice", "setsid", "stdbuf", "nice", "chrt", "taskset") and len(w) > 1:
+            w = _skip_wrapper(base, w)
             continue
         if base == "timeout" and len(w) > 2:
             w = w[2:] if re.match(r"^[\d.]+[smhd]?$", w[1]) else w[1:]
@@ -241,7 +257,7 @@ def check_kind(argv, text):
     if p in ("bash", "sh", "zsh") and a and a[0] == "-n":
         return None
     # scripts (optionally behind bash/sh/node/python)
-    cand = [p] + a[:2]
+    cand = [p]  # a script counts when it is the program itself or the script argument of an interpreter (not `git diff x`, `pgrep -f x`)
     if p in {"bash", "sh", "zsh", "node", "tsx", "bun", "deno"} | PY_NAMES:
         if p in PY_NAMES and a[:1] == ["-m"] and len(a) > 1:
             return check_kind(unwrap(a[1:]), text)
@@ -397,7 +413,7 @@ def analyse_bash(cmd, ctx, call_cwd):
                     if op in (";", "\n", "||", "&") or (op == "|" and not pipefail):
                         masked = True
                     # a later `&&` keeps the exit
-            wrapped = kind == "script" and p not in ({"bash", "sh", "zsh", "node", "tsx", "bun", "deno"} | PY_NAMES) and not SCRIPT_RE.match(p)
+            wrapped = any(posixpath.basename(x) in ("flock", "ionice", "setsid", "stdbuf", "nice", "chrt", "taskset") for x in words[:8])
             checks.append({"seg": si, "kind": kind, "masked": masked, "wrapped": wrapped})
         # --- edits ---
         def add(cls, how, n=1):
@@ -421,7 +437,7 @@ def analyse_bash(cmd, ctx, call_cwd):
                 files = files[1:]
             if p == "perl":
                 files = files[1:] if not any(x == "-e" or re.match(r"^-\w*e", x) for x in a) else files[1:]
-            cl = [ctx.classify(f, cwd, var_scratch, unk) for f in files] or ["code"]
+            cl = [ctx.classify(f, call_cwd, var_scratch, unk, cwd) for f in files] or ["code"]
             add(_worst(cl), "sed-i")
         elif p in INPLACE_FMT and any(x in INPLACE_FMT[p] for x in a) and not (p == "ruff" and a[:1] == ["check"] and "--fix" not in a):
             add("code", "formatter")
@@ -443,13 +459,13 @@ def analyse_bash(cmd, ctx, call_cwd):
                 files = files[-1:]
             if p == "ln":
                 files = []
-            cl = [ctx.classify(f, cwd, var_scratch, unk) for f in files]
+            cl = [ctx.classify(f, call_cwd, var_scratch, unk, cwd) for f in files]
             cl = [c for c in cl if c != "ignore"]
             if cl:
                 add(_worst(cl), p)
         elif p == "tee":
             files = [x for x in a if not x.startswith("-")]
-            cl = [ctx.classify(f, cwd, var_scratch, unk) for f in files]
+            cl = [ctx.classify(f, call_cwd, var_scratch, unk, cwd) for f in files]
             cl = [c for c in cl if c != "ignore"]
             if cl:
                 add(_worst(cl), "tee")
@@ -459,7 +475,7 @@ def analyse_bash(cmd, ctx, call_cwd):
             code = body + " " + txt
             if SHELL_WRITE_RE.search(code):
                 paths = QUOTED_PATH_RE.findall(code)
-                cl = [ctx.classify(x, cwd, var_scratch, unk) for x in paths]
+                cl = [ctx.classify(x, call_cwd, var_scratch, unk, cwd) for x in paths]
                 cl = [c for c in cl if c != "ignore"]
                 add(_worst(cl) if cl else "code", "interp-write")
         # redirects (stdout / any fd into a file), not for pure data movers handled above
@@ -470,7 +486,7 @@ def analyse_bash(cmd, ctx, call_cwd):
                 continue
             if "_" * 3 in mt[mo.start(2) : mo.end(2)] and tgt and not tgt.startswith("$"):
                 pass
-            c = ctx.classify(tgt, cwd, var_scratch, unk)
+            c = ctx.classify(tgt, call_cwd, var_scratch, unk, cwd)
             if c == "ignore":
                 continue
             if kind and mo.group(1) in ("", "1", "2"):

@@ -101,6 +101,26 @@
    "reason": "c-passed"
   },
   {
+   "label": "runner under flock and ionice",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "git diff of a test file is not a check",
+   "status": "unchecked",
+   "reason": "u-nocheck"
+  },
+  {
+   "label": "wait loop killed with 137 is not a failing check",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "cd into a scratch directory given by a variable",
+   "status": "no-changes",
+   "reason": "nc-scratch"
+  },
+  {
    "label": "python heredoc writes a markdown file",
    "status": "no-changes",
    "reason": "nc-doc"

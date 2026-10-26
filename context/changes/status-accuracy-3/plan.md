@@ -89,7 +89,7 @@ POST after phases 1-3: A 85.5%, B 83.5% (from 74.0% / 68.9%); 27 disagreements l
 ## Phase 6: Truth-script fixes (audit tool, a different agent than the tool phases)
 
 `scripts/audit/truth.py`: unwrap `flock` (and the other wrappers) for every runner, not only scripts; `git diff <file>` is not a check; a wait loop (`pgrep`/`sleep`/`until`) is not a check; expand `cd $VAR` from same-command assignments. One synthetic fixture case each in `scripts/audit/fixtures`, self-test green.
-- [ ] done when: `node --test scripts/audit/audit.test.mjs` passes; gate exit 0/2.
+- [x] done when: `node --test scripts/audit/audit.test.mjs` passes; gate exit 0/2.
 
 ## Phase 4: Real-log audit (orchestrator only)
 
