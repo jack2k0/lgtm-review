@@ -18,6 +18,14 @@ function makeHost(files: readonly string[], configs: Record<string, unknown> = {
   return {
     exists: (path) => set.has(path),
     readJson: (path) => configs[path],
+    listDirs: (dir) => {
+      const prefix = dir === "" ? "" : `${dir}/`;
+      const names = new Set<string>();
+      for (const f of [...set, ...Object.keys(configs)]) {
+        if (f.startsWith(prefix) && f.indexOf("/", prefix.length) !== -1) names.add(f.slice(prefix.length, f.indexOf("/", prefix.length)));
+      }
+      return [...names].sort();
+    },
   };
 }
 
@@ -222,5 +230,103 @@ describe("mapLanguageOf", () => {
     ["", null],
   ])("%s => %s", (path, expected) => {
     expect(mapLanguageOf(path)).toBe(expected);
+  });
+});
+
+describe("NodeNext extension mapping", () => {
+  const resolve = (files: readonly string[], specifier: string) =>
+    createResolver({ host: makeHost(files) }).resolve(specifier, "src/from.ts");
+
+  test(".js maps to .ts then .tsx; .mjs to .mts; .cjs to .cts; .jsx to .tsx", () => {
+    expect(resolve(["src/Button.tsx"], "./Button.js")).toBe("src/Button.tsx");
+    expect(resolve(["src/Button.ts", "src/Button.tsx"], "./Button.js")).toBe("src/Button.ts");
+    expect(resolve(["src/helper.mts"], "./helper.mjs")).toBe("src/helper.mts");
+    expect(resolve(["src/helper.cts"], "./helper.cjs")).toBe("src/helper.cts");
+    expect(resolve(["src/View.tsx"], "./View.jsx")).toBe("src/View.tsx");
+    expect(resolve(["src/helper.ts"], "./helper.mjs")).toBeNull();
+  });
+});
+
+describe("tsconfig baseUrl", () => {
+  test("paths targets are relative to baseUrl", () => {
+    const configs = { "tsconfig.json": { compilerOptions: { baseUrl: "src", paths: { "@/*": ["*"], "@lib": ["lib/index"] } } } };
+    const host = makeHost(["src/a/b.ts", "src/lib/index.ts"], configs);
+    const aliases = loadTsconfigAliases("", host);
+    expect(aliases[0]).toEqual({ pattern: "@/*", targets: ["src/*"] });
+    expect(aliases[1]).toEqual({ pattern: "@lib", targets: ["src/lib/index"] });
+    const r = createResolver({ host, aliases });
+    expect(r.resolve("@/a/b", "x.ts")).toBe("src/a/b.ts");
+    expect(r.resolve("@lib", "x.ts")).toBe("src/lib/index.ts");
+  });
+
+  test("baseUrl-only bare specifier resolves when the file exists, else stays external", () => {
+    const configs = { "tsconfig.json": { compilerOptions: { baseUrl: "./src" } } };
+    const host = makeHost(["src/utils/fmt.ts"], configs);
+    const r = createResolver({ host, aliases: loadTsconfigAliases("", host) });
+    expect(r.resolve("utils/fmt", "src/a.ts")).toBe("src/utils/fmt.ts");
+    expect(r.resolve("react", "src/a.ts")).toBeNull();
+  });
+
+  test("baseUrl '.' and no baseUrl leave aliases unchanged", () => {
+    const host = makeHost(["lib/x.ts"], { "tsconfig.json": { compilerOptions: { baseUrl: "." } } });
+    const r = createResolver({ host, aliases: loadTsconfigAliases("", host) });
+    expect(r.resolve("lib/x", "a.ts")).toBe("lib/x.ts");
+  });
+});
+
+describe("workspace packages", () => {
+  const files = [
+    "packages/core/src/index.ts",
+    "packages/core/src/node/index.ts",
+    "packages/core/src/util.ts",
+    "packages/ui/src/button.tsx",
+    "packages/lib/src/main.ts",
+    "apps/web/src/app.ts",
+  ];
+  const manifests = {
+    "packages/core/package.json": { name: "@lgtm/core", main: "dist/index.js" },
+    "packages/ui/package.json": { name: "ui", types: "./dist/button.d.ts" },
+    "packages/lib/package.json": { name: "lib", exports: { ".": { types: "./dist/main.d.ts", default: "./dist/main.js" } } },
+    "apps/web/package.json": { name: "web" },
+  };
+
+  const check = (extra: Record<string, unknown>) => {
+    const host = makeHost(files, { ...manifests, ...extra });
+    const r = createResolver({ host });
+    expect(r.resolve("@lgtm/core", "apps/web/src/app.ts")).toBe("packages/core/src/index.ts");
+    expect(r.resolve("@lgtm/core/node", "apps/web/src/app.ts")).toBe("packages/core/src/node/index.ts");
+    expect(r.resolve("@lgtm/core/util", "apps/web/src/app.ts")).toBe("packages/core/src/util.ts");
+    expect(r.resolve("ui", "apps/web/src/app.ts")).toBe("packages/ui/src/button.tsx");
+    expect(r.resolve("lib", "apps/web/src/app.ts")).toBe("packages/lib/src/main.ts");
+    expect(r.resolve("@lgtm/unknown", "apps/web/src/app.ts")).toBeNull();
+    expect(r.resolve("react", "apps/web/src/app.ts")).toBeNull();
+  };
+
+  test("pnpm-workspace.yaml globs", () => {
+    check({ "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n  - apps/* # apps\nallowBuilds:\n  esbuild: true\n' });
+  });
+
+  test("package.json workspaces (array and object forms)", () => {
+    check({ "package.json": { workspaces: ["packages/*", "apps/*"] } });
+    check({ "package.json": { workspaces: { packages: ["packages/*", "apps/*"] } } });
+  });
+
+  test("default scan of packages/*, apps/*, libs/*", () => {
+    check({});
+  });
+
+  test("a package outside the declared globs is external; unmatched dist target falls back to the target itself", () => {
+    const host = makeHost([...files, "packages/raw/dist/index.js"], {
+      ...manifests,
+      "packages/raw/package.json": { name: "raw", main: "dist/index.js" },
+      "pnpm-workspace.yaml": "packages:\n  - apps/*\n",
+    });
+    const r = createResolver({ host });
+    expect(r.resolve("@lgtm/core", "a.ts")).toBeNull();
+    const all = makeHost([...files, "packages/raw/dist/index.js"], {
+      ...manifests,
+      "packages/raw/package.json": { name: "raw", main: "dist/index.js" },
+    });
+    expect(createResolver({ host: all }).resolve("raw", "a.ts")).toBe("packages/raw/dist/index.js");
   });
 });
