@@ -625,9 +625,9 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               if (detail) t.patch = retain(use.prompt, f.path, f.patch);
               return t;
             });
-          } else if (sm.edits.length > 0 && !(ev.bashEditDiff !== undefined && sm.gitOnly)) {
-            // No diff in the log (the session did not start inside the repo), or an empty one next to an explicit
-            // edit (the harness snapshots before the command ends and misses edits committed within it): count the command text.
+          } else if (sm.edits.length > 0 && (ev.bashEditDiff === undefined || (!sm.gitOnly && sm.hasHidingGitOp))) {
+            // No diff in the log (the session did not start inside the repo), or an empty one next to an in-command
+            // git operation that can hide edits: count the command text.
             gitOp = sm.gitOnly;
             if (!gitOp) seqAt = orderedSeq(seq, sm.order);
             const cwd = use.cwd ?? parser.meta().cwd;

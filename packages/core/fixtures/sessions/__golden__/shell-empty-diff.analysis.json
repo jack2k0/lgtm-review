@@ -95,17 +95,9 @@
       "index": 3,
       "uuid": "00000000-0000-4000-8000-000000000010",
       "text": "Write a file with a heredoc, then test, in one command.",
-      "status": "checked",
-      "reason": "pnpm test passed after last edit (shell edits may be incomplete)",
-      "files": [
-        {
-          "path": "/home/user/project/src/new.js",
-          "kind": "M",
-          "added": 0,
-          "removed": 0,
-          "maybeIncomplete": true
-        }
-      ],
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
       "partial": false,
       "timeSplit": {
         "readMs": 0,

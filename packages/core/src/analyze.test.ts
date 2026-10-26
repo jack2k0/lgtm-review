@@ -342,14 +342,25 @@ describe("shell edits without bashEditDiff", () => {
       ["perl -pi + commit", "perl -pi -e 's/a/b/' x.pl && git commit -am m", "unchecked", "no checks ran (shell edits may be incomplete)", ["/home/user/project/x.pl"]],
       ["printf >> file", "printf 'x' >> notes.txt && git commit -am m", "unchecked", "no checks ran (shell edits may be incomplete)", ["/home/user/project/notes.txt"]],
       ["git apply", "git apply fix.patch && git commit -am m", "unchecked", "no checks ran (shell edits may be incomplete)", ["(shell edit)"]],
-      ["heredoc write before check", "cat > x.js <<'EOF'\nx\nEOF\npnpm test", "checked", "pnpm test passed after last edit (shell edits may be incomplete)", ["/home/user/project/x.js"]],
-      ["check before sed -i", "pnpm test && sed -i 's/a/b/' x.js", "unchecked", "1 edit after last check (shell edits may be incomplete)", ["/home/user/project/x.js"]],
+      ["heredoc write before check (no git op)", "cat > x.js <<'EOF'\nx\nEOF\npnpm test", "no-changes", "no edits", []],
+      ["check before sed -i (no git op)", "pnpm test && sed -i 's/a/b/' x.js", "no-changes", "no edits", []],
+      ["heredoc write before check + commit", "cat > x.js <<'EOF'\nx\nEOF\ngit commit -am m && pnpm test", "checked", "pnpm test passed after last edit (shell edits may be incomplete)", ["/home/user/project/x.js"]],
+      ["check before sed -i + commit", "pnpm test && sed -i 's/a/b/' x.js && git commit -am m", "unchecked", "1 edit after last check (shell edits may be incomplete)", ["/home/user/project/x.js"]],
+      ["tee without git op", "mvn compile | tee output.txt", "no-changes", "no edits", []],
+      ["sed -i x a.ts && git commit -am m", "sed -i x a.ts && git commit -am m", "unchecked", "no checks ran (shell edits may be incomplete)", ["/home/user/project/a.ts"]],
       ["plain git commit", "git add -A && git commit -m m", "no-changes", "no edits", []],
       ["git-op only", "git merge origin/main", "no-changes", "no edits", []],
       ["scratch redirect", "echo hi > /tmp/x && git commit -m m", "no-changes", "no edits", []],
     ])("%s", (_n, command, status, reason, files) => {
       const p = run(command);
       expect({ status: p.status, reason: p.reason, files: p.files.map((f) => f.path) }).toEqual({ status, reason, files });
+    });
+
+    test("without bashEditDiff at all, keep today's behaviour (tee creates heuristic edit)", () => {
+      const p = one([prompt("q"), toolUse("b1", "Bash", { command: "mvn compile | tee output.txt" }), toolResult("b1", "BUILD SUCCESS", { toolUseResult: { stdout: "BUILD SUCCESS" } })]);
+      expect(p.status).toBe("unchecked");
+      expect(p.reason).toBe("no checks ran (shell edits may be incomplete)");
+      expect(p.files.map((f) => f.path)).toEqual(["/home/user/project/output.txt"]);
     });
   });
 

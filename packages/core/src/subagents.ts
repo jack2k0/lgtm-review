@@ -10,8 +10,8 @@ import { parseTs } from "./timing.js";
  * - each guest event goes after the last host event whose timestamp is <= its own (ties: host first);
  *   events without a timestamp inherit the previous known one; guest events earlier than the start of the
  *   host attach at the start (right after the prompt event), later than the end at the end;
- * - guest timestamps are made monotone within their transcript, so a transcript keeps its own order;
- * - guests of one slot are ordered by (timestamp, agentId, position);
+ * - guest timestamps are made monotone within their transcript and floored at the host call's time;
+ * - guests of one slot are ordered by (timestamp, host call order, position);
  * - nested agents (an `Agent` call inside a transcript) are merged recursively up to depth 3;
  * - at most 20,000 non-text guest events per prompt are merged (applied while merging).
  */
@@ -150,7 +150,7 @@ function inheritedTimes(events: readonly Event[], first: number): number[] {
   let last = first;
   for (const ev of events) {
     const t = parseTs(eventTs(ev));
-    if (t !== null) last = t;
+    if (t !== null) last = Math.max(first, t);
     out.push(last);
   }
   return out;
@@ -180,7 +180,7 @@ interface Guest {
   ev: Event;
   slot: number;
   ts: number;
-  key: string;
+  callIdx: number;
   idx: number;
 }
 
@@ -256,17 +256,20 @@ function mergeLevel(host: readonly Event[], depth: number, minSlot: number, ctx:
     events = mergeLevel(events, depth + 1, 0, ctx, budget, flags);
 
     // Guest timestamps: inherit, lead with the call's own time, and keep them monotone within the transcript.
-    const times = inheritedTimes(events, hostTs[i]!);
-    let run = -Infinity;
+    // Guests can never be slotted before their host Agent call: floor ts at call time, slot right after the call.
+    const callTs = hostTs[i]!;
+    const minGuestSlot = Math.max(minSlot, i + 1);
+    const times = inheritedTimes(events, callTs);
+    let run = callTs;
     for (let k = 0; k < events.length; k++) {
       run = Math.max(run, times[k]!);
       const j = lastAtOrBefore(suffix(), run);
-      guests.push({ ev: events[k]!, slot: Math.max(minSlot, j + 1), ts: run, key: tr.agentId, idx: guests.length });
+      guests.push({ ev: events[k]!, slot: Math.max(minGuestSlot, j + 1), ts: run, callIdx: i, idx: k });
     }
   }
   if (guests.length === 0) return out;
 
-  guests.sort((a, b) => a.slot - b.slot || a.ts - b.ts || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0) || a.idx - b.idx);
+  guests.sort((a, b) => a.slot - b.slot || a.ts - b.ts || a.callIdx - b.callIdx || a.idx - b.idx);
   const merged: Event[] = [];
   let g = 0;
   for (let s = 0; s <= out.length; s++) {

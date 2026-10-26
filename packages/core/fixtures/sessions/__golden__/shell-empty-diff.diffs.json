@@ -27,13 +27,6 @@
       }
     ]
   },
-  "3:/home/user/project/src/new.js": {
-    "path": "/home/user/project/src/new.js",
-    "kind": "M",
-    "truncated": false,
-    "maybeIncomplete": true,
-    "hunks": []
-  },
   "4:/home/user/project/src/c.js": {
     "path": "/home/user/project/src/c.js",
     "kind": "M",
