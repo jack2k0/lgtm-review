@@ -3,3 +3,4 @@ dist
 .turbo
 *.log
 .env
+__pycache__/
