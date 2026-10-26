@@ -1,0 +1,16 @@
+{
+  "fixture": "continued-agent",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "the agent edited add.js and its check passed; its later continuation does not count here"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "note": "SendMessage continued the agent: its mul.js edit counts for this prompt and no check ran after it"
+    }
+  ]
+}
