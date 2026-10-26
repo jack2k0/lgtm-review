@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import type { PromptAnalysis, SessionAnalysis, SessionSummary } from "@lgtm/core";
-import { PromptTable } from "./PromptTable";
+import { PromptTable, Row, InheritedGroup } from "./PromptTable";
 import { SessionList } from "./SessionList";
 
 const prompt = (index: number, over: Partial<PromptAnalysis> = {}): PromptAnalysis => ({
@@ -56,6 +56,31 @@ describe("inherited prompts in the prompt table", () => {
     const html = renderToStaticMarkup(<PromptTable session={s} />);
     expect(html).toContain("2 prompts");
     expect(html).not.toContain("inherited");
+  });
+
+  test("inherited row has no Map or Play link; own row has Map link", () => {
+    const s = session();
+    const ownHtml = renderToStaticMarkup(
+      <table>
+        <tbody>
+          <Row sessionId={s.sessionId} p={s.prompts[0]!} open={false} onToggle={() => {}} />
+        </tbody>
+      </table>,
+    );
+    expect(ownHtml).toContain("Steps");
+    expect(ownHtml).toContain("Map");
+    expect(ownHtml).not.toContain("Play");
+
+    const inheritedHtml = renderToStaticMarkup(
+      <table>
+        <tbody>
+          <Row sessionId={s.sessionId} p={s.prompts[2]!} open={false} onToggle={() => {}} />
+        </tbody>
+      </table>,
+    );
+    expect(inheritedHtml).toContain("Steps");
+    expect(inheritedHtml).not.toContain("Map");
+    expect(inheritedHtml).not.toContain("Play");
   });
 });
 

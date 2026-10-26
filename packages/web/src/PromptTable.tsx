@@ -51,8 +51,12 @@ export function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: Pr
         </td>
         <td className="nowrap">
           <a href={routeHref({ kind: "steps", id: sessionId, index: p.index })} aria-label={`Steps of prompt ${p.index + 1}`}>Steps</a>
-          {" · "}
-          <a href={routeHref({ kind: "map", id: sessionId, index: p.index })} aria-label={`Import map of prompt ${p.index + 1}`}>Map</a>
+          {p.inheritedFrom === undefined ? (
+            <>
+              {" · "}
+              <a href={routeHref({ kind: "map", id: sessionId, index: p.index })} aria-label={`Import map of prompt ${p.index + 1}`}>Map</a>
+            </>
+          ) : null}
         </td>
       </tr>
       {open ? (
@@ -84,7 +88,7 @@ function PromptHead() {
 }
 
 /** Collapsed-by-default group of prompts inherited from an earlier session; its rows use the same Row as own prompts. */
-function InheritedGroup({ sessionId, rows, from, others, openIdx, onToggle }: { sessionId: string; rows: readonly PromptAnalysis[]; from: string; others: number; openIdx: ReadonlySet<number>; onToggle: (i: number) => void }) {
+export function InheritedGroup({ sessionId, rows, from, others, openIdx, onToggle }: { sessionId: string; rows: readonly PromptAnalysis[]; from: string; others: number; openIdx: ReadonlySet<number>; onToggle: (i: number) => void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="inherited-group">
@@ -147,7 +151,9 @@ export function PromptTable({ session, show = "all" }: { session: SessionAnalysi
     } else if (k === "steps") {
       window.location.hash = routeHref({ kind: "steps", id, index: Number(target.dataset.index) });
     } else {
-      window.location.hash = routeHref({ kind: "map", id, index: Number(target.dataset.index) });
+      const idx = Number(target.dataset.index);
+      if (session.prompts[idx]?.inheritedFrom !== undefined) return;
+      window.location.hash = routeHref({ kind: "map", id, index: idx });
     }
   };
 

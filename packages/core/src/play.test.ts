@@ -303,6 +303,37 @@ describe("buildBeats", () => {
     expect(beats[1]!.text).toBe("packages/core/src/index.ts now imports packages/cli/src/index.ts");
   });
 
+  test("play beat names with two index.ts use repo paths (D4)", () => {
+    const diffs = new Map([
+      ["packages/core/src/index.ts", makeDiff("packages/core/src/index.ts", "M", 2, 1)],
+      ["packages/cli/src/index.ts", makeDiff("packages/cli/src/index.ts", "M", 3, 0)],
+      ["src/util.ts", makeDiff("src/util.ts", "M", 1, 0)],
+    ]);
+    const steps: Step[] = [
+      makeStep({ n: 1, phase: "write", files: ["packages/core/src/index.ts", "src/util.ts"] }),
+      makeStep({ n: 2, phase: "write", files: ["packages/cli/src/index.ts"] }),
+    ];
+    const map = makeMap([
+      { path: "packages/core/src/index.ts", changed: true },
+      { path: "packages/cli/src/index.ts", changed: true },
+      { path: "src/util.ts", changed: true },
+    ]);
+
+    const { beats } = buildBeats({ steps, diffs, map });
+    expect(beats).toHaveLength(3);
+    expect(beats[0]!.text).toBe("Edited packages/core/src/index.ts (+2 -1)");
+    expect(beats[1]!.text).toBe("Edited util.ts (+1 -0)");
+    expect(beats[2]!.text).toBe("Edited packages/cli/src/index.ts (+3 -0)");
+
+    // Fix re-edit with same-basename file also uses repo path
+    const fixSteps: Step[] = [
+      makeStep({ n: 1, phase: "write", files: ["packages/core/src/index.ts", "packages/cli/src/index.ts"] }),
+      makeStep({ n: 2, phase: "fix", files: ["packages/core/src/index.ts"] }),
+    ];
+    const { beats: fixBeats } = buildBeats({ steps: fixSteps, diffs, map });
+    expect(fixBeats[2]!.text).toBe("Fix: edited packages/core/src/index.ts (+2 -1)");
+  });
+
   test("focus filtering for off-map paths: off-map paths excluded from focus.nodes", () => {
     const diffs = new Map([
       ["README.md", makeDiff("README.md", "M", 10, 0)],
