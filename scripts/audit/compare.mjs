@@ -7,7 +7,7 @@
 // Build first (`pnpm build`). Without --truth the script runs `python3 -I scripts/audit/truth.py` into a private
 // temp dir that is removed afterwards. Never commit any output of the truth script.
 import { spawnSync } from "node:child_process";
-import { closeSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync } from "node:fs";
+import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -180,6 +180,10 @@ function main() {
     return 0;
   }
   const projectsDir = resolve(values["projects-dir"] ?? join(homedir(), ".claude", "projects"));
+  if (!existsSync(projectsDir)) {
+    console.error(`compare: no projects dir at ${projectsDir}`);
+    return 2;
+  }
   const cli = resolve(values.cli ?? join(here, "../../packages/cli/dist/cli.js"));
   const tmp = mkdtempSync(join(tmpdir(), "lgtm-audit-"));
   try {
@@ -188,7 +192,7 @@ function main() {
       truthFile = join(tmp, "truth.json");
       const r = spawnSync("python3", ["-I", join(here, "truth.py"), "--projects-dir", projectsDir, "--out", truthFile, "--min-age-minutes", values["min-age-minutes"] ?? "30"], { encoding: "utf8" });
       if (r.status !== 0) {
-        console.error(`compare: truth.py failed (exit ${r.status})`);
+        console.error(`compare: truth.py failed (${r.error ? r.error.message : `exit ${r.status}`})${r.stderr ? `: ${r.stderr.trim().split("\n").pop()}` : ""}`);
         return 1;
       }
     }

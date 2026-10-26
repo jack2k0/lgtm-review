@@ -1,7 +1,7 @@
 // Self-test of the audit scripts on the synthetic fixture (no real logs).  Run: node --test scripts/audit/
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -62,4 +62,20 @@ test("categorize names the smallest tool behaviour that reproduces the tool answ
   assert.match(c.cat, /shell-written-doc-or-scratch-counts/);
   assert.equal(categorize({ status: "checked", reasonClass: "c-passed" }, g).cat, "unexplained");
   assert.deepEqual(truthOf(g, "strict"), { status: "no-changes", reason: "nc-doc" });
+});
+
+test("truth.py refuses --out inside the repository and writes its file 0600 outside it", () => {
+  const inRepo = join(here, "should-not-exist.json");
+  const r = spawnSync("python3", ["-I", join(here, "truth.py"), "--projects-dir", join(here, "fixtures/projects"), "--min-age-minutes", "0", "--out", inRepo], { encoding: "utf8" });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /outside the repository/);
+  assert.equal(existsSync(inRepo), false);
+  const tmp = mkdtempSync(join(tmpdir(), "lgtm-audit-test-"));
+  try {
+    const out = join(tmp, "t.json");
+    assert.equal(spawnSync("python3", ["-I", join(here, "truth.py"), "--projects-dir", join(here, "fixtures/projects"), "--min-age-minutes", "0", "--out", out]).status, 0);
+    assert.equal(statSync(out).mode & 0o777, 0o600);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });

@@ -961,6 +961,13 @@ def main():
     ap.add_argument("--out", help="write per-prompt truth JSON here (outside the repo; never commit)")
     ap.add_argument("--min-age-minutes", type=float, default=30, help="skip session files modified more recently than this (the session being written)")
     args = ap.parse_args()
+    if not os.path.isdir(args.projects_dir):
+        print(f"truth: no projects dir at {args.projects_dir}", file=sys.stderr)
+        return 2
+    repo = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+    if args.out and os.path.realpath(os.path.abspath(args.out)).startswith(repo + os.sep):
+        print("truth: --out must be outside the repository (it holds ids derived from private logs)", file=sys.stderr)
+        return 2
     now = time.time()
     rows, excl, stats = [], [], Counter()
     for pdir in sorted(glob.glob(os.path.join(args.projects_dir, "*"))):
@@ -972,7 +979,9 @@ def main():
         stats.update(s)
     res = {"rows": rows, "excluded": [{"project": a, "session": b} for a, b in excl], "stats": dict(stats)}
     if args.out:
-        with open(args.out, "w") as fh:
+        fd = os.open(args.out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as fh:
             json.dump(res, fh)
     c = Counter(r["status"] for r in rows)
     print(f"truth: {len(rows)} prompts in {len({r['session'] for r in rows})} sessions; excluded sessions {len(excl)}; subagent files attached {stats['sub-attached']}, unattached {stats['sub-unattached']}")
