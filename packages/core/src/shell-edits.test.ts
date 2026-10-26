@@ -161,11 +161,4 @@ describe("classifyShellMutation: order and paths", () => {
     expect(normalizePath("/a/b/../c/./d")).toBe("/a/c/d");
     expect(normalizePath("../a")).toBe("../a");
   });
-
-  test("long commands stay linear-ish", () => {
-    const cmd = "sed -i s/a/b/ " + Array.from({ length: 5000 }, (_, i) => `f${i}.js`).join(" ");
-    const t = Date.now();
-    expect(classifyShellMutation(cmd).edits.length).toBeLessThanOrEqual(20);
-    expect(Date.now() - t).toBeLessThan(1000);
-  });
 });

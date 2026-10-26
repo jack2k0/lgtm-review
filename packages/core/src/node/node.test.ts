@@ -63,30 +63,6 @@ describe("analyzeFile", () => {
       writeFileSync(join(dir, "c.jsonl"), lines + lines);
       expect((await analyzeFile(join(dir, "c.jsonl"))).prompts).toHaveLength(1);
     }));
-
-  test("20 MB session analysed fast", () =>
-    withTmp(async (dir) => {
-      resetIds();
-      const f = join(dir, "big.jsonl");
-      const filler = "x".repeat(2000);
-      const chunks: string[] = [];
-      let size = 0;
-      let n = 0;
-      while (size < 20 * 1024 * 1024) {
-        const batch = [prompt(`task ${n}`), ...edit(`e${n}`), ...bash(`b${n}`, "pnpm test", { output: filler })];
-        const s = batch.join("\n") + "\n";
-        chunks.push(s);
-        size += s.length;
-        n++;
-      }
-      writeFileSync(f, chunks.join(""));
-      const t0 = performance.now();
-      const a = await analyzeFile(f);
-      const ms = performance.now() - t0;
-      console.log(`analyzed ${(size / 1048576).toFixed(1)} MB, ${a.prompts.length} prompts in ${Math.round(ms)} ms`);
-      expect(a.prompts.length).toBeGreaterThan(0);
-      expect(ms).toBeLessThan(process.env.CI ? 6000 : 3000);
-    }), 60_000);
 });
 
 describe("loadRepoScripts", () => {

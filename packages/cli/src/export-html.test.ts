@@ -473,6 +473,80 @@ describe("diff size cap and inherited prompts", () => {
   });
 });
 
+describe("diff card counts and truncation", () => {
+  test("truncated diff shows file entry counts and (diff truncated)", () => {
+    const input: ExportInput = {
+      analysis: {
+        ...hostileInput().analysis,
+        title: "truncated diff test",
+        prompts: [
+          {
+            ...hostileInput().analysis.prompts[0]!,
+            files: [{ path: "/home/user/project/big.ts", kind: "M", added: 2500, removed: 0, maybeIncomplete: false }],
+          },
+        ],
+      },
+      details: [],
+      diffs: new Map([
+        [
+          0,
+          [
+            {
+              path: "/home/user/project/big.ts",
+              kind: "M",
+              truncated: true,
+              maybeIncomplete: false,
+              hunks: [
+                {
+                  header: "@@ -1,1 +1,2001 @@",
+                  lines: Array.from({ length: 2000 }, (_, i) => ({ t: "+" as const, s: `line ${i}` })),
+                },
+              ],
+            },
+          ],
+        ],
+      ]),
+    };
+    const { html } = renderExport(input, BASE);
+    expect(html).toContain('<span class="muted">1 hunk +2500 -0 (diff truncated)</span>');
+    expect(html).toContain("+2500");
+  });
+
+  test("whole-file write without structuredPatch shows file counts and keeps muted note", () => {
+    const input: ExportInput = {
+      analysis: {
+        ...hostileInput().analysis,
+        title: "unpatched write test",
+        prompts: [
+          {
+            ...hostileInput().analysis.prompts[0]!,
+            files: [{ path: "/home/user/project/write.ts", kind: "A", added: 150, removed: 0, maybeIncomplete: true }],
+          },
+        ],
+      },
+      details: [],
+      diffs: new Map([
+        [
+          0,
+          [
+            {
+              path: "/home/user/project/write.ts",
+              kind: "A",
+              truncated: false,
+              maybeIncomplete: true,
+              hunks: [],
+            },
+          ],
+        ],
+      ]),
+    };
+    const { html } = renderExport(input, BASE);
+    expect(html).toContain('<span class="muted">0 hunks +150 -0</span>');
+    expect(html).not.toContain("(diff truncated)");
+    expect(html).toContain('<p class="muted">No changed lines were recorded for this file.</p>');
+  });
+});
+
 // ------------------------------------------------------------------ contrast
 
 describe("export stylesheet contrast", () => {
