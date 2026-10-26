@@ -187,8 +187,7 @@ describe("files", () => {
 describe("session fields", () => {
   test("title, branch, startedAt, sessionId", () => {
     const a = analyzeSession([prompt("A\n  long   prompt " + "x".repeat(100))]);
-    expect(a.title).toHaveLength(60);
-    expect(a.title.startsWith("A long prompt")).toBe(true);
+    expect(a.title).toBe("A long prompt");
     expect(a.branch).toBe("main");
     expect(a.startedAt).toBe("2026-01-01T00:00:01.000Z");
     expect(a.sessionId).toBe("00000000-0000-4000-8000-000000000001");
@@ -742,6 +741,14 @@ describe("scoped checks (FR-017)", () => {
     expect(make.status).toBe("checked");
     expect(make.reason).toBe("make -Cpackages/web test passed after last edit (scoped to packages/web)");
     expect(scoped(make)).toEqual([CORE]);
+  });
+
+  test("SC-16: secret option values are never scopes", () => {
+    const p = one([prompt("q"), ...edit("e1", CORE), ...bash("b1", "pytest -q --password hunter2")]);
+    expect(p.status).toBe("checked");
+    expect(scoped(p)).toEqual([]);
+    expect(p.reason).not.toContain("scoped to");
+    expect(p.reason).not.toContain("(scoped to hunter2)");
   });
 });
 

@@ -33,7 +33,15 @@ function basename(path: string): string {
 
 function oneLine(s: string, max: number): string {
   const t = s.replace(/\s+/g, " ").trim();
-  return t.length > max ? t.slice(0, max) : t;
+  if (t.length <= max) return t;
+  if (max <= 0) return "";
+  if (t[max - 1] !== " " && t[max] !== " ") {
+    const lastSpace = t.lastIndexOf(" ", max - 1);
+    if (lastSpace !== -1) {
+      return t.slice(0, lastSpace).trimEnd();
+    }
+  }
+  return t.slice(0, max).trimEnd();
 }
 
 function countDiffLines(diff: FileDiff | null): { added: number; removed: number } {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { createAnalyzer } from "./analyze.js";
 import { parseLines } from "./parse.js";
 import type { PromptDetail, Step } from "./schema.js";
+import { oneLine } from "./steps.js";
 import { at, bash, bgBash, edit, F, patchResult, prompt, rec, resetIds, taskNotification, toolResult, toolUse } from "./testing/records.js";
 import { listFixtures, readFixtureLines } from "./testing/fixtures.js";
 import { analyzeSession } from "./analyze.js";
@@ -134,7 +135,7 @@ describe("step grouping", () => {
       toolResult("g", "x"),
     ]);
     const all = s.flatMap((x) => x.actions);
-    expect(all.map((a) => a.summary)).toEqual(["src/n.ts", long.slice(0, 200), "needle"]);
+    expect(all.map((a) => a.summary)).toEqual(["src/n.ts", "echo", "needle"]);
     expect(JSON.stringify(s)).not.toContain("SECRET");
   });
 
@@ -444,3 +445,28 @@ describe("background check steps", () => {
     expect(b.steps[0]!.durationMs).toBe(a.steps[0]!.durationMs);
   });
 });
+
+describe("oneLine", () => {
+  test("mid-word cut: cuts back to the last space", () => {
+    expect(oneLine("hello world", 8)).toBe("hello");
+    expect(oneLine("one two three four", 11)).toBe("one two");
+    expect(oneLine('{"password": "hunter2xyz"}', 20)).toBe('{"password":');
+  });
+
+  test("no-space cut: keeps hard cut", () => {
+    expect(oneLine("supercalifragilistic", 5)).toBe("super");
+    expect(oneLine("abcdefghij", 4)).toBe("abcd");
+  });
+
+  test("exact length: returns text unchanged", () => {
+    expect(oneLine("hello world", 11)).toBe("hello world");
+    expect(oneLine("hello", 5)).toBe("hello");
+    expect(oneLine("", 5)).toBe("");
+  });
+
+  test("cut at whitespace boundary trims trailing spaces", () => {
+    expect(oneLine("hello world", 5)).toBe("hello");
+    expect(oneLine("hello world", 6)).toBe("hello");
+  });
+});
+
