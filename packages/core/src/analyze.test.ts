@@ -1090,4 +1090,13 @@ describe("mixed git and plain commands (status-accuracy-3, G)", () => {
     const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge b && sed -i 's/x/y/' plan.md", [`${P}src/a.ts`])]);
     expect(p).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit" });
   });
+
+  test.each(["cp /tmp/x src/a.ts", "python3 -c \"open('src/a.ts','w').write('x')\"", "install /tmp/x src/a.ts"])(
+    "(H1) an unrecognised writer in the command keeps the old all-plain attribution: %s",
+    (writer) => {
+      const cmd = `git merge b && sed -i 's/x/y/' plan.md && ${writer}`;
+      const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", cmd, [`${P}src/a.ts`, `${P}plan.md`])]);
+      expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
+    },
+  );
 });

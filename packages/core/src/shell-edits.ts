@@ -34,9 +34,14 @@ export interface ShellMutation {
    * switch, reset, restore, am, mv): the files in its `bashEditDiff` may come from git rather than from its plain edits.
    */
   hasHistoryGitOp: boolean;
+  /**
+   * Some segment is neither a recognised write, a git operation, a check nor a known non-writing command, or the
+   * list of edits was cut: files of the diff cannot be attributed one by one.
+   */
+  opaque: boolean;
 }
 
-const NONE: ShellMutation = { edits: [], gitOnly: false, order: "unknown", hasCd: false, hasHistoryGitOp: false };
+const NONE: ShellMutation = { edits: [], gitOnly: false, order: "unknown", hasCd: false, hasHistoryGitOp: false, opaque: false };
 const FILES_MAX = 20;
 const GIT_OPS = new Set(["merge", "rebase", "pull", "checkout", "stash", "cherry-pick", "revert", "mv", "restore", "reset", "switch", "am"]);
 
@@ -298,6 +303,25 @@ function pyValue(expr: string, bound: ReadonlyMap<string, string | null>, argv: 
   return /^\w+$/.test(e) ? (bound.get(e) ?? null) : null;
 }
 
+/** Removes `#` comments outside string literals (an apostrophe in a comment must not open a string). */
+function stripPyComments(src: string): string {
+  return src
+    .split("\n")
+    .map((line) => {
+      let quote = "";
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i] as string;
+        if (quote !== "") {
+          if (c === "\\") i++;
+          else if (c === quote) quote = "";
+        } else if (c === '"' || c === "'") quote = c;
+        else if (c === "#") return line.slice(0, i);
+      }
+      return line;
+    })
+    .join("\n");
+}
+
 /** The text between the parenthesis at `open` and its match (quote-aware), or null when it is not closed. */
 function balancedArgs(s: string, open: number): string | null {
   let depth = 0;
@@ -317,6 +341,8 @@ function balancedArgs(s: string, open: number): string | null {
 /** Start of the receiver expression that ends `prefix` (`Path("x")`, `(a / "b")`, `p`), or null. */
 function receiverOf(prefix: string): string | null {
   const t = prefix.trimEnd();
+  // A qualified name (`a.b.write_text`, `x[0].write_text`) is not a plain name we can follow.
+  if (/[\w)\]]\s*\.\s*\w+$/.test(t) || t.endsWith("]")) return null;
   if (t.endsWith(")")) {
     let depth = 0;
     for (let i = t.length - 1; i >= 0; i--) {
@@ -336,20 +362,35 @@ function receiverOf(prefix: string): string | null {
  * string literal, `sys.argv[N]` (of `python3 - args`), a name bound to such a value by an assignment above the
  * write (the binding in effect at the write counts), or a concatenation / `Path` / `os.path.join` of those.
  */
-function pythonWrites(body: string, argv: (string | null)[]): string[] {
+function pythonWrites(raw: string, argv: (string | null)[]): string[] {
+  const body = stripPyComments(raw);
   const out: string[] = [];
   let unknown = false;
-  const binds: { at: number; name: string; expr: string }[] = [];
-  for (const m of body.matchAll(PY_BIND_RE)) binds.push({ at: m.index ?? 0, name: m[1] as string, expr: m[2] as string });
+  const binds: { at: number; name: string; expr: string; nested: boolean }[] = [];
+  for (const m of body.matchAll(PY_BIND_RE)) {
+    const name = m[1] as string;
+    const at = (m.index ?? 0) + m[0].indexOf(name);
+    const lineStart = body.lastIndexOf("\n", at - 1) + 1;
+    // An indented binding (inside if / for / with / def) may or may not run: the name is then unresolved.
+    const nested = (/^[ \t]*/.exec(body.slice(lineStart))?.[0] ?? "") !== "";
+    binds.push({ at, name, expr: m[2] as string, nested });
+  }
   const writes: { at: number; expr: string | null }[] = [];
   for (const m of body.matchAll(PY_OPEN_CALL_RE)) {
     const at = m.index ?? 0;
     const args = balancedArgs(body, at + m[0].length - 1);
-    if (args === null) continue;
+    if (args === null) {
+      // Cannot tell what is written: stay conservative.
+      writes.push({ at, expr: null });
+      continue;
+    }
     const parts = splitTop(args, ",").map((x) => x.trim());
-    const mode = parts[1] !== undefined && !/^\w+\s*=/.test(parts[1]) ? parts[1] : (parts.find((x) => /^mode\s*=/.test(x)) ?? "").replace(/^mode\s*=\s*/, "");
-    if (!/^(['"])[wax][bt+]*\1$/.test(mode)) continue;
-    writes.push({ at, expr: parts[0] ?? null });
+    const kw = parts.find((x) => /^mode\s*=/.test(x));
+    const mode = kw !== undefined ? kw.replace(/^mode\s*=\s*/, "") : parts[1] !== undefined && !/^\w+\s*=(?!=)/.test(parts[1]) ? parts[1] : undefined;
+    if (mode === undefined) continue; // open(path): read
+    const lit = /^(['"])([^'"\n]*)\1$/.exec(mode);
+    if (lit && !/[wax+]/.test(lit[2] as string)) continue; // a literal read mode
+    writes.push({ at, expr: lit ? (parts[0] ?? null) : null }); // a non-literal mode might write
   }
   for (const m of body.matchAll(PY_WRITE_RE)) {
     const at = m.index ?? 0;
@@ -360,13 +401,16 @@ function pythonWrites(body: string, argv: (string | null)[]): string[] {
   let bi = 0;
   for (const w of writes) {
     while (bi < binds.length && (binds[bi] as { at: number }).at < w.at) {
-      const b = binds[bi++] as { name: string; expr: string };
-      bound.set(b.name, pyValue(b.expr, bound, argv));
+      const b = binds[bi++] as { name: string; expr: string; nested: boolean };
+      bound.set(b.name, b.nested ? null : pyValue(b.expr, bound, argv));
     }
     const v = w.expr === null ? null : pyValue(w.expr, bound, argv);
     if (v === null || v === "") unknown = true;
     else if (!isIgnoredPath(v)) out.push(v);
-    if (out.length >= FILES_MAX) break;
+    if (out.length >= FILES_MAX) {
+      unknown = true; // cut: more writes may follow
+      break;
+    }
   }
   if (unknown) out.push(SHELL_EDIT_FILE);
   return out;
@@ -434,15 +478,37 @@ const ASSIGN_RE = /^(?:export\s+)?([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|"'`$]*)
 /** Literal `NAME=value` assignments at the start of a segment (also `export NAME=value` and inline env prefixes). */
 function collectAssignments(seg: string, vars: Map<string, string>): void {
   let s = seg.trim();
+  const exported = s.startsWith("export ");
+  const found: [string, string | null][] = [];
   for (let guard = 0; guard < 10; guard++) {
     const m = ASSIGN_RE.exec(s);
-    if (!m) return;
+    if (!m) break;
     const raw = m[2] as string;
     const v = /^(["'])([\s\S]*)\1$/.test(raw) ? raw.slice(1, -1) : raw;
-    if (v.includes("$") || v.includes("`") || v === "") vars.delete(m[1] as string);
-    else vars.set(m[1] as string, v);
+    found.push([m[1] as string, v.includes("$") || v.includes("`") || v === "" ? null : v]);
     s = s.slice(m[0].length);
   }
+  // `NAME=x cmd` sets NAME for cmd only: later segments do not see it (and `$NAME` in cmd is expanded before it).
+  if (s.trim() !== "" && !exported) return;
+  for (const [name, v] of found) {
+    if (v === null) vars.delete(name);
+    else vars.set(name, v);
+  }
+}
+
+const SAFE_HEADS = new Set(["cd", "pushd", "popd", "echo", "printf", "ls", "cat", "true", "false", ":", "test", "[", "[[", "sleep", "export", "set", "unset", "pwd"]);
+const SAFE_GIT = new Set(["add", "commit", "status", "log", "diff", "show"]);
+
+/** Segments known not to write files (beyond what `segmentMutation` already reported). */
+function isKnownNonWriting(words: Word[], redirects: Redirect[]): boolean {
+  const head = words[0]?.text;
+  if (head === undefined) return redirects.length === 0;
+  // A write redirect to an unknown target is a write we cannot see.
+  if (redirects.some((r) => (r.fd === "" || r.fd === "1") && (r.target === null || isUnknownTarget(r.target)))) return false;
+  if (/^[A-Za-z_]\w*=/.test(head)) return true;
+  const git = gitSub(words);
+  if (git !== null) return SAFE_GIT.has(git.sub) || (git.sub === "worktree" && git.args[0]?.text === "list");
+  return SAFE_HEADS.has(head);
 }
 
 const XARGS_VALUE_OPTS = new Set(["-I", "-n", "-P", "-d", "-L", "-s", "-E", "-a", "-J"]);
@@ -461,6 +527,7 @@ function segmentMutation(
   isCheck: boolean,
   pipedFromCheck: boolean,
   heredoc: string | null,
+  heredocUnsure: boolean,
   vars: ReadonlyMap<string, string>,
 ): SegMut | null {
   const words = unwrapXargs(rawWords.map((w) => substituteVars(w, vars)));
@@ -531,10 +598,10 @@ function segmentMutation(
     const f = teeFiles(words.slice(1));
     mutating = f.length > 0;
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
-  } else if (/^python[\d.]*$/.test(head) && heredoc !== null) {
+  } else if (/^python[\d.]*$/.test(head) && (heredoc !== null || heredocUnsure)) {
     const dash = words.findIndex((w) => w.text === "-");
     const argv = dash < 0 ? [] : words.slice(dash + 1).map((w) => shellArg(w, vars));
-    const f = pythonWrites(heredoc, argv);
+    const f = heredoc === null ? [SHELL_EDIT_FILE] : pythonWrites(heredoc, argv);
     mutating = f.length > 0;
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
   }
@@ -593,19 +660,25 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
     const vars = new Map<string, string>();
     const bodies = command.includes("<<") ? heredocBodies(command) : [];
     let heredocs = 0;
-    let prevHeredoc: number | null = null;
+    let pipeHeredoc: number | null = null;
+    let opaque = false;
+    let truncated = false;
     segs.forEach((seg, i) => {
       collectAssignments(seg.text, vars);
-      // The heredoc fed to this segment's stdin: its own, or the one of the previous segment of a pipe.
+      // The heredoc fed to this segment's stdin: its own, or the one that opened the pipeline it belongs to.
       const own = HEREDOC_START_RE.test(seg.text) ? heredocs++ : null;
-      const fed = own ?? (prevPipe ? prevHeredoc : null);
-      prevHeredoc = own;
+      if (!prevPipe) pipeHeredoc = null;
+      if (own !== null) pipeHeredoc = own;
+      const fed = own ?? (prevPipe ? pipeHeredoc : null);
       const heredoc = fed === null ? null : (bodies[fed] ?? null);
+      // A piped python with no heredoc in its pipeline, while the command has one elsewhere: unsure, not "no write".
+      const unsure = heredoc === null && prevPipe && heredocs > 0 && pipeHeredoc === null;
       const isCheck = matchSegment(seg.text, repo);
       const { words, redirects } = parseWords(normalizeFirstToken(stripPrefixes(seg.text)));
       const head = words[0]?.text;
       if (head === "cd" || head === "pushd") hasCd = true;
-      const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, heredoc, vars);
+      const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, heredoc, unsure, vars);
+      if (m === null && !isCheck && !isKnownNonWriting(words, redirects)) opaque = true;
       prevCheck = isCheck;
       prevPipe = seg.op === "|";
       if (isCheck) checkIdx.push(i);
@@ -619,7 +692,11 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
       for (const f of m.files) {
         const kind = f.kind ?? "M";
         const key = `${m.gitOp ? "g" : "e"}\u0000${kind}\u0000${f.file}`;
-        if (seen.has(key) || edits.length >= FILES_MAX) continue;
+        if (seen.has(key)) continue;
+        if (edits.length >= FILES_MAX) {
+          truncated = true;
+          continue;
+        }
         seen.add(key);
         edits.push({ file: f.file, gitOp: m.gitOp, kind });
       }
@@ -630,7 +707,7 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
       const lastCheck = checkIdx[checkIdx.length - 1] as number;
       order = plainIdx.some((i) => i > lastCheck) ? "after-check" : "before-check";
     }
-    return { edits, gitOnly: !anyPlain, order, hasCd, hasHistoryGitOp };
+    return { edits, gitOnly: !anyPlain, order, hasCd, hasHistoryGitOp, opaque: opaque || truncated };
   } catch {
     return NONE;
   }

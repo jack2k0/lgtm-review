@@ -216,3 +216,42 @@ describe("classifyShellMutation: history-moving git operations", () => {
     expect(m.edits.map((e) => [e.file, e.gitOp, e.kind])).toEqual([["context/changes/x", true, "D"], ["context/archive/x", true, "A"]]);
   });
 });
+
+describe("classifyShellMutation: fail closed on unresolved shell writes (review round 1)", () => {
+  test.each<[string, string, string[]]>([
+    ["A3 non-literal mode", "python3 - <<'EOF'\nm = 'w'\nopen('docs/a.md', m).write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A3 non-literal mode keyword", "python3 - <<'EOF'\nopen('docs/a.md', mode=m).write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A3 literal read mode is no write", "python3 - <<'EOF'\nopen('docs/a.md', 'r').read()\nEOF", []],
+    ["A4 qualified receiver", "python3 - <<'EOF'\nself.p.write_text('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A4 chained receiver", "python3 - <<'EOF'\nfrom pathlib import Path\nPath('a.md').resolve().write_text('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A5 apostrophe in a comment inside the call", "python3 - <<'EOF'\nopen('docs/a.md', # don't\n    'w').write('x')\nEOF", ["docs/a.md"]],
+    ["A5 unbalanced call", "python3 - <<'EOF'\nopen('docs/a.md', 'w'\nEOF", [SHELL_EDIT_FILE]],
+    ["A6 heredoc three stages before python", "cat <<'EOF' | tr a b | python3 -\nopen('docs/a.md', 'w').write('x')\nEOF", ["docs/a.md"]],
+    ["A6 piped python with a heredoc elsewhere", "cat <<'EOF' > /tmp/x\nfoo\nEOF\nprintf x | python3 -", [SHELL_EDIT_FILE]],
+    ["A7 indented rebinding", "python3 - <<'EOF'\np = 'docs/a.md'\nif x:\n    p = 'src/b.ts'\nopen(p, 'w').write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A8 prefix assignment does not reach python argv", "R=docs/x.md python3 - \"$R\" <<'EOF'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A8 prefix assignment does not persist", "R=docs/x.md true && sed -i s/a/b/ \"$R\"", [SHELL_EDIT_FILE]],
+    ["A8 export persists", "export R=docs/x.md && sed -i s/a/b/ \"$R\"", ["docs/x.md"]],
+  ])("%s", (_name, cmd, expected) => {
+    expect(files(cmd)).toEqual(expected);
+  });
+
+  test("H2: a cut list of edits is opaque", () => {
+    const many = Array.from({ length: 25 }, (_, i) => `d${i}.md`).join(" ");
+    const m = classifyShellMutation(`git merge b && sed -i s/a/b/ ${many}`);
+    expect(m.edits).toHaveLength(20);
+    expect(m.opaque).toBe(true);
+  });
+
+  test.each([
+    ["git merge b && sed -i 's/x/y/' plan.md && git commit -qam m", false],
+    ["cd sub && git merge b && sed -i s/x/y/ plan.md && git status", false],
+    ["git merge b && echo done && ls && sleep 1 && true", false],
+    ["git merge b && sed -i s/x/y/ plan.md && cp /tmp/x src/a.ts", true],
+    ["git merge b && sed -i s/x/y/ plan.md && python3 -c \"open('src/a.ts','w')\"", true],
+    ["git merge b && sed -i s/x/y/ plan.md && install a b", true],
+    ["git merge b && sed -i s/x/y/ plan.md && echo x > \"$UNSET\"", true],
+  ])("H1 opaque: %s", (cmd, opaque) => {
+    expect(classifyShellMutation(cmd).opaque).toBe(opaque);
+  });
+});

@@ -219,7 +219,6 @@ function aggregateFiles(edits: EditRec[]): FileChange[] {
   return [...byPath.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
-/** Sequence number of an edit made in the same command as a check, ordered by segment. */
 /**
  * Diff paths made by the plain (non-git) edits of a command that also runs a history-moving git operation,
  * matched by the resolved targets of those edits (A2). Null when a target is unresolved or a code target matches no diff path:
@@ -245,6 +244,7 @@ function plainDiffPaths(sm: ShellMutation, diff: readonly { path: string }[], cw
   return out;
 }
 
+/** Sequence number of an edit made in the same command as a check, ordered by segment. */
 function orderedSeq(seq: number, order: "before-check" | "after-check" | "unknown"): number {
   return order === "before-check" ? seq - 0.5 : order === "after-check" ? seq + 0.5 : seq;
 }
@@ -650,7 +650,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           const sm = classifyShellMutation(use.input.command, opts.repo);
           const cwd = use.cwd ?? parser.meta().cwd;
           if (ev.bashEditDiff !== undefined && ev.bashEditDiff.length > 0) {
-            const plain = sm.hasHistoryGitOp && !sm.gitOnly ? plainDiffPaths(sm, ev.bashEditDiff, cwd, (path) => classify(path, use) === "code") : null;
+            const plain = sm.hasHistoryGitOp && !sm.gitOnly && !sm.opaque ? plainDiffPaths(sm, ev.bashEditDiff, cwd, (path) => classify(path, use) === "code") : null;
             const all = ev.bashEditDiff.map((f) => {
               const gitMade = plain === null ? sm.gitOnly : !plain.has(f.path);
               const t: FileTouch = {
@@ -688,7 +688,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               };
               return { t, gitMade: e.gitOp };
             });
-            const split = sm.hasHistoryGitOp && !sm.gitOnly;
+            const split = sm.hasHistoryGitOp && !sm.gitOnly && !sm.opaque;
             for (const gitOp of split ? [true, false] : [sm.gitOnly]) {
               const files = all.filter((x) => (split ? x.gitMade === gitOp : true)).map((x) => x.t);
               if (files.length > 0) groups.push({ files, gitOp });
