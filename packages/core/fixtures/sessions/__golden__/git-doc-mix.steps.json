@@ -1,0 +1,195 @@
+[
+  {
+    "index": 0,
+    "text": "Fix add and merge the feature branch.",
+    "status": "checked",
+    "reason": "pnpm test passed after last code edit; 1 documentation edit after it",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "write",
+        "title": "Edit src/feature.js (+1 -1), edit plan.md (+1 -1)",
+        "startedAt": "2026-01-01T00:00:06.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git merge feature && sed -i 's/todo/done/' plan.md && git commit -qam merge",
+            "ok": true,
+            "ts": "2026-01-01T00:00:06.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/feature.js",
+          "/home/user/project/plan.md"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Merge the feature branch and tick the plan.",
+    "status": "no-changes",
+    "reason": "no code edits (documentation only)",
+    "headline": "Mostly writing (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:09.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/feature.js (+1 -1), edit plan.md (+1 -1)",
+        "startedAt": "2026-01-01T00:00:10.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git merge feature && sed -i 's/todo/done/' plan.md && git commit -qam merge",
+            "ok": true,
+            "ts": "2026-01-01T00:00:10.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/feature.js",
+          "/home/user/project/plan.md"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Fix sub, merge, patch the merged file.",
+    "status": "unchecked",
+    "reason": "1 edit after last check",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:13.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/merged.js",
+        "reason": "edited after the last completed check"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/sub.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:14.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/sub.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/sub.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:16.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:16.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "write",
+        "title": "Edit src/feature.js (+1 -1), edit src/merged.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:18.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git merge feature && sed -i 's/x/y/' src/merged.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:18.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/feature.js",
+          "/home/user/project/src/merged.js"
+        ]
+      }
+    ]
+  }
+]

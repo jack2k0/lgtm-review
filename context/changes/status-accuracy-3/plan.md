@@ -65,7 +65,7 @@ schema: no
 - `analyze.ts`: per-file attribution of `bashEditDiff` for commands with a history-moving git op (Desired End State G).
 - Tests in `analyze.test.ts`/`shell-edits.test.ts`: (a) edit code, test passes, then `git merge b && sed -i 's/x/y/' plan.md && git commit -qam m` with a diff listing `src/a.ts` and `plan.md` → still checked, reason with the documentation tail; (b) the same command as the only activity of a prompt → no-changes (`git operations` / documentation reason as today's rules give); (c) `git mv context/changes/x context/archive/x && sed -i … context/archive/x/change.md` → no code edit; (d) a mixed command whose plain edit writes `src/b.ts` → `src/b.ts` counts as a code edit, the merged files do not; (e) unresolved plain target → today's behaviour.
 - New fixture `git-doc-mix` with goldens covering (a), (b), (d).
-- [ ] done when: tests pass; existing labels and goldens unchanged; `pnpm check` green; gate exit 0/2.
+- [x] done when: tests pass; existing labels and goldens unchanged; `pnpm check` green; gate exit 0/2.
 
 ## Phase 3: Heredoc and variable targets (R)
 

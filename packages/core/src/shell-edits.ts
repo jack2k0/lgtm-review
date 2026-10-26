@@ -29,11 +29,16 @@ export interface ShellMutation {
   order: "before-check" | "after-check" | "unknown";
   /** The command changes directory: relative targets cannot be resolved against the session cwd. */
   hasCd: boolean;
+  /**
+   * The command runs a history-moving git operation (merge, rebase, pull, cherry-pick, revert, stash, checkout,
+   * switch, reset, restore, am, mv): the files in its `bashEditDiff` may come from git rather than from its plain edits.
+   */
+  hasHistoryGitOp: boolean;
 }
 
-const NONE: ShellMutation = { edits: [], gitOnly: false, order: "unknown", hasCd: false };
+const NONE: ShellMutation = { edits: [], gitOnly: false, order: "unknown", hasCd: false, hasHistoryGitOp: false };
 const FILES_MAX = 20;
-const GIT_OPS = new Set(["merge", "rebase", "pull", "checkout", "stash", "cherry-pick", "mv", "restore", "reset"]);
+const GIT_OPS = new Set(["merge", "rebase", "pull", "checkout", "stash", "cherry-pick", "revert", "mv", "restore", "reset", "switch", "am"]);
 
 interface Word {
   text: string;
@@ -242,6 +247,8 @@ interface MutFile {
 
 interface SegMut {
   gitOp: boolean;
+  /** A history-moving git operation (`GIT_OPS`), as opposed to `git rm` / `git apply`. */
+  history: boolean;
   files: MutFile[];
 }
 
@@ -266,6 +273,7 @@ function segmentMutation(
   const head = words[0]?.text ?? "";
   const files: MutFile[] = [];
   let gitOp = false;
+  let history = false;
   let mutating = false;
 
   const git = gitSub(words);
@@ -285,6 +293,7 @@ function segmentMutation(
       }
     } else if (GIT_OPS.has(git.sub)) {
       gitOp = true;
+      history = true;
       mutating = true;
       if (git.sub === "mv") {
         const ops = git.args.filter((w) => !isOption(w));
@@ -342,7 +351,7 @@ function segmentMutation(
       files.push({ file: r.target.text, kind: "M" as const });
     }
   }
-  return mutating ? { gitOp, files } : null;
+  return mutating ? { gitOp, history, files } : null;
 }
 
 /** Normalizes `.`/`..` segments of a path without touching the file system. */
@@ -381,6 +390,7 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
     let anyMutating = false;
     let anyPlain = false;
     let hasCd = false;
+    let hasHistoryGitOp = false;
     let prevCheck = false;
     let prevPipe = false;
     segs.forEach((seg, i) => {
@@ -394,6 +404,7 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
       if (isCheck) checkIdx.push(i);
       if (m === null) return;
       anyMutating = true;
+      if (m.history) hasHistoryGitOp = true;
       if (!m.gitOp) {
         anyPlain = true;
         plainIdx.push(i);
@@ -412,7 +423,7 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
       const lastCheck = checkIdx[checkIdx.length - 1] as number;
       order = plainIdx.some((i) => i > lastCheck) ? "after-check" : "before-check";
     }
-    return { edits, gitOnly: !anyPlain, order, hasCd };
+    return { edits, gitOnly: !anyPlain, order, hasCd, hasHistoryGitOp };
   } catch {
     return NONE;
   }

@@ -1029,3 +1029,60 @@ describe("checks inside an agent worktree", () => {
     expect(p.hints.filter((h) => h.rule === "check-scope").map((h) => h.path)).toEqual([`${P}/src/auth.ts`]);
   });
 });
+
+describe("mixed git and plain commands (status-accuracy-3, G)", () => {
+  const P = "/home/user/project/";
+  const diffBash = (id: string, command: string, paths: string[]) => [
+    toolUse(id, "Bash", { command }),
+    toolResult(id, "", {
+      toolUseResult: {
+        bashEditDiff: { files: paths.map((filePath) => ({ filePath, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-a", "+b", "+c"] }] })) },
+      },
+    }),
+  ];
+  const MERGE_SED = "git merge b && sed -i 's/x/y/' plan.md && git commit -qam m";
+
+  test("(a) merge + doc sed + commit after a passing check: still checked, documentation tail", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", MERGE_SED, [`${P}src/a.ts`, `${P}plan.md`])]);
+    expect(p).toMatchObject({ status: "checked", reason: "pnpm test passed after last code edit; 1 documentation edit after it" });
+    expect(p.files.map((f) => [f.path, f.maybeIncomplete])).toContainEqual([`${P}src/a.ts`, true]);
+  });
+
+  test("(b) the same command alone: no code edits (documentation only)", () => {
+    const p = one([prompt("q"), ...diffBash("b1", MERGE_SED, [`${P}src/a.ts`, `${P}plan.md`])]);
+    expect(p).toMatchObject({ status: "no-changes", reason: "no code edits (documentation only)" });
+    expect(p.files).toHaveLength(2);
+  });
+
+  test("(b2) without a diff: a git record plus a doc record", () => {
+    const p = one([prompt("q"), ...bash("b1", "git merge b && sed -i 's/x/y/' plan.md && git commit -qam m")]);
+    expect(p).toMatchObject({ status: "no-changes", reason: "no code edits (documentation only) (shell edits may be incomplete)" });
+  });
+
+  test("(c) git mv of a directory plus a doc sed: no code edit", () => {
+    const cmd = "git mv context/changes/x context/archive/x && sed -i 's/a/b/' context/archive/x/change.md";
+    const withDiff = one([prompt("q"), ...diffBash("b1", cmd, [`${P}context/archive/x/change.md`, `${P}context/archive/x/notes.ts`, `${P}context/changes/x/notes.ts`])]);
+    expect(withDiff).toMatchObject({ status: "no-changes", reason: "no code edits (documentation only)" });
+    const noDiff = one([prompt("q"), ...bash("b1", cmd)]);
+    expect(noDiff).toMatchObject({ status: "no-changes", reason: "no code edits (documentation only) (shell edits may be incomplete)" });
+  });
+
+  test("(d) a plain edit of a code file counts, the merged files do not", () => {
+    const cmd = "git merge b && sed -i 's/x/y/' src/b.ts";
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", cmd, [`${P}src/a.ts`, `${P}src/b.ts`])]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
+  });
+
+  test("(d2) a relative target after cd matches the diff path by suffix", () => {
+    const cmd = "cd sub && git merge b && sed -i 's/x/y/' src/b.ts";
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", cmd, [`${P}sub/src/a.ts`, `${P}sub/src/b.ts`])]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
+  });
+
+  test("(e) an unresolved plain target keeps the old behaviour: everything is a plain edit", () => {
+    const glob = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge b && sed -i 's/x/y/' src/*.md", [`${P}src/a.ts`, `${P}src/a.md`])]);
+    expect(glob.status).toBe("unchecked");
+    const nomatch = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge b && sed -i 's/x/y/' gone.md", [`${P}src/a.ts`])]);
+    expect(nomatch.status).toBe("unchecked");
+  });
+});

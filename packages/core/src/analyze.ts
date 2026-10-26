@@ -1,5 +1,5 @@
 import { checkScope, classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
-import { classifyShellMutation, resolveTarget } from "./shell-edits.js";
+import { classifyShellMutation, normalizePath, resolveTarget, SHELL_EDIT_FILE, type ShellMutation } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, isDocPath, isScratchPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
 import { createParser, type Event, type TaskNotificationEvent, type ToolInput, type ToolResultEvent } from "./parse.js";
@@ -220,6 +220,30 @@ function aggregateFiles(edits: EditRec[]): FileChange[] {
 }
 
 /** Sequence number of an edit made in the same command as a check, ordered by segment. */
+/**
+ * Diff paths made by the plain (non-git) edits of a command that also runs a history-moving git operation,
+ * matched by the resolved targets of those edits (A2). Null when a target is unresolved or matches no diff path:
+ * the whole diff is then attributed as one, as before.
+ */
+function plainDiffPaths(sm: ShellMutation, diff: readonly { path: string }[], cwd: string | null): Set<string> | null {
+  const out = new Set<string>();
+  for (const e of sm.edits) {
+    if (e.gitOp) continue;
+    if (e.file === SHELL_EDIT_FILE) return null;
+    const target = resolveTarget(e.file, cwd, sm.hasCd);
+    const rel = target.startsWith("/") ? null : normalizePath(target);
+    let hit = false;
+    for (const f of diff) {
+      if (rel === null ? f.path === normalizePath(target) : rel !== "" && !rel.startsWith("..") && !rel.startsWith("~") && (f.path === rel || f.path.endsWith(`/${rel}`))) {
+        out.add(f.path);
+        hit = true;
+      }
+    }
+    if (!hit) return null;
+  }
+  return out;
+}
+
 function orderedSeq(seq: number, order: "before-check" | "after-check" | "unknown"): number {
   return order === "before-check" ? seq - 0.5 : order === "after-check" ? seq + 0.5 : seq;
 }
@@ -619,36 +643,39 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             touches = [t];
           }
         }
-        let gitOp = false;
-        let seqAt = seq;
+        // One record per origin: git-made files never change the status, plain edits do (A1).
+        const groups: { files: FileTouch[]; gitOp: boolean }[] = [];
         if (use.name === "Bash" && use.input.command !== undefined) {
           const sm = classifyShellMutation(use.input.command, opts.repo);
+          const cwd = use.cwd ?? parser.meta().cwd;
           if (ev.bashEditDiff !== undefined && ev.bashEditDiff.length > 0) {
-            gitOp = sm.gitOnly;
-            if (!gitOp) seqAt = orderedSeq(seq, sm.order);
-            touches = ev.bashEditDiff.map((f) => {
+            const plain = sm.hasHistoryGitOp && !sm.gitOnly ? plainDiffPaths(sm, ev.bashEditDiff, cwd) : null;
+            const all = ev.bashEditDiff.map((f) => {
+              const gitMade = plain === null ? sm.gitOnly : !plain.has(f.path);
               const t: FileTouch = {
                 path: f.path,
                 kind: f.kind,
                 added: f.added,
                 removed: f.removed,
-                maybeIncomplete: f.maybeIncomplete || gitOp,
+                maybeIncomplete: f.maybeIncomplete || gitMade,
                 inFix: phase === "fix",
                 stats: f.stats,
                 cls: classify(f.path, use),
               };
               if (detail) t.patch = retain(use.prompt, f.path, f.patch);
-              return t;
+              return { t, gitMade };
             });
+            for (const gitOp of plain === null ? [sm.gitOnly] : [true, false]) {
+              const files = all.filter((x) => (plain === null ? true : x.gitMade === gitOp)).map((x) => x.t);
+              if (files.length > 0) groups.push({ files, gitOp });
+            }
+            touches = all.map((x) => x.t);
           } else if (sm.edits.length > 0 && !(ev.bashEditDiff !== undefined && sm.gitOnly)) {
             // No diff in the log (the session did not start inside the repo), or an empty one next to an explicit
             // edit (the harness snapshots before the command ends and misses edits committed within it): count the command text.
-            gitOp = sm.gitOnly;
-            if (!gitOp) seqAt = orderedSeq(seq, sm.order);
-            const cwd = use.cwd ?? parser.meta().cwd;
-            touches = sm.edits.map((e) => {
+            const all = sm.edits.map((e) => {
               const path = resolveTarget(e.file, cwd, sm.hasCd);
-              return {
+              const t: FileTouch = {
                 path,
                 kind: e.kind ?? ("M" as const),
                 added: 0,
@@ -658,15 +685,27 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
                 stats: emptyStats(),
                 cls: classify(path, use),
               };
+              return { t, gitMade: e.gitOp };
             });
-            if (!gitOp) use.prompt.shellHeuristic = true;
+            const split = sm.hasHistoryGitOp && !sm.gitOnly;
+            for (const gitOp of split ? [true, false] : [sm.gitOnly]) {
+              const files = all.filter((x) => (split ? x.gitMade === gitOp : true)).map((x) => x.t);
+              if (files.length > 0) groups.push({ files, gitOp });
+            }
+            touches = all.map((x) => x.t);
+            if (groups.some((g) => !g.gitOp)) use.prompt.shellHeuristic = true;
+          }
+          for (const g of groups) {
+            const seqAt = g.gitOp ? seq : orderedSeq(seq, sm.order);
+            const doc = g.files.every((t) => isDocPath(t.path));
+            use.prompt.edits.push({ seq: seqAt, files: g.files, gitOp: g.gitOp, doc, scratch: !doc && g.files.every((t) => t.cls !== "code"), thread: use.thread });
           }
         }
-        if (touches.length > 0) {
+        if (groups.length === 0 && touches.length > 0) {
           const doc = touches.every((t) => isDocPath(t.path));
-          use.prompt.edits.push({ seq: seqAt, files: touches, gitOp, doc, scratch: !doc && touches.every((t) => t.cls !== "code"), thread: use.thread });
-          if (act) act.edits = touches.map((t) => ({ path: t.path, kind: t.kind, added: t.added, removed: t.removed }));
+          use.prompt.edits.push({ seq, files: touches, gitOp: false, doc, scratch: !doc && touches.every((t) => t.cls !== "code"), thread: use.thread });
         }
+        if (touches.length > 0 && act) act.edits = touches.map((t) => ({ path: t.path, kind: t.kind, added: t.added, removed: t.removed }));
         return;
       }
     }

@@ -164,3 +164,32 @@ describe("classifyShellMutation: order and paths", () => {
     expect(normalizePath("../a")).toBe("../a");
   });
 });
+
+describe("classifyShellMutation: history-moving git operations", () => {
+  test.each(["git merge b", "git rebase main", "git pull", "git cherry-pick a", "git revert a", "git stash", "git checkout x", "git switch x", "git reset --hard", "git restore a", "git am p.mbox", "git mv a b"])(
+    "%s",
+    (cmd) => {
+      const m = classifyShellMutation(cmd);
+      expect(m.hasHistoryGitOp).toBe(true);
+      expect(m.gitOnly).toBe(true);
+    },
+  );
+
+  test("plain edits next to a git operation are listed separately", () => {
+    const m = classifyShellMutation("git merge b && sed -i 's/x/y/' plan.md && git commit -qam m");
+    expect(m.hasHistoryGitOp).toBe(true);
+    expect(m.gitOnly).toBe(false);
+    expect(m.edits.map((e) => [e.file, e.gitOp])).toEqual([["plan.md", false]]);
+  });
+
+  test("git rm, git apply and plain edits are not history-moving", () => {
+    expect(classifyShellMutation("git rm a.js").hasHistoryGitOp).toBe(false);
+    expect(classifyShellMutation("git apply p.diff").hasHistoryGitOp).toBe(false);
+    expect(classifyShellMutation("sed -i s/a/b/ x.js").hasHistoryGitOp).toBe(false);
+  });
+
+  test("git mv reports its targets as git-moved", () => {
+    const m = classifyShellMutation("git mv context/changes/x context/archive/x");
+    expect(m.edits.map((e) => [e.file, e.gitOp, e.kind])).toEqual([["context/changes/x", true, "D"], ["context/archive/x", true, "A"]]);
+  });
+});
