@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { analyzeSession, createAnalyzer } from "./analyze.js";
 import {
+  compareHints,
   computeHints,
   emptyStats,
   isConfigPath,
@@ -251,6 +252,7 @@ describe("isScratchPath", () => {
   test.each<[string, string | null, string | null, boolean]>([
     ["/tmp/claude-1000/x/scratchpad/a.py", "/home/u/repo", "/home/u/repo", true],
     ["/tmp/notes.ts", "/home/u/repo", null, true],
+    ["/dev/shm/scratch_buffer.dat", "/home/u/repo", null, true],
     ["/var/tmp/a.js", "/home/u/repo", null, true],
     ["/private/var/folders/ab/T/x.ts", "/Users/u/repo", null, true],
     ["/home/u/scratch/a.py", "/home/u/repo", null, true],
@@ -412,6 +414,21 @@ describe("computeHints rules", () => {
     const h = computeHints({ edits: [ev("/p/src/a.ts"), ev("/p/src/b.ts")], lastCheckSeq: null, cwd: "/p" });
     expect(rules(h)).toEqual(["unchecked-edit:/p/src/a.ts", "unchecked-edit:/p/src/b.ts"]);
     expect(h[0]?.reason).toContain("no check completed");
+  });
+
+  test("unchecked-edit reason distinguishes no check from check before edit", () => {
+    const noCheck = computeHints({ edits: [ev("/p/src/a.ts", { seq: 10 })], lastCheckSeq: null, cwd: "/p" });
+    expect(noCheck[0]?.reason).toBe("edited and no check completed in this prompt");
+    const checkBefore = computeHints({ edits: [ev("/p/src/a.ts", { seq: 20 })], lastCheckSeq: 10, cwd: "/p" });
+    expect(checkBefore[0]?.reason).toBe("edited after the last completed check");
+  });
+
+  test("compareHints ties with prompt-level hints", () => {
+    const promptLevel: Hint = { rule: "check-scope", severity: "warn", path: null, reason: "prompt" };
+    const fileLevel: Hint = { rule: "check-scope", severity: "warn", path: "src/a.ts", reason: "file" };
+    expect(compareHints(promptLevel, fileLevel)).toBeLessThan(0);
+    expect(compareHints(fileLevel, promptLevel)).toBeGreaterThan(0);
+    expect(compareHints(promptLevel, promptLevel)).toBe(0);
   });
 
   test("a sensitive test file is only a warning", () => {

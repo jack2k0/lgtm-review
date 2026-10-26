@@ -199,6 +199,12 @@ describe("session fields", () => {
     expect(a).toEqual({ sessionId: "unknown", title: "", branch: "unknown", startedAt: null, prompts: [], warnings: [] });
   });
 
+  test("unmatched subagent warning omits file when opts.file is undefined", () => {
+    const a = createAnalyzer();
+    a.addSubagent("orphan", [], { agentId: "orphan" });
+    expect(a.finish().warnings).toEqual([{ line: 0, reason: "unmatched subagent orphan" }]);
+  });
+
   test("push/finish matches analyzeSession and is idempotent", () => {
     const lines = [prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test")];
     const a = createAnalyzer();
