@@ -91,8 +91,12 @@ function blankCommentsAndStrings(src: string): string {
           blank(i);
           i++;
           if (i < n) {
-            blank(i);
-            i++;
+            if (src[i] === "\r" && src[i + 1] === "\n") {
+              i += 2;
+            } else {
+              blank(i);
+              i++;
+            }
           }
           continue;
         }

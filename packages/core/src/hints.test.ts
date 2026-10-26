@@ -233,6 +233,9 @@ describe("isScratchPath", () => {
     ["(shell edit)", "/home/u/repo", null, false],
     ["/tmp/a.ts", null, null, true],
     ["C:\\tmp\\a.ts", null, null, false],
+    ["/tmp/repo/src/index.ts", "/private/tmp/repo", "/private/tmp/repo", false],
+    ["/private/tmp/repo/a.ts", "/tmp/repo", null, false],
+    ["/private/tmp/x.txt", "/tmp/repo", null, true],
   ])("%s (%s, %s) => %s", (path, sessionRoot, callCwd, expected) => {
     expect(isScratchPath(path, sessionRoot, callCwd)).toBe(expected);
   });

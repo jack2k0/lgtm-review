@@ -220,14 +220,30 @@ const TEMP_ROOTS = ["/tmp/", "/var/tmp/", "/private/tmp/", "/private/var/folders
  * directory whose name starts with "scratch". Edits to it need no check.
  */
 export function isScratchPath(path: string, sessionRoot: string | null, callCwd: string | null): boolean {
-  const p = path.replace(/\\/g, "/");
+  let p = path.replace(/\\/g, "/");
   if (!p.startsWith("/")) return false;
+  if (p.startsWith("/private/tmp/")) p = `/tmp/${p.slice(13)}`;
+  else if (p.startsWith("/private/var/")) p = `/var/${p.slice(13)}`;
+
+  const norm = (root: string | null): string | null => {
+    if (root === null || root === "") return null;
+    let r = root.replace(/\\/g, "/");
+    if (r.startsWith("/private/tmp/")) r = `/tmp/${r.slice(13)}`;
+    else if (r === "/private/tmp") r = "/tmp";
+    else if (r.startsWith("/private/var/")) r = `/var/${r.slice(13)}`;
+    else if (r === "/private/var") r = "/var";
+    return r;
+  };
+
+  const normSessionRoot = norm(sessionRoot);
+  const normCallCwd = norm(callCwd);
+
   const inside = (root: string | null): boolean => {
     if (root === null || root === "") return false;
-    const r = root.replace(/\\/g, "/").replace(/\/+$/, "");
+    const r = root.replace(/\/+$/, "");
     return r !== "" && (p === r || p.startsWith(`${r}/`));
   };
-  if (inside(sessionRoot) || inside(callCwd)) return false;
+  if (inside(normSessionRoot) || inside(normCallCwd)) return false;
   if (p.includes("/.claude/worktrees/")) return false;
   if (TEMP_ROOTS.some((t) => p.startsWith(t))) return true;
   return p.split("/").slice(0, -1).some((d) => d.toLowerCase().startsWith("scratch"));
