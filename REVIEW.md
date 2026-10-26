@@ -21,7 +21,7 @@ The change sets the tier, not the author: the highest tier over all changed file
 |---|---|---|
 | Low | `*.md`, `docs/`, `context/`, tests and goldens only | Gate green. No reviewer. |
 | Medium | other `packages/*/src/**`, `scripts/**` | Gate green + **1** reviewer, diff-only, quick. |
-| High | status rule (`analyze`, `check-patterns`, `shell-edits`, `parse`, `subagents`, `scope`, `hints`, `inherit`), `redact`, `schema`, server/API/export/summary, `node/{git,archive,read}`, web token, label files, manifests and lockfile, CI, `smoke-pack`/`build-demo`/`gate`, `AGENTS.md`/`REVIEW.md`/`CLAUDE.md` | Gate green + **2** reviewers in parallel, then **cross-verification**: each reviewer confirms or refutes the other's Important findings with a command. Status-rule paths also need a real-log PRE/POST audit (aggregate counts). Owner reads the gate block before push. |
+| High | status rule (`analyze`, `check-patterns`, `shell-edits`, `parse`, `subagents`, `scope`, `hints`, `inherit`), `redact`, `schema`, server/API/export/summary, `node/{git,archive,read,subagents}`, web token, label files, manifests and lockfile, CI, `smoke-pack`/`build-demo`/`gate`, `AGENTS.md`/`REVIEW.md`/`CLAUDE.md` | Gate green + **2** reviewers in parallel, then **cross-verification**: each reviewer confirms or refutes the other's Important findings with a command. Status-rule paths also need a real-log PRE/POST audit (aggregate counts). Owner reads the gate block before push. |
 
 An agent's approval never stands in for the owner's on High: the owner's push is the approval, and it covers the commits pushed.
 

@@ -243,6 +243,25 @@ describe("scripts/gate.mjs", () => {
     expect(ok.out).toMatch(/PASS review: agy \+ opencode; 3 finding\(s\): 1 fixed, 1 rejected, 1 deferred/);
   });
 
+  test("--merge: ledgers fail closed (no Verdict column, no outer pipes, escaped pipes, loose verdicts, placeholders)", () => {
+    const d = repo({}, { "scripts/x.mjs": "1\n" });
+    const run = (body: string) => {
+      const f = join(tmp, `l${n++}.md`);
+      writeFileSync(f, body);
+      return gate(d, ["--merge", "--findings", f]);
+    };
+    const noVerdict = run("reviewers: a\n\n| # | Status |\n|---|---|\n| 1 | open |\n");
+    expect(noVerdict.code).toBe(1);
+    expect(noVerdict.out).toMatch(/FAIL review: 1 unanswered/);
+    expect(run("reviewers: a\n\n# | Verdict\n--|--\n1 | open\n").out).toMatch(/FAIL review: 1 unanswered/);
+    expect(run("reviewers: a\n\n| # | Finding | Verdict | Why |\n|---|---|---|---|\n| 1 | a \\| fixed | | e |\n").out).toMatch(/FAIL review: 1 unanswered/);
+    expect(run("reviewers: a\n\n| Verdict |\n|---|\n| fixed? |\n| fixed-not |\n| not fixed |\n").out).toMatch(/FAIL review: 3 unanswered/);
+    expect(run("reviewers: <a>\n").out).toMatch(/ledger names 0/);
+    const ok = run("reviewers: a\n\n```\n| x | y |\n```\n\n| # | Verdict |\n|---|---|\n| 1 | fixed (abc) |\n| 2 | Deferred: S-22 |\n");
+    expect(ok.code).toBe(0);
+    expect(ok.out).toMatch(/2 finding\(s\): 1 fixed, 0 rejected, 1 deferred/);
+  });
+
   test("--tiers prints the table with reviewer counts", () => {
     const r = gate(repo({}, {}), ["--tiers"]);
     expect(r.code).toBe(0);

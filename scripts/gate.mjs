@@ -72,18 +72,27 @@ export function parseGateBlock(text) {
   return g;
 }
 
-/** Parse a findings ledger: reviewer names, and one { line, verdict } per table row below the header. */
+/**
+ * Parse a findings ledger: reviewer names, and one { line, verdict } per table row below a header. Fails closed:
+ * a row in a table without a Verdict column gets verdict "" (unanswered). Rows may omit the outer pipes; `\|` is
+ * a literal pipe inside a cell. Only a bare name counts as a reviewer (a placeholder like `<a>` does not).
+ */
 export function parseLedger(text) {
   const rv = /^reviewers\s*:\s*(.*)$/im.exec(text);
-  const reviewers = [...new Set((rv?.[1] ?? "").split(",").map((r) => r.trim().toLowerCase()).filter((r) => r && r !== "none"))];
+  const names = (rv?.[1] ?? "").split(",").map((r) => r.trim().toLowerCase());
+  const reviewers = [...new Set(names.filter((r) => /^[a-z0-9][\w.+-]*$/.test(r) && r !== "none"))];
   const rows = [];
-  let col = -1;
+  let col = null; // null = outside a table; -1 = table without a Verdict column
+  let fence = false;
   text.split(/\r?\n/).forEach((line, i) => {
-    if (!line.trim().startsWith("|")) return void (col = -1);
-    const cells = line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
-    if (col < 0) return void (col = cells.findIndex((c) => /^verdict/i.test(c)));
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    const t = line.trim();
+    if (fence || !/(^|[^\\])\|/.test(t)) return void (col = null);
+    const cells = t.replace(/^\|/, "").replace(/(^|[^\\])\|$/, "$1").split(/(?<!\\)\|/).map((c) => c.trim());
+    if (col === null) return void (col = cells.findIndex((c) => /^verdict\b/i.test(c)));
     if (cells.every((c) => /^:?-+:?$/.test(c))) return;
-    rows.push({ line: i + 1, verdict: (cells[col] ?? "").toLowerCase().split(/[^a-z]/)[0] });
+    const cell = col < 0 ? "" : (cells[col] ?? "").toLowerCase();
+    rows.push({ line: i + 1, verdict: /^([a-z]+)(?=$|[\s(:,;])/.exec(cell)?.[1] ?? cell });
   });
   return { reviewers, rows };
 }

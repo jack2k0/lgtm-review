@@ -1,5 +1,23 @@
 # ORCHESTRATION state
 
+## Kolejka właściciela
+Każda pozycja: akcja → dowód → ile minut.
+- Push lokalnych commitów → bloki bramki w opisach merge od ostatniego pushu (`git log origin/main..main --merges`), High czytać przed pushem → ~5 min na merge High.
+- S-08 LLM: decyzje O-1..O-3 → `context/foundation/prd.md` → ~15 min.
+- Przegląd UI w przeglądarce (S-17/S-19/S-21) → `npx lgtm-review` w repo → ~15 min.
+- Audyt celu ≥97% na prawdziwych logach → skrypty audytu (scratchpad, agregaty) → ~30 min.
+- Nazwa/znak towarowy, publikacja npm → ~?
+
+## Proces przeglądu (od 2026-10-26, na wzór Anthropic; „chcę mieć system pod review Anthropica”)
+Reguły: `AGENTS.md` (wszyscy agenci), `REVIEW.md` (tiery, uwagi, rejestr, maks. 2 rundy, fix at the source), briefy `docs/prompts/03-review.md`, bramka `node scripts/gate.mjs ... --merge`. Domyślne odpowiedzi Opusa na otwarte pytania (do korekty przez właściciela):
+- High: Opus merguje lokalnie; akceptacją właściciela jest push po przeczytaniu bloków bramki merge'ów High.
+- Lista High = `TIERS` w `scripts/gate.mjs` (+ pliki reguł AGENTS/REVIEW/CLAUDE.md, gate.mjs, build-demo.mjs).
+- Pliki publiczne: tylko reguły procesu; notatki o modelach, limitach i panelach zostają w prywatnej pamięci.
+- Język: pliki dla agentów po angielsku, ORCHESTRATION po polsku.
+- Zapasowy recenzent: Haiku (Medium), subagent Sonnet za jednego z dwóch (High), gdy Agy/OpenCode bez limitu.
+- Przeglądy cykliczne (sweep): tylko na prośbę właściciela, nie bez nadzoru. Dist-tag `next` przy publikacji npm: decyzja przy publikacji.
+- Pilot: następne 2 zmiany; metryki na merge (tier, liczba uwag, werdykty, rundy) w rejestrze `reviews/findings.md`.
+
 ## Faza łańcucha
 Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-lite (live-refresh, FR-011) S-06 (html-export z redakcją, FR-008) i S-11 (status-accuracy, audyt realnych logów: status 97.1% bez subagentów) zmergowane (+ S-12 subagent-prompts, + S-13 fork-dedupe 2026-10-23): F-01, S-01, S-02, S-03 zmergowane lokalnie na main i zarchiwizowane (2026-10-23). Czeka na właściciela: nazwa/trademark, kredyt autora pomysłu, publikacja npm; PRD v2 dodaje FR-009/010 (zrobione w S-05). + S-14 bg-checks (zmergowane, audyt realnych logów zrobiony) + S-09 python-map (2026-10-23). Brak kolejnych slice'ów bez decyzji produktowych. Zaparkowane: S-04 import map, S-07 Play the change, S-08 LLM, S-10 demo page (wymagają decyzji produktowych/rozszerzenia PRD). Procedura: plan Opus -> plan-review agy -> impl Sonnet -> weryfikacja Opus.
 
