@@ -30,6 +30,14 @@ pnpm check                 # typecheck, tests, build and the pack smoke test
 node packages/cli/dist/cli.js
 ```
 
+Merge gate (run from a worktree; exit 0 pass, 1 hard fail, 2 needs a look):
+
+```
+node scripts/gate.mjs --base main [--plan <plan.md>] [--run-check]
+```
+
+It checks freshness, scope (a fenced `gate` block in the plan: `allow`, `goldens`, `labels`, `deps`, `schema`), labels, goldens, removed test expectations, dependencies and the schema, and prints a risk tier. The tier table is the `TIERS` constant in the script.
+
 The server listens on 127.0.0.1 only, is read-only and requires the per-run token in the printed URL. See packages/cli/README.md for options, the Steps/Diff views and their limits.
 
 Licensed under Apache-2.0. Copyright lgtm-review contributors.
