@@ -1,7 +1,7 @@
 # ORCHESTRATION state
 
 ## Faza łańcucha
-Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-lite (live-refresh, FR-011) S-06 (html-export z redakcją, FR-008) i S-11 (status-accuracy, audyt realnych logów: status 97.1% bez subagentów) zmergowane (+ S-12 subagent-prompts, + S-13 fork-dedupe 2026-10-23): F-01, S-01, S-02, S-03 zmergowane lokalnie na main i zarchiwizowane (2026-10-23). Nic nie wypchnięte. Czeka na właściciela: push/remote, nazwa/trademark, kredyt autora pomysłu, publikacja npm; PRD v2 dodaje FR-009/010 (zrobione w S-05). + S-14 bg-checks (zmergowane, audyt realnych logów zrobiony) + S-09 python-map (2026-10-23). Brak kolejnych slice'ów bez decyzji produktowych. Zaparkowane: S-04 import map, S-07 Play the change, S-08 LLM, S-10 demo page (wymagają decyzji produktowych/rozszerzenia PRD). Procedura: plan Opus -> plan-review agy -> impl Sonnet -> weryfikacja Opus.
+Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-lite (live-refresh, FR-011) S-06 (html-export z redakcją, FR-008) i S-11 (status-accuracy, audyt realnych logów: status 97.1% bez subagentów) zmergowane (+ S-12 subagent-prompts, + S-13 fork-dedupe 2026-10-23): F-01, S-01, S-02, S-03 zmergowane lokalnie na main i zarchiwizowane (2026-10-23). Czeka na właściciela: nazwa/trademark, kredyt autora pomysłu, publikacja npm; PRD v2 dodaje FR-009/010 (zrobione w S-05). + S-14 bg-checks (zmergowane, audyt realnych logów zrobiony) + S-09 python-map (2026-10-23). Brak kolejnych slice'ów bez decyzji produktowych. Zaparkowane: S-04 import map, S-07 Play the change, S-08 LLM, S-10 demo page (wymagają decyzji produktowych/rozszerzenia PRD). Procedura: plan Opus -> plan-review agy -> impl Sonnet -> weryfikacja Opus.
 
 ## Decyzje właściciela (2026-10-23)
 - Nazwa projektu/pakietu npm: `lgtm-review` (wolne na npm 2026-10-23; GitHub/znak towarowy do sprawdzenia przed publikacją). Hasło robocze: "Earn your LGTM."
@@ -49,9 +49,8 @@ brak
 
 ## Notatki
 - Repo ma remote `origin` (github.com/jack2k0/lgtm-review). Push main 426a7f4 za zgodą właściciela (2026-10-23); kolejne pushe tylko na polecenie.
-- Repo lokalne, bez remote. Nie pushować. Branch startowy `master`, docelowy `main` (do zmiany przy commicie fundamentu).
-- Env (2026-10-25): shim /tmp/claude-1000/shim zniknął; pnpm przez corepack (`corepack pnpm`, wrapper w scratchpadzie sesji). Wcześniej: node 22 + pnpm przez PATH=/tmp/claude-1000/shim:$HOME/.local/opt/node22/bin. git user nie ustawiony: commity z GIT_AUTHOR_*/GIT_COMMITTER_* (jack / bogatyszejksponsor2@gmail.com). Narzędzia quoty niesprawdzone.
+- Push main e93427d za zgodą właściciela (2026-10-26); CI zielone (run 40285484561).
+- Env (2026-10-26): domyślny node to 20; `pnpm check` wymaga PATH=<scratchpad>/bin:$HOME/.local/opt/node22/bin, gdzie `bin/pnpm` to wrapper `exec corepack pnpm "$@"` (turbo szuka binarki pnpm w PATH). Env (2026-10-25): shim /tmp/claude-1000/shim zniknął; pnpm przez corepack. Wcześniej: node 22 + pnpm przez PATH=/tmp/claude-1000/shim:$HOME/.local/opt/node22/bin. git user nie ustawiony: commity z GIT_AUTHOR_*/GIT_COMMITTER_* (jack / bogatyszejksponsor2@gmail.com). Narzędzia quoty niesprawdzone.
 
 ## Otwarte problemy
-brak
-- S-04 import-map (2026-10-23, STOP: limit): fazy 1 (OpenCode Big Pickle), 2 (Sonnet), 3 (OpenCode, gałąź change/import-map-web) każda osobno zielona; po merge web do change/import-map (worktree ../lgtm-review-import-map) naprawione (duplikaty kluczy schema, diagnoza Agy), zmergowane na main i zarchiwizowane. Do zrobienia: audyt realnych logów S-14 (wymaga zgody na odczyt ~/.claude).
+brak (S-04 import-map zmergowane i zarchiwizowane 2026-10-23; audyt realnych logów S-14 zrobiony)
