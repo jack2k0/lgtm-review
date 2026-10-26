@@ -163,10 +163,69 @@ const PREFIXES: RegExp[] = [
   /^yarn\s+dlx\s+/,
 ];
 
+const WORD_RE = /^(?:"[^"]*"|'[^']*'|\S+)/;
+
+/** Reads the next shell word (quotes kept) and the rest of the string, or null at the end. */
+function nextWord(s: string): { word: string; rest: string } | null {
+  const m = WORD_RE.exec(s);
+  if (!m) return null;
+  return { word: m[0], rest: s.slice(m[0].length).trimStart() };
+}
+
+/** Options that take a separate value, per wrapper (an attached value such as `-w10` or `--wait=10` is one word). */
+const WRAPPER_VALUE_OPTS: Record<string, ReadonlySet<string>> = {
+  flock: new Set(["-w", "-E", "--wait", "--timeout", "--conflict-exit-code"]),
+  ionice: new Set(["-c", "-n", "-p", "-P", "-u", "--class", "--classdata", "--pid", "--pgid", "--uid"]),
+  setsid: new Set(),
+  stdbuf: new Set(["-i", "-o", "-e", "--input", "--output", "--error"]),
+};
+
+/**
+ * Strips `flock [opts] <lock> <cmd>` / `flock <lock> -c "<cmd>"`, `ionice`, `setsid` and `stdbuf`, word by word.
+ * Returns the wrapped command, or null when `s` does not start with one of them.
+ */
+function stripWrapper(s: string): string | null {
+  const head = /^(flock|ionice|setsid|stdbuf)\s+/.exec(s);
+  if (!head) return null;
+  const name = head[1] as string;
+  const valueOpts = WRAPPER_VALUE_OPTS[name] as ReadonlySet<string>;
+  let rest = s.slice(head[0].length).trimStart();
+  let lockSeen = name !== "flock";
+  for (let guard = 0; guard < 50; guard++) {
+    const w = nextWord(rest);
+    if (w === null) return null;
+    if (w.word.startsWith("-") && w.word.length > 1) {
+      if (name === "flock" && lockSeen && (w.word === "-c" || w.word === "--command")) {
+        const cmd = nextWord(w.rest);
+        return cmd === null ? null : unquote(cmd.word) + (cmd.rest === "" ? "" : " " + cmd.rest);
+      }
+      rest = w.rest;
+      if (valueOpts.has(w.word)) {
+        const v = nextWord(rest);
+        if (v === null) return null;
+        rest = v.rest;
+      }
+      continue;
+    }
+    if (!lockSeen) {
+      lockSeen = true;
+      rest = w.rest;
+      continue;
+    }
+    return rest;
+  }
+  return null;
+}
+
 export function stripPrefixes(seg: string): string {
   let s = seg.trim();
   for (let guard = 0; guard < 20; guard++) {
     let changed = false;
+    const wrapped = stripWrapper(s);
+    if (wrapped !== null && wrapped !== s) {
+      s = wrapped.trimStart();
+      changed = true;
+    }
     for (const re of PREFIXES) {
       const m = re.exec(s);
       if (m && m[0].length > 0) {

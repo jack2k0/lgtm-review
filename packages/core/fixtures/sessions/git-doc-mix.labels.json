@@ -1,0 +1,21 @@
+{
+  "fixture": "git-doc-mix",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "merge brings code, sed edits a doc: only the doc edit is plain, so still checked"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "note": "the same command alone: merged files are git-made, the doc edit is documentation"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "note": "the plain sed edits a code file after the check: it counts, the merged file does not"
+    }
+  ]
+}

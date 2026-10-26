@@ -1,0 +1,159 @@
+{
+  "sessionId": "shell-gaps-2",
+  "title": "Fix add, then update two docs with one script.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Fix add, then update two docs with one script.",
+      "status": "checked",
+      "reason": "pnpm test passed after last code edit; 1 documentation edit after it (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/docs/a.md",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        },
+        {
+          "path": "/home/user/project/docs/b.md",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        },
+        {
+          "path": "/home/user/project/src/add.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (33%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000009",
+      "text": "Fix sub, then tick the plan through a shell variable.",
+      "status": "checked",
+      "reason": "pnpm test passed after last code edit; 1 documentation edit after it (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/context/plan.md",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        },
+        {
+          "path": "/home/user/project/src/sub.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (33%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000017",
+      "text": "Fix mul, then write a helper script with a heredoc and run it.",
+      "status": "unchecked",
+      "reason": "1 edit after last check (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/src/mul.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/tool.py",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 2000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (33%), 1 check",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/tool.py",
+          "reason": "edited after the last completed check"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 3,
+      "uuid": "00000000-0000-4000-8000-000000000025",
+      "text": "Fix div, merge, tick the plan; the logged diff is capped.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit",
+      "files": [
+        {
+          "path": "/home/user/project/src/div.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": false
+        },
+        {
+          "path": "/home/user/project/src/feature.js",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 4000,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 6000,
+      "headline": "Mostly writing (67%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    }
+  ],
+  "warnings": []
+}

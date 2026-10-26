@@ -34,10 +34,11 @@ PRD rules are unchanged (S-11, S-16, S-18, S-20 already say what is right); this
 
 ```gate
 allow: ^packages/core/src/(check-patterns|shell-edits|analyze)(\.test)?\.ts$
-allow: ^packages/core/fixtures/sessions/(wrapped-checks|git-doc-mix|heredoc-targets)\.(jsonl|labels\.json)$
-allow: ^packages/core/fixtures/sessions/__golden__/(wrapped-checks|git-doc-mix|heredoc-targets)\.
+allow: ^packages/core/fixtures/sessions/(wrapped-checks|git-doc-mix|heredoc-targets|shell-gaps-2)\.(jsonl|labels\.json)$
+allow: ^packages/core/fixtures/sessions/__golden__/(wrapped-checks|git-doc-mix|heredoc-targets|shell-gaps-2)\.
 allow: ^context/changes/status-accuracy-3/
-goldens: (wrapped-checks|git-doc-mix|heredoc-targets)\.
+allow: ^scripts/audit/
+goldens: (wrapped-checks|git-doc-mix|heredoc-targets|shell-gaps-2)\.
 labels: new-only
 deps: no
 schema: no
@@ -50,6 +51,7 @@ schema: no
 - A3 (#4, #5): wrappers are parsed word by word, not with one regex: `flock` takes any number of option words (`-nx`, `-w10`, `-w 10`, `--wait=10`, `-E 1`, `--conflict-exit-code 1`), then a lockfile or fd number, then the command; `flock <lock> -c '<cmd>'` / `-c "<cmd>"` unquotes `<cmd>`. Same approach for `ionice`, `setsid`, `stdbuf`.
 - A4 (#6): `pythonWrites` follows one level of variable binding: `p = sys.argv[N]`, `p = Path(sys.argv[N])`, `p = "lit"`, `p = Path("lit")`.
 - A5 (#7): the directory test for an extensionless `git mv` target happens in `analyze.ts` against the diff paths; `shell-edits.ts` only reports the git-moved targets.
+- A6 (orchestrator, during phase 3): the existing expectation `shell-edits.test.ts:33` (`Path('a').write_text('x')` → `(shell edit)`) changes to `["a"]`: a literal `Path(...)` receiver is exactly what R resolves; the status does not change (`a` is still a code path). This is the only existing expectation this slice may change.
 - Rejected #3: a file a merge brings in after a check is git-made and never counts as a code edit (S-11), so the plain edit's order is the only one that matters.
 
 ## Phase 1: Wrapped checks (W)
@@ -57,7 +59,7 @@ schema: no
 - `check-patterns.ts`: add the wrappers to `PREFIXES`; `flock -c "<cmd>"` form.
 - Tests in `check-patterns.test.ts`: each wrapper with a test command, a script check (`scripts/check.sh`), and a non-check (`flock /tmp/l ls`); a wrapped `sed -i` in `shell-edits.test.ts` stays an edit.
 - New fixture `wrapped-checks.jsonl` + `.labels.json` + goldens: prompt 1 edit code, `flock /tmp/x.lock ./scripts/check.sh` passes → checked; prompt 2 edit, `flock -w 600 lock bash scripts/verify-all.sh` in the background with a passing notification → checked; prompt 3 edit, `ionice -c3 nice pnpm test` failing → failing.
-- [ ] done when: tests and the fixture pass; `pnpm check` green; gate exit 0/2.
+- [x] done when: tests and the fixture pass; `pnpm check` green; gate exit 0/2.
 
 ## Phase 2: Git attribution in mixed commands (G)
 
@@ -65,16 +67,31 @@ schema: no
 - `analyze.ts`: per-file attribution of `bashEditDiff` for commands with a history-moving git op (Desired End State G).
 - Tests in `analyze.test.ts`/`shell-edits.test.ts`: (a) edit code, test passes, then `git merge b && sed -i 's/x/y/' plan.md && git commit -qam m` with a diff listing `src/a.ts` and `plan.md` → still checked, reason with the documentation tail; (b) the same command as the only activity of a prompt → no-changes (`git operations` / documentation reason as today's rules give); (c) `git mv context/changes/x context/archive/x && sed -i … context/archive/x/change.md` → no code edit; (d) a mixed command whose plain edit writes `src/b.ts` → `src/b.ts` counts as a code edit, the merged files do not; (e) unresolved plain target → today's behaviour.
 - New fixture `git-doc-mix` with goldens covering (a), (b), (d).
-- [ ] done when: tests pass; existing labels and goldens unchanged; `pnpm check` green; gate exit 0/2.
+- [x] done when: tests pass; existing labels and goldens unchanged; `pnpm check` green; gate exit 0/2.
 
 ## Phase 3: Heredoc and variable targets (R)
 
 - `shell-edits.ts` `pythonWrites` (and its caller for the `python3 - args` form).
 - Tests: `p = "docs/x.md"; open(p, "w")` → `docs/x.md`; `Path("a/b.md").write_text(…)`; `p = Path("a.md"); p.write_text`; `python3 - "$R" <<EOF … open(sys.argv[1], "w")` with `R=context/plan.md &&` before; `open(f"{x}.md", "w")` → `(shell edit)`; a literal under the scratchpad → ignored.
 - New fixture `heredoc-targets` with goldens: code edit + passing check, then a heredoc doc write → checked with the documentation tail; a heredoc code write after the check → unchecked.
-- [ ] done when: tests pass; `pnpm check` green; gate exit 0/2.
+- [x] done when: tests pass; `pnpm check` green; gate exit 0/2.
 
-## Phase 4: Real-log audit (orchestrator only)
+## Phase 5: Remaining tool gaps from the POST audit (adjudication round 2)
+
+POST after phases 1-3: A 85.5%, B 83.5% (from 74.0% / 68.9%); 27 disagreements left, tool wrong in 18. Fix:
+- R1 `shell-edits.ts` `pythonWrites`: resolve each write with the binding in effect at its position (a name rebound later does not become unresolved); support `NAME + "lit"` / `"lit" + NAME` and `NAME / "lit"` (pathlib) when the parts resolve; `os.path.join(lit|NAME, …)`.
+- R2 `shell-edits.ts`: `$VAR` / `${VAR}` / `"$VAR"` operands of `sed -i`, redirects, `tee`, `cp`/`mv`/`rm` resolve from literal assignments earlier in the same command (the same `vars` map used for python argv).
+- R3 `analyze.ts` `plainDiffPaths`: a doc/scratch plain target absent from a capped `bashEditDiff.files` does not make the match fail (it cannot change the code attribution); a code target absent from the diff still does.
+- R4 `shell-edits.ts` `segmentMutation`: only the heredoc fed to the python segment's stdin is scanned for python writes, not every heredoc in the command.
+- Tests for each, failing on the code before this phase; extend the `heredoc-targets` / `git-doc-mix` fixtures only by NEW fixtures (e.g. `heredoc-targets-2`), never by editing the new ones' labels after the fact unless the label was wrong by the plan (then say so).
+- [x] done when: tests pass; `pnpm check` green; gate exit 0/2.
+
+## Phase 6: Truth-script fixes (audit tool, a different agent than the tool phases)
+
+`scripts/audit/truth.py`: unwrap `flock` (and the other wrappers) for every runner, not only scripts; `git diff <file>` is not a check; a wait loop (`pgrep`/`sleep`/`until`) is not a check; expand `cd $VAR` from same-command assignments. One synthetic fixture case each in `scripts/audit/fixtures`, self-test green.
+- [x] done when: `node --test scripts/audit/audit.test.mjs` passes; gate exit 0/2.
+
+## Phase 4: Real-log audit (orchestrator only) — done, see reviews/audit.md
 
 - PRE = main before this change, POST = branch: `node scripts/audit/compare.mjs` (aggregates only) and status transitions PRE→POST (counts only).
 - Target: A >= 95%, no category of the adjudication still above 2 rows; record in `context/changes/status-accuracy-3/reviews/audit.md`.

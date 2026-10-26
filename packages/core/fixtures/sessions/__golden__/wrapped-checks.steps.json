@@ -1,0 +1,171 @@
+[
+  {
+    "index": 0,
+    "text": "Fix add.",
+    "status": "checked",
+    "reason": "scripts/check.sh passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run scripts/check.sh -> passed",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "flock /tmp/x.lock ./scripts/check.sh",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "flock /tmp/x.lock ./scripts/check.sh",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Fix sub.",
+    "status": "checked",
+    "reason": "bash scripts/verify-all.sh passed after last edit",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:07.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/sub.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:08.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/sub.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/sub.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run bash scripts/verify-all.sh -> passed",
+        "startedAt": "2026-01-01T00:00:10.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "flock -w 600 lock bash scripts/verify-all.sh",
+            "ok": true,
+            "ts": "2026-01-01T00:00:10.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "flock -w 600 lock bash scripts/verify-all.sh",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": "",
+          "background": true
+        }
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Fix mul.",
+    "status": "failing",
+    "reason": "pnpm test failed: Tests: 1 failed, 2 passed",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:14.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/mul.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:15.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/mul.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:15.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/mul.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> failed (exit 1)",
+        "startedAt": "2026-01-01T00:00:17.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "ionice -c3 nice pnpm test",
+            "ok": false,
+            "ts": "2026-01-01T00:00:17.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "ionice -c3 nice pnpm test",
+          "exitCode": 1,
+          "passed": false,
+          "excerpt": "Tests: 1 failed, 2 passed"
+        }
+      }
+    ]
+  }
+]

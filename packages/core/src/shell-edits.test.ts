@@ -12,6 +12,8 @@ describe("classifyShellMutation: edits", () => {
     ["sed --in-place 's/a/b/' x.js", ["x.js"]],
     ["sed -i 's/a/b/' \"my file.js\"", ["my file.js"]],
     ["sed -i 's/a/b/' src/*.js", [SHELL_EDIT_FILE]],
+    ["flock -w 10 /tmp/l sed -i 's/a/b/' src/x.js", ["src/x.js"]],
+    ["ionice -c3 nice sed -i 's/a/b/' src/x.js", ["src/x.js"]],
     ["find . -name '*.js' | xargs sed -i 's/a/b/'", [SHELL_EDIT_FILE]],
     ["perl -pi -e 's/a/b/' lib/a.pl", ["lib/a.pl"]],
     ["perl -i.bak -pe 's/a/b/' lib/a.pl", ["lib/a.pl"]],
@@ -28,7 +30,29 @@ describe("classifyShellMutation: edits", () => {
     ["cd ../repo && git apply -p0 fix.patch", [SHELL_EDIT_FILE]],
     ["python3 - <<'EOF'\nopen('src/a.py', 'w').write('x')\nEOF", ["src/a.py"]],
     ["python3 - <<'EOF'\nwith open(path, \"w\") as f:\n    f.write('x')\nEOF", [SHELL_EDIT_FILE]],
-    ["python - <<EOF\nfrom pathlib import Path\nPath('a').write_text('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["python - <<EOF\nfrom pathlib import Path\nPath('a').write_text('x')\nEOF", ["a"]],
+    ["python3 - <<'EOF'\np = \"docs/x.md\"\nwith open(p, \"w\") as f:\n    f.write('x')\nEOF", ["docs/x.md"]],
+    ["python3 - <<'EOF'\nfrom pathlib import Path\nPath(\"a/b.md\").write_text('x')\nEOF", ["a/b.md"]],
+    ["python3 - <<'EOF'\nfrom pathlib import Path\np = Path(\"a.md\")\np.write_text('x')\nEOF", ["a.md"]],
+    ["R=context/plan.md && python3 - \"$R\" <<'EOF'\nimport sys\nopen(sys.argv[1], \"w\").write('x')\nEOF", ["context/plan.md"]],
+    ["R=docs/x.md\npython3 - $R <<'EOF'\nimport sys\np = sys.argv[1]\nopen(p, 'w').write('x')\nEOF", ["docs/x.md"]],
+    ["python3 - docs/y.md <<'EOF'\nimport sys\nfrom pathlib import Path\nPath(sys.argv[1]).write_text('x')\nEOF", ["docs/y.md"]],
+    ["python3 - <<'EOF'\nopen(f\"{x}.md\", \"w\").write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["python3 - \"$UNSET\" <<'EOF'\nimport sys\nopen(sys.argv[1], \"w\").write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["python3 - <<'EOF'\np = \"a.md\"\np = \"b.md\"\nopen(p, \"w\").write('x')\nEOF", ["b.md"]],
+    ["python3 - <<'EOF'\np = \"docs/a.md\"\nopen(p, \"w\").write('x')\np = \"docs/b.md\"\nopen(p, \"w\").write('y')\nEOF", ["docs/a.md", "docs/b.md"]],
+    ["python3 - <<'EOF'\nroot = \"docs\"\nopen(root + \"/x.md\", \"w\").write('x')\nEOF", ["docs/x.md"]],
+    ["python3 - <<'EOF'\nfrom pathlib import Path\nroot = Path(\"docs\")\n(root / \"x.md\").write_text('x')\nEOF", ["docs/x.md"]],
+    ["python3 - <<'EOF'\nimport os\nopen(os.path.join(\"docs\", \"x.md\"), \"w\").write('x')\nEOF", ["docs/x.md"]],
+    ["python3 - <<'EOF'\np = \"docs/a.md\"\np = compute()\nopen(p, \"w\").write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["F=context/plan.md && sed -i 's/a/b/' \"$F\"", ["context/plan.md"]],
+    ["F=a.md\necho x >> \"$F\"", ["a.md"]],
+    ["D=docs && echo x > $D/y.md", ["docs/y.md"]],
+    ["F=a.md && echo x | tee $F", ["a.md"]],
+    ["sed -i 's/a/b/' \"$F\"", [SHELL_EDIT_FILE]],
+    ["F=$(pick) && sed -i 's/a/b/' \"$F\"", [SHELL_EDIT_FILE]],
+    ["cat > tool.py <<'EOF'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nEOF\npython3 tool.py out.md", ["tool.py"]],
+    ["cat > t.md <<'EOF'\nopen('x.py', 'w')\nEOF\npython3 - <<'EOF'\nopen('y.md', 'w').write('z')\nEOF", ["t.md", "y.md"]],
     ["git mv a.js b.js", ["a.js", "b.js"]],
     ["git rm src/a.ts", ["src/a.ts"]],
     ["git rm -r src/a.ts src/b.ts", ["src/a.ts", "src/b.ts"]],
@@ -64,6 +88,7 @@ describe("classifyShellMutation: edits", () => {
     "sed -i 's/a/b/' /tmp/x.txt",
     "python3 - <<'EOF'\nprint(open('a.py').read())\nEOF",
     "python3 - <<'EOF'\nopen('/tmp/a.py', 'w').write('x')\nEOF",
+    "python3 - <<'EOF'\np = \"/tmp/scratch/a.md\"\nopen(p, 'w').write('x')\nEOF",
     "python3 script.py",
     "echo \"a > b\"",
     "echo 'x' | grep '>'",
@@ -160,5 +185,114 @@ describe("classifyShellMutation: order and paths", () => {
   test("normalizePath", () => {
     expect(normalizePath("/a/b/../c/./d")).toBe("/a/c/d");
     expect(normalizePath("../a")).toBe("../a");
+  });
+});
+
+describe("classifyShellMutation: history-moving git operations", () => {
+  test.each(["git merge b", "git rebase main", "git pull", "git cherry-pick a", "git revert a", "git stash", "git checkout x", "git switch x", "git reset --hard", "git restore a", "git am p.mbox", "git mv a b"])(
+    "%s",
+    (cmd) => {
+      const m = classifyShellMutation(cmd);
+      expect(m.hasHistoryGitOp).toBe(true);
+      expect(m.gitOnly).toBe(true);
+    },
+  );
+
+  test("plain edits next to a git operation are listed separately", () => {
+    const m = classifyShellMutation("git merge b && sed -i 's/x/y/' plan.md && git commit -qam m");
+    expect(m.hasHistoryGitOp).toBe(true);
+    expect(m.gitOnly).toBe(false);
+    expect(m.edits.map((e) => [e.file, e.gitOp])).toEqual([["plan.md", false]]);
+  });
+
+  test("git rm, git apply and plain edits are not history-moving", () => {
+    expect(classifyShellMutation("git rm a.js").hasHistoryGitOp).toBe(false);
+    expect(classifyShellMutation("git apply p.diff").hasHistoryGitOp).toBe(false);
+    expect(classifyShellMutation("sed -i s/a/b/ x.js").hasHistoryGitOp).toBe(false);
+  });
+
+  test("git mv reports its targets as git-moved", () => {
+    const m = classifyShellMutation("git mv context/changes/x context/archive/x");
+    expect(m.edits.map((e) => [e.file, e.gitOp, e.kind])).toEqual([["context/changes/x", true, "D"], ["context/archive/x", true, "A"]]);
+  });
+});
+
+describe("classifyShellMutation: fail closed on unresolved shell writes (review round 1)", () => {
+  test.each<[string, string, string[]]>([
+    ["A3 non-literal mode", "python3 - <<'EOF'\nm = 'w'\nopen('docs/a.md', m).write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A3 non-literal mode keyword", "python3 - <<'EOF'\nopen('docs/a.md', mode=m).write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A3 literal read mode is no write", "python3 - <<'EOF'\nopen('docs/a.md', 'r').read()\nEOF", []],
+    ["A4 qualified receiver", "python3 - <<'EOF'\nself.p.write_text('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A4 chained receiver", "python3 - <<'EOF'\nfrom pathlib import Path\nPath('a.md').resolve().write_text('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A5 apostrophe in a comment inside the call", "python3 - <<'EOF'\nopen('docs/a.md', # don't\n    'w').write('x')\nEOF", ["docs/a.md"]],
+    ["A5 unbalanced call", "python3 - <<'EOF'\nopen('docs/a.md', 'w'\nEOF", [SHELL_EDIT_FILE]],
+    ["A6 heredoc three stages before python", "cat <<'EOF' | tr a b | python3 -\nopen('docs/a.md', 'w').write('x')\nEOF", ["docs/a.md"]],
+    ["A6 piped python with a heredoc elsewhere", "cat <<'EOF' > /tmp/x\nfoo\nEOF\nprintf x | python3 -", [SHELL_EDIT_FILE]],
+    ["A7 indented rebinding", "python3 - <<'EOF'\np = 'docs/a.md'\nif x:\n    p = 'src/b.ts'\nopen(p, 'w').write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A8 prefix assignment does not reach python argv", "R=docs/x.md python3 - \"$R\" <<'EOF'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nEOF", [SHELL_EDIT_FILE]],
+    ["A8 prefix assignment does not persist", "R=docs/x.md true && sed -i s/a/b/ \"$R\"", [SHELL_EDIT_FILE]],
+    ["A8 export persists", "export R=docs/x.md && sed -i s/a/b/ \"$R\"", ["docs/x.md"]],
+  ])("%s", (_name, cmd, expected) => {
+    expect(files(cmd)).toEqual(expected);
+  });
+
+  test("H2: a cut list of edits is opaque", () => {
+    const many = Array.from({ length: 25 }, (_, i) => `d${i}.md`).join(" ");
+    const m = classifyShellMutation(`git merge b && sed -i s/a/b/ ${many}`);
+    expect(m.edits).toHaveLength(20);
+    expect(m.opaque).toBe(true);
+  });
+
+  test.each([
+    ["git merge b && sed -i 's/x/y/' plan.md && git commit -qam m", false],
+    ["cd sub && git merge b && sed -i s/x/y/ plan.md && git status", false],
+    ["git merge b && echo done && ls && sleep 1 && true", false],
+    ["git merge b && sed -i s/x/y/ plan.md && cp /tmp/x src/a.ts", true],
+    ["git merge b && sed -i s/x/y/ plan.md && python3 -c \"open('src/a.ts','w')\"", true],
+    ["git merge b && sed -i s/x/y/ plan.md && install a b", true],
+    ["git merge b && sed -i s/x/y/ plan.md && echo x > \"$UNSET\"", true],
+  ])("H1 opaque: %s", (cmd, opaque) => {
+    expect(classifyShellMutation(cmd).opaque).toBe(opaque);
+  });
+});
+
+describe("classifyShellMutation: read-only segments do not make a mixed command opaque", () => {
+  const mixed = (seg: string) => `git merge b && sed -i s/x/y/ plan.md && ${seg}`;
+  test.each([
+    "tail -5 log", "head -3 f", "grep -r x .", "egrep x f", "rg x", "cut -d: -f1 f", "wc -l f", "tr a b", "sort f", "uniq f", "diff a b", "cmp a b",
+    "jq . f", "column -t f", "nl f", "basename a", "dirname a", "realpath a", "readlink a", "stat a", "file a", "du -sh .", "df -h", "date", "which git",
+    "type git", "command -v git", "whoami", "hostname", "sleep 1", "sed -n 1p f", "sed s/a/b/ f", "for f in a b; do echo $f; done", "if true; then true; fi",
+    "while false; do break; done", "case x in x) true;; esac", "exit 0", "mkdir -p d", "rmdir d", "git branch -D x", "git push origin x", "git fetch",
+    "git remote -v", "git rev-parse HEAD", "git rev-list HEAD", "git merge-base a b", "git show-ref", "git grep x", "git ls-files", "git worktree add ../w",
+    "git worktree remove ../w", "git worktree prune", "git worktree list", "git tag v1", "git describe", "git config --get user.name", "herdr pane list",
+  ])("safe: %s", (seg) => {
+    expect(classifyShellMutation(mixed(seg)).opaque).toBe(false);
+  });
+
+  test.each([
+    "cp a b", "rm a", "mv a b", "install a b", "python3 x.py", "node x.js", "bash x.sh", "sh x.sh", "uv run x", "pnpm publish", "npm run x", "npx x", "make all",
+    "awk '{print}' f", "perl x.pl", "frobnicate", "sed -n 'w out' f", "sed 's/a/b/w out' f", "git config user.name x",
+    "git worktree move a b", "git clean -fd", "echo x > $UNSET", "grep x f > $UNSET",
+  ])("kept opaque: %s", (seg) => {
+    expect(classifyShellMutation(mixed(seg)).opaque).toBe(true);
+  });
+});
+
+describe("classifyShellMutation: write options of read-only tools, fd redirects (review round 2)", () => {
+  const mixed = (seg: string) => `git merge b && sed -i s/x/y/ plan.md && ${seg}`;
+  test.each([
+    "sort -o out.ts in", "sort --output=out.ts in", "sort -ro out.ts in", "sort -oout.ts in", "sort --output out.ts in", "uniq in out.ts", "uniq -c in out.ts", "uniq -f 1 in out.ts",
+    "git diff --output=out.ts", "git show --output out.ts HEAD", "git log --output=out.ts",
+    "sed -n 'W out.ts' f", "sed e f", "sed 's/a/b/e' f", "sed -n 's/a/b/w out.ts' f",
+    "echo x &> out.ts", "echo x &>> out.ts", "echo x >& out.ts", "echo x 2> out.ts", "echo x 2>> out.ts", "echo x 2> \"$UNSET\"", "echo x 3> out.ts",
+  ])("opaque: %s", (seg) => {
+    expect(classifyShellMutation(mixed(seg)).opaque).toBe(true);
+  });
+
+  test.each([
+    "sort in", "sort -r -k2 in", "uniq in", "uniq -c in", "git diff", "git show HEAD", "sed -n '/e/p' f", "sed -n 's/a/b/gp' f",
+    "echo x 2>&1", "echo x >&2", "echo x 2>/dev/null", "echo x &> /dev/null", "echo x 2> err.log", "echo x 2> notes.md", "ls >&-",
+  ])("still known: %s", (seg) => {
+    expect(classifyShellMutation(mixed(seg)).opaque).toBe(false);
   });
 });

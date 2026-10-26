@@ -1,0 +1,135 @@
+{
+  "0:/home/user/project/docs/a.md": {
+    "path": "/home/user/project/docs/a.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "0:/home/user/project/docs/b.md": {
+    "path": "/home/user/project/docs/b.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "0:/home/user/project/src/add.js": {
+    "path": "/home/user/project/src/add.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a - b"
+          },
+          {
+            "t": "+",
+            "s": "a + b"
+          }
+        ]
+      }
+    ]
+  },
+  "1:/home/user/project/context/plan.md": {
+    "path": "/home/user/project/context/plan.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "1:/home/user/project/src/sub.js": {
+    "path": "/home/user/project/src/sub.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a + b"
+          },
+          {
+            "t": "+",
+            "s": "a - b"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/src/mul.js": {
+    "path": "/home/user/project/src/mul.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a + b"
+          },
+          {
+            "t": "+",
+            "s": "a * b"
+          }
+        ]
+      }
+    ]
+  },
+  "2:/home/user/project/tool.py": {
+    "path": "/home/user/project/tool.py",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "3:/home/user/project/src/div.js": {
+    "path": "/home/user/project/src/div.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": false,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a * b"
+          },
+          {
+            "t": "+",
+            "s": "a / b"
+          }
+        ]
+      }
+    ]
+  },
+  "3:/home/user/project/src/feature.js": {
+    "path": "/home/user/project/src/feature.js",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "f0"
+          },
+          {
+            "t": "+",
+            "s": "f1"
+          }
+        ]
+      }
+    ]
+  }
+}

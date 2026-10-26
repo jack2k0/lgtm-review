@@ -58,6 +58,11 @@ case("failed check then fix, no recheck","unchecked","u-after",lambda:(s.edit(RE
 case("lint and typecheck scripts","checked","c-passed",lambda:(s.edit(REPO+"/src/a.ts"),s.bash("pnpm typecheck && pnpm lint","ok")))
 case("syntax-only shell check is not a check","unchecked","u-nocheck",lambda:(s.edit(REPO+"/src/a.ts"),s.bash("bash -n scripts/check.sh","")))
 case("masked mutation probe prints expected red lines","checked","c-passed",lambda:(s.bash("sed -i 's/a/b/' src/a.ts"),s.bash("./scripts/check-gates-can-go-red.sh 2>&1 | tail -4","recipe one went RED (exit 1)\nrecipe two went RED (exit 1)\nall mutation recipes behaved")))
+# truth-script fixes (phase 6): wrapped runners, git diff of a test file, wait loops, `cd $VAR`
+case("runner under flock and ionice","checked","c-passed",lambda:(s.edit(REPO+"/src/a.ts"),s.bash("flock /tmp/gates.lock ionice -c3 nice ./mvnw -q test","ok")))
+case("git diff of a test file is not a check","unchecked","u-nocheck",lambda:(s.edit(REPO+"/src/a.ts"),s.bash("git diff tests/test_a.py scripts/check.sh","")))
+case("wait loop killed with 137 is not a failing check","checked","c-passed",lambda:(s.edit(REPO+"/src/a.ts"),s.bash("pnpm test","ok"),s.bash("until ! pgrep -f scripts/check.sh; do sleep 5; done","",code=137)))
+case("cd into a scratch directory given by a variable","no-changes","nc-scratch",lambda:s.bash("export W=/tmp/claude-1/scratchpad && cd $W/wt && printf x > f.py"))
 # documentation written by an interpreter heredoc / next to git operations in one command (the target is a .md file)
 case("python heredoc writes a markdown file","no-changes","nc-doc",lambda:s.bash("python3 - <<'EOF'\np='context/roadmap.md'\nopen(p,'w').write('x')\nEOF"))
 case("git mv and sed on markdown in one command","no-changes","nc-doc",lambda:s.bash("sed -i 's/a/b/' context/x/plan.md && git mv context/x context/archive/x"))

@@ -1,0 +1,26 @@
+{
+  "fixture": "shell-gaps-2",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "note": "a rebound python name: both writes are docs"
+    },
+    {
+      "index": 1,
+      "expectedStatus": "checked",
+      "note": "a shell variable resolves to a doc target"
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "note": "the cat heredoc writes the helper script (code) after the check; its body is not a python write"
+    },
+    {
+      "index": 3,
+      "expectedStatus": "checked",
+      "note": "the doc target is missing from the capped diff; the merged file is git-made"
+    }
+  ]
+}

@@ -1,9 +1,10 @@
 ---
 change_id: status-accuracy-3
 title: Status accuracy, round 3 — wrapped checks, git attribution in mixed commands, heredoc write targets
-status: planned
+status: done
 created: 2026-10-26
 updated: 2026-10-26
+archived_at: 2026-10-26
 ---
 
 ## Notes
