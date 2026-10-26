@@ -348,7 +348,7 @@ function exitCodeOf(structured: string | undefined, text: string): number | unde
 const NOTIFICATION_SCAN_MAX = 200_000;
 const NOTIFICATIONS_PER_RECORD_MAX = 20;
 const NOTIFICATION_BLOCK_RE = /<task-notification>([\s\S]*?)<\/task-notification>/g;
-const NOTIFICATION_EXIT_RE = /exit code:?\s*(\d+)/i;
+const NOTIFICATION_EXIT_RE = /exit code:?\s*(\d+)/gi;
 
 function tagValue(block: string, tag: string): string | undefined {
   const m = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(block);
@@ -372,11 +372,15 @@ function notificationsOf(content: unknown, ts: string | null, line: number): Tas
     const taskId = tagValue(block, "task-id");
     const toolUseId = tagValue(block, "tool-use-id");
     if (taskId === undefined && toolUseId === undefined) continue;
-    const em = NOTIFICATION_EXIT_RE.exec(tagValue(block, "summary") ?? "");
+    const summary = tagValue(block, "summary") ?? "";
+    let exitCode: number | null = null;
+    for (const em of summary.matchAll(NOTIFICATION_EXIT_RE)) {
+      if (em[1] !== undefined) exitCode = Number(em[1]);
+    }
     const ev: TaskNotificationEvent = {
       type: "task-notification",
       status: (tagValue(block, "status") ?? "").toLowerCase(),
-      exitCode: em?.[1] !== undefined ? Number(em[1]) : null,
+      exitCode,
       ts,
       line,
     };

@@ -50,6 +50,7 @@ export const DETAIL_DIFF_CHARS_MAX = 16_000_000;
 export const DETAIL_ACTIONS_MAX = 100_000;
 
 const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
+const STOP_STATUSES = new Set(["killed", "stopped", "cancelled", "canceled", "timeout", "timed_out", "aborted"]);
 const TITLE_MAX = 60;
 const FAIL_OUTPUT_MAX = 200;
 
@@ -392,24 +393,27 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
     const c = entry.check;
     // Only an unresolved background check can be resolved, and only once: the first terminal notification wins.
     if (!c.background || c.completed || c.stopped) return;
+    const status = ev.status.toLowerCase();
     // A notification with no status and no exit code is a progress event (e.g. a monitor): not terminal, ignored.
-    if (ev.status === "" && ev.exitCode === null) return;
-    const finished = ev.status === "completed" || ev.status === "failed" || (ev.status === "" && ev.exitCode !== null);
-    let exit: number | null = null;
-    if (finished) {
-      // An exit code in the summary decides; "failed" never passes, even when the summary says exit code 0.
-      exit = ev.exitCode ?? (ev.status === "completed" ? 0 : null);
-      if (ev.status === "failed" && exit === 0) exit = null;
-    }
+    if (status === "" && ev.exitCode === null) return;
+    const finished = status === "completed" || status === "failed" || (status === "" && ev.exitCode !== null);
+    const stopped = STOP_STATUSES.has(status);
+    if (!finished && !stopped) return;
     c.resultSeq = seq;
     const act = entry.action;
-    if (!finished) {
+    if (stopped) {
       c.stopped = true;
       if (act?.check) {
         act.check.background = true;
         act.check.stopped = true;
       }
       return;
+    }
+    let exit: number | null = null;
+    if (finished) {
+      // An exit code in the summary decides; "failed" never passes, even when the summary says exit code 0.
+      exit = ev.exitCode ?? (status === "completed" ? 0 : null);
+      if (status === "failed" && exit === 0) exit = null;
     }
     c.completed = true;
     c.exit = exit;

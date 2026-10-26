@@ -475,10 +475,56 @@ describe("background checks resolved by task notifications", () => {
     expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { summary: "exit code: 2" })]).reason).toBe("pnpm test failed (exit 2)");
   });
 
-  test("killed, unknown status: stopped => unchecked, check stopped", () => {
-    for (const status of ["killed", "stopped", "weird"]) {
+  test("known stop statuses: stopped => unchecked, check stopped", () => {
+    for (const status of ["killed", "stopped", "cancelled", "canceled", "timeout", "timed_out", "aborted", "KILLED", "Timeout"]) {
       expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { status, summary: "was stopped" })])).toMatchObject({ status: "unchecked", reason: "check stopped" });
     }
+  });
+
+  test("unknown non-empty status is a progress event: ignored", () => {
+    for (const status of ["weird", "running", "in_progress", "unknown"]) {
+      expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), done("t1", { status, summary: "running" })])).toMatchObject({ status: "unchecked", reason: "check did not complete" });
+    }
+  });
+
+  test("1.1: exit code 0 in command text does not mask trailing exit code 1", () => {
+    const lines = [
+      prompt("q"),
+      ...edit("e1"),
+      ...bgBash("b1", "t1", 'pytest -k "exit code 0"'),
+      done("t1", { status: "completed", summary: 'Command "pytest -k \\"exit code 0\\"" failed with exit code 1' }),
+    ];
+    expect(one(lines)).toMatchObject({
+      status: "failing",
+      reason: 'pytest -k "exit code 0" failed (exit 1)',
+    });
+  });
+
+  test("1.3: exit code 0 in text before trailing exit code does not mask failure", () => {
+    const lines = [
+      prompt("q"),
+      ...edit("e1"),
+      ...bgBash("b1", "t1", "pnpm test"),
+      done("t1", { status: "completed", summary: 'Task timed out after 60s (last line: check exit code 0) (exit code 1)' }),
+    ];
+    expect(one(lines)).toMatchObject({
+      status: "failing",
+      reason: "pnpm test failed (exit 1)",
+    });
+  });
+
+  test("2.1: progress/monitor notification with running status is ignored and subsequent completed exit 0 passes", () => {
+    const lines = [
+      prompt("q"),
+      ...edit("e1"),
+      ...bgBash("b1", "t1", "pnpm test"),
+      taskNotification({ taskId: "t1", status: "running", summary: "Command 'pnpm test' is still running" }),
+      done("t1", { status: "completed", summary: "Command 'pnpm test' completed with exit code 0" }),
+    ];
+    expect(one(lines)).toMatchObject({
+      status: "checked",
+      reason: "pnpm test passed after last edit",
+    });
   });
 
   test("status-less notification without exit code is not terminal: ignored", () => {

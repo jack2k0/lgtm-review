@@ -311,6 +311,10 @@ describe("task notifications", () => {
     expect(notes([taskNotification({ taskId: "t1", status: "completed", summary: "Background command finished" })])[0]).toMatchObject({ exitCode: null });
   });
 
+  test("last exit code in the summary decides", () => {
+    expect(notes([taskNotification({ taskId: "t1", status: "completed", summary: 'Command "pytest -k \\"exit code 0\\"" failed with exit code 1' })])[0]).toMatchObject({ exitCode: 1 });
+  });
+
   test("several blocks in one record, in order", () => {
     const text = [notificationBlock({ taskId: "a", status: "completed" }), "noise", notificationBlock({ taskId: "b", status: "failed", summary: "exit code 2" })].join("\n");
     expect(notes([prompt(text, { origin: { kind: "task-notification" } })]).map((e) => (e as { taskId?: string }).taskId)).toEqual(["a", "b"]);
