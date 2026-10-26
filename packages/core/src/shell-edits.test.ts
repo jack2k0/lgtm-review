@@ -277,3 +277,22 @@ describe("classifyShellMutation: read-only segments do not make a mixed command 
     expect(classifyShellMutation(mixed(seg)).opaque).toBe(true);
   });
 });
+
+describe("classifyShellMutation: write options of read-only tools, fd redirects (review round 2)", () => {
+  const mixed = (seg: string) => `git merge b && sed -i s/x/y/ plan.md && ${seg}`;
+  test.each([
+    "sort -o out.ts in", "sort --output=out.ts in", "sort -ro out.ts in", "sort -oout.ts in", "sort --output out.ts in", "uniq in out.ts", "uniq -c in out.ts", "uniq -f 1 in out.ts",
+    "git diff --output=out.ts", "git show --output out.ts HEAD", "git log --output=out.ts",
+    "sed -n 'W out.ts' f", "sed e f", "sed 's/a/b/e' f", "sed -n 's/a/b/w out.ts' f",
+    "echo x &> out.ts", "echo x &>> out.ts", "echo x >& out.ts", "echo x 2> out.ts", "echo x 2>> out.ts", "echo x 2> \"$UNSET\"", "echo x 3> out.ts",
+  ])("opaque: %s", (seg) => {
+    expect(classifyShellMutation(mixed(seg)).opaque).toBe(true);
+  });
+
+  test.each([
+    "sort in", "sort -r -k2 in", "uniq in", "uniq -c in", "git diff", "git show HEAD", "sed -n '/e/p' f", "sed -n 's/a/b/gp' f",
+    "echo x 2>&1", "echo x >&2", "echo x 2>/dev/null", "echo x &> /dev/null", "echo x 2> err.log", "echo x 2> notes.md", "ls >&-",
+  ])("still known: %s", (seg) => {
+    expect(classifyShellMutation(mixed(seg)).opaque).toBe(false);
+  });
+});

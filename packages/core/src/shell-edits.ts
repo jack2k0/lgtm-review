@@ -4,6 +4,7 @@
  * commands whose only mutating segments are git operations (merge, rebase, checkout, ...).
  * Pure string logic on the command, regex/linear, never throws.
  */
+import { isDocPath } from "./hints.js";
 import { matchSegment, normalizeFirstToken, splitSegments, stripHeredocs, stripPrefixes, type RepoScripts } from "./check-patterns.js";
 
 /** File name used when the target of a shell edit cannot be read off the command. */
@@ -115,10 +116,14 @@ function parseWords(s: string): { words: Word[]; redirects: Redirect[] } {
     const m = REDIR_RE.exec(s);
     if (m) {
       i = REDIR_RE.lastIndex;
-      const fd = m[1] ?? "";
+      const fd = m[1] ?? ""; // "&" for `&>` / `&>>`
       const op = m[2] as string;
       if (op === ">" || op === ">>" || op === ">|") redirects.push({ fd, target: readWord() });
-      else readWord(); // `>&2`, `<file`, `<<EOF`, `<<<str`: nothing written to a file
+      else if (op === ">&") {
+        // `>&2`, `2>&1`, `>&-` duplicate or close a descriptor; `>& file` writes the file.
+        const target = readWord();
+        if (target !== null && !/^\d*-?$/.test(target.text)) redirects.push({ fd: fd === "" ? "&" : fd, target });
+      } else readWord(); // `<file`, `<<EOF`, `<<<str`: nothing written to a file
       continue;
     }
     const before = i;
@@ -510,14 +515,42 @@ const SAFE_HEADS = new Set(
 const SAFE_GIT = new Set(["add", "commit", "status", "log", "diff", "show", "branch", "push", "fetch", "remote", "rev-parse", "rev-list", "merge-base", "show-ref", "grep", "ls-files", "tag", "describe"]);
 const SAFE_WORKTREE = new Set(["add", "remove", "prune", "list"]);
 
-/** `sed` that neither edits in place nor writes a file with a `w` command / flag. */
+const SED_SUBST_WRITE_RE = /(?:^|[;{}\s!])s(.)(?:(?!\1)[^\\]|\\.)*\1(?:(?!\1)[^\\]|\\.)*\1[0-9gIiMmp]*[we]/;
+
+/** `sed` that neither edits in place nor writes a file (`w` / `W`), nor runs a command (`e`, `s///e`). */
 function isReadOnlySed(words: Word[]): boolean {
   for (const w of words.slice(1)) {
     const t = w.text;
     if (t === "--in-place" || t.startsWith("--in-place=") || /^-[A-Za-z]*i/.test(t)) return false;
-    if (/(?:^|[;{}\s])w\s*\S/.test(t) || /\/[A-Za-z0-9]*w\s*\S/.test(t)) return false;
+    if (/(?:^|[;{}\s!])[wW]\s*\S/.test(t) || /(?:^|[;{}\s!])e(?:\s|$|;|\})/.test(t) || SED_SUBST_WRITE_RE.test(t)) return false;
   }
   return true;
+}
+
+/** `sort -o f` / `--output=f`, `uniq in out`: read-only tools with an output file. */
+function writesOutputFile(head: string, words: Word[]): boolean {
+  const args = words.slice(1).map((w) => w.text);
+  if (head === "sort") return args.some((t) => t === "--output" || t.startsWith("--output=") || /^-[A-Za-z]*o/.test(t));
+  if (head === "uniq") {
+    let positional = 0;
+    for (let i = 0; i < args.length; i++) {
+      const t = args[i] as string;
+      if (t === "-f" || t === "-s" || t === "-w") i++;
+      else if (!t.startsWith("-") || t === "-") positional++;
+    }
+    return positional >= 2;
+  }
+  return false;
+}
+
+/**
+ * A redirect that may write a file we do not see as an edit: any unknown target; for descriptors other than stdout
+ * (`2> f`, `&> f`, `>& f`) also a known target that is neither scratch/log nor documentation.
+ */
+function writesUnseen(r: Redirect): boolean {
+  if (r.target === null || isUnknownTarget(r.target)) return true;
+  if (r.fd === "" || r.fd === "1") return false;
+  return !isIgnoredPath(r.target.text) && !isDocPath(r.target.text);
 }
 
 /** Segments known not to write files (beyond what `segmentMutation` already reported). */
@@ -525,16 +558,18 @@ function isKnownNonWriting(words: Word[], redirects: Redirect[]): boolean {
   const head = words[0]?.text;
   if (head === undefined) return redirects.length === 0;
   // A write redirect to an unknown target is a write we cannot see.
-  if (redirects.some((r) => (r.fd === "" || r.fd === "1") && (r.target === null || isUnknownTarget(r.target)))) return false;
+  if (redirects.some(writesUnseen)) return false;
   if (/^[A-Za-z_]\w*=/.test(head)) return true;
   const git = gitSub(words);
   if (git !== null) {
-    if (SAFE_GIT.has(git.sub)) return true;
+    // `git diff --output=f` and friends write a file.
+    if (SAFE_GIT.has(git.sub)) return !git.args.some((w) => /^--out(?:p(?:ut?)?)?(?:=|$)/.test(w.text));
     if (git.sub === "worktree") return SAFE_WORKTREE.has(git.args[0]?.text ?? "");
     if (git.sub === "config") return git.args.some((w) => w.text === "--get" || w.text === "--get-all" || w.text === "--list" || w.text === "-l");
     return false;
   }
   if (head === "sed" || head === "gsed") return isReadOnlySed(words);
+  if (writesOutputFile(head, words)) return false;
   return SAFE_HEADS.has(head);
 }
 
