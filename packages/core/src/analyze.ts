@@ -3,7 +3,7 @@ import { classifyShellMutation, resolveTarget } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, isDocPath, isScratchPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
 import { createParser, type Event, type TaskNotificationEvent, type ToolInput, type ToolResultEvent } from "./parse.js";
-import { resolveScope, scopeGaps, type ResolvedScope } from "./scope.js";
+import { agentWorktreeRoot, resolveScope, resolveWorktreeScope, scopeCovers, scopeGaps, type ResolvedScope } from "./scope.js";
 import { ACTIONS_MAX, buildSteps, failureExcerpt, kindOf, oneLine, QUOTES_PER_STEP, type ActionRec } from "./steps.js";
 import { actionPhase, createTimingTracker, parseTs, type TimingTracker } from "./timing.js";
 import { createSubagentCollector, emptyFlags, mergeSubagents, textWeight, type MergeContext, type MergeFlags, type SubagentTranscript } from "./subagents.js";
@@ -232,6 +232,12 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
+/** Scope of a check run from `cwd`; inside an agent worktree it is always the worktree (or a directory in it). */
+function checkScopeOf(raw: string[] | null, cwd: string | null, sessionRoot: string | null): ResolvedScope | null {
+  const wt = agentWorktreeRoot(cwd);
+  return wt === null ? resolveScope(raw, cwd, sessionRoot) : resolveWorktreeScope(raw, cwd as string, wt, sessionRoot);
+}
+
 function judge(p: PromptState, by: (thread: string) => string): { status: Status; reason: string; outOfScope: Map<string, string> } {
   const via = (thread: string): string => (thread === "" ? "" : ` (by subagent ${by(thread)})`);
   if (p.edits.length === 0) return { status: "no-changes", reason: "no edits", outOfScope: new Map() };
@@ -247,7 +253,16 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
   }
   const lastEdit = edits.reduce((m, e) => Math.max(m, e.seq), -1);
   const real = p.checks.filter((c) => !c.ignored);
-  const completed = real.filter((c) => c.completed);
+  // An agent-worktree check that passed but covers none of the edited files proves nothing about them.
+  const editedPaths = new Set<string>();
+  for (const e of edits) for (const f of e.files) if (f.cls === "code" && f.path.startsWith("/")) editedPaths.add(f.path);
+  const coversNone = (c: CheckRec): boolean =>
+    c.scope?.worktree !== undefined &&
+    c.exit === 0 &&
+    !c.masked &&
+    editedPaths.size > 0 &&
+    ![...editedPaths].some((path) => c.scope!.roots.some((r) => scopeCovers(r, path)));
+  const completed = real.filter((c) => c.completed && !coversNone(c));
   const lastCompleted = completed.reduce<CheckRec | null>(
     (m, c) => (m === null || c.coveredSeq > m.coveredSeq || (c.coveredSeq === m.coveredSeq && c.resultSeq > m.resultSeq) ? c : m),
     null,
@@ -499,7 +514,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               maskedLine: "",
               output: "",
               thread,
-              scope: resolveScope(checkScope(ev.input.command, opts.repo), ev.cwd ?? parser.meta().cwd, parser.meta().cwd),
+              scope: checkScopeOf(checkScope(ev.input.command, opts.repo), ev.cwd ?? parser.meta().cwd, parser.meta().cwd),
             };
             cur.checks.push(check);
           }
