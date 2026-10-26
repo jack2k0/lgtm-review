@@ -160,7 +160,8 @@ describe.each(routes)("%s: ETag / 304", (_name, path) => {
 describe("map and play answer a 304 without detail analysis", () => {
   // A fresh server has empty caches, so the tag can only be answered from the cheap plan. The old routes loaded the
   // full detail analysis (~1 s for a large log) before checking `If-None-Match`.
-  test.each(["/api/sessions/diffy/map", "/api/sessions/diffy/prompts/0/play"])("%s", async (path) => {
+  // Prompt 0 of diffy shares its uuid with the "live" session (checked-basic), whose prompt set is a subset, so live owns it and play answers 404 for the inherited copy; prompt 1 is diffy's own.
+  test.each(["/api/sessions/diffy/map", "/api/sessions/diffy/prompts/1/play"])("%s", async (path) => {
     const tag = etagOf(await get(path));
     expect(tag).toMatch(/^"[0-9a-f]{16}"$/);
     const cold = await startServer({ dir: PROJECT, projectsDir: join(tmp, "projects"), webRoot: join(tmp, "no-web") });

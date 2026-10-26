@@ -47,6 +47,12 @@ describe("inherited prompts", () => {
     expect(html).not.toContain('id="p1"');
     expect(html).toContain(`id="p${n}"`);
   });
+  test("several source sessions: the note does not claim a single source", () => {
+    const input = marked([0]);
+    const prompts = input.analysis.prompts.map((p, i) => (i === 1 ? { ...p, inheritedFrom: "fedcba9876543210" } : p));
+    const html = renderExport({ ...input, analysis: { ...input.analysis, prompts } }, BASE).html;
+    expect(html).toContain("All 2 prompts inherited from 01234567 and 1 other session. No prompts to review.");
+  });
   test("all inherited: only the note, no table", () => {
     const n = fixtureInput("steps-mixed").analysis.prompts.length;
     const html = renderExport(marked([...Array(n).keys()]), BASE).html;
@@ -439,6 +445,31 @@ describe("diff size cap", () => {
     expect(html).toContain("Diffs omitted (size cap)");
     const none = buildExportInput(analysis, a, { diffs: false });
     expect(count(none.input.diffs)).toBe(0);
+  });
+});
+
+describe("diff size cap and inherited prompts", () => {
+  test("diffs of inherited prompts do not use up the cap", () => {
+    const name = "hints-test-edits";
+    const a = createAnalyzer({ detail: true, sessionId: name, file: `${name}.jsonl` });
+    for (const l of readFileSync(join(sessionsDir, `${name}.jsonl`), "utf8").split("\n").filter((x) => x !== "")) a.push(l);
+    const analysis = a.finish();
+    const withDiffs = analysis.prompts.filter((p) => p.files.length > 0);
+    expect(withDiffs.length).toBeGreaterThan(1);
+    const own = buildExportInput(
+      { ...analysis, prompts: analysis.prompts.map((p) => (p === withDiffs[0] ? { ...p, inheritedFrom: "other" } : p)) },
+      a,
+      { diffs: true },
+    );
+    expect(own.capped).toBe(false);
+    expect(own.input.diffs.has(withDiffs[0]!.index)).toBe(false);
+    const rest = buildExportInput({ ...analysis, prompts: analysis.prompts.filter((p) => p !== withDiffs[0]) }, a, { diffs: true });
+    expect([...own.input.diffs.keys()]).toEqual([...rest.input.diffs.keys()]);
+    // a cap that fits the own diffs exactly is not exhausted by the inherited prompt's diffs
+    const total = [...rest.input.diffs.values()].flat().reduce((n, d) => n + d.path.length + d.hunks.reduce((m, h) => m + h.header.length + h.lines.reduce((k, l) => k + l.s.length + 1, 0), 0), 0);
+    const tight = buildExportInput({ ...analysis, prompts: analysis.prompts.map((p) => (p === withDiffs[0] ? { ...p, inheritedFrom: "other" } : p)) }, a, { diffs: true, capChars: total });
+    expect(tight.capped).toBe(false);
+    expect([...tight.input.diffs.keys()]).toEqual([...rest.input.diffs.keys()]);
   });
 });
 

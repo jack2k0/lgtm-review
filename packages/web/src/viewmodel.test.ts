@@ -274,6 +274,13 @@ describe("splitInherited", () => {
     expect(r.from).toBe("sess-a");
   });
 
+  test("from is the most frequent source (shared rule), others counts the rest", () => {
+    const r = splitInherited([p(0, "sess-a"), p(1, "sess-b"), p(2, "sess-b"), p(3, "sess-c")]);
+    expect(r.from).toBe("sess-b");
+    expect(r.others).toBe(2);
+    expect(splitInherited([p(0, "sess-b"), p(1, "sess-a")]).from).toBe("sess-a");
+  });
+
   test("all inherited: own is empty", () => {
     const r = splitInherited([p(0, "abc"), p(1, "abc")]);
     expect(r.own).toEqual([]);

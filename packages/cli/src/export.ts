@@ -33,6 +33,7 @@ export function buildExportInput(analysis: SessionAnalysis, analyzer: Analyzer, 
   let capped = false;
   if (opts.diffs) {
     outer: for (const p of analysis.prompts) {
+      if (p.inheritedFrom !== undefined) continue; // omitted from the HTML, so not counted against the cap
       for (const f of p.files) {
         const d = analyzer.diffFor(p.index, f.path);
         if (d === null) continue;

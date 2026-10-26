@@ -2,17 +2,12 @@ import { realpathSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { analyzeFile, analyzeFileDetail, discoverRootSessions, gitCrosscheck, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile, type SessionRoot } from "@lgtm/core/node";
-import { buildBeats, markInherited, needsAttention } from "@lgtm/core";
+import { buildBeats, inheritedSource, markInherited, needsAttention, ownershipRanks } from "@lgtm/core";
 import type { Analyzer, GitCrosscheckResponse, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
 import { planImportMap, toRepoRelative } from "./map.js";
 import { sortSessions } from "./format.js";
 import { etagFor, ifNoneMatch, sendJson, sendNotModified, type ApiHandler } from "./http.js";
 import type { ServerOptions } from "./server.js";
-
-/** Ownership order of `markInherited` (earlier start first, missing last, then id), as a sortable key. */
-function ownershipRank(s: { sessionId: string; startedAt: string | null }): string {
-  return s.startedAt === null ? `\xFF${s.sessionId}` : `${s.startedAt}\x00${s.sessionId}`;
-}
 
 /**
  * Counts only non-inherited prompts; `inheritedCount` and `forkOf` describe the rest. `all` (the project's sessions)
@@ -20,31 +15,18 @@ function ownershipRank(s: { sessionId: string; startedAt: string | null }): stri
  */
 export function summarize(s: SessionAnalysis, all: readonly SessionAnalysis[] = []): SessionSummary {
   const statusCounts: Record<Status, number> = { checked: 0, unchecked: 0, failing: 0, "no-changes": 0 };
-  const inheritedTally = new Map<string, number>();
   let inheritedCount = 0;
   let attentionCount = 0;
   for (const p of s.prompts) {
     if (p.inheritedFrom !== undefined) {
       inheritedCount++;
-      inheritedTally.set(p.inheritedFrom, (inheritedTally.get(p.inheritedFrom) ?? 0) + 1);
     } else {
       statusCounts[p.status]++;
       if (needsAttention(p)) attentionCount++;
     }
   }
-  // forkOf: session id with most inherited prompts; ties go to the earlier owner (startedAt, then id)
-  const rankOf = (sid: string): string => {
-    const o = all.find((x) => x.sessionId === sid);
-    return o ? ownershipRank(o) : `\xFF${sid}`;
-  };
-  let forkOf: string | undefined;
-  let forkOfMax = 0;
-  for (const [sid, count] of inheritedTally) {
-    if (count > forkOfMax || (count === forkOfMax && forkOf !== undefined && rankOf(sid) < rankOf(forkOf))) {
-      forkOfMax = count;
-      forkOf = sid;
-    }
-  }
+  // forkOf: shared rule (most inherited prompts; ties to the earlier owner)
+  const forkOf = inheritedSource(s.prompts, all.length > 0 ? ownershipRanks(all) : undefined)?.from;
   return {
     id: s.sessionId,
     title: s.title,

@@ -1,3 +1,4 @@
+import { inheritedSource } from "@lgtm/core";
 import type { FileChange, PromptAnalysis, SessionAnalysis, Status } from "@lgtm/core";
 
 export interface FormatOptions {
@@ -23,20 +24,14 @@ function fileLine(f: FileChange): string {
   return `${f.kind} ${f.path} +${f.added} -${f.removed}${f.maybeIncomplete ? " (incomplete)" : ""}`;
 }
 
-/** Inherited prompts of a session (resumed or forked copies) and the session most of them came from (ties: smallest id); null when none. */
-export function inheritedInfo(prompts: readonly PromptAnalysis[]): { count: number; from: string } | null {
-  const tally = new Map<string, number>();
-  let count = 0;
-  for (const p of prompts) {
-    if (p.inheritedFrom === undefined) continue;
-    count++;
-    tally.set(p.inheritedFrom, (tally.get(p.inheritedFrom) ?? 0) + 1);
-  }
-  if (count === 0) return null;
-  let from = "";
-  let max = 0;
-  for (const [id, n] of tally) if (n > max || (n === max && id < from)) [from, max] = [id, n];
-  return { count, from };
+/** Inherited prompts of a session (resumed or forked copies), the session most of them came from and how many other sources there are; null when none. */
+export function inheritedInfo(prompts: readonly PromptAnalysis[]): { count: number; from: string; others: number } | null {
+  return inheritedSource(prompts);
+}
+
+/** " and 1 other session" when the inherited prompts come from more than one session, else "". */
+export function inheritedOthers(inh: { others: number }): string {
+  return inh.others > 0 ? ` and ${inh.others} other ${inh.others === 1 ? "session" : "sessions"}` : "";
 }
 
 /** Newest first by start time (missing last), then by id. */
@@ -65,7 +60,7 @@ export function formatText(sessions: SessionAnalysis[], opts: FormatOptions): st
     out.push(
       `${paint(opts, "1", s.sessionId.slice(0, 8))}  ${oneLine(s.title, 60)}  [${s.branch}]  ${s.startedAt ?? "unknown start"}${archived}`,
     );
-    out.push(`  ${own.length} prompt(s)${counts ? `: ${counts}` : ""}${inh ? ` (+${inh.count} inherited from ${inh.from.slice(0, 8)})` : ""}`);
+    out.push(`  ${own.length} prompt(s)${counts ? `: ${counts}` : ""}${inh ? ` (+${inh.count} inherited from ${inh.from.slice(0, 8)}${inheritedOthers(inh)})` : ""}`);
     for (const p of s.prompts) {
       const mark = p.inheritedFrom === undefined ? "" : ` (inherited from ${p.inheritedFrom.slice(0, 8)})`;
       out.push(`  ${p.index + 1}. ${paint(opts, CODES[p.status], p.status.padEnd(10))} ${oneLine(p.text, 200)}${mark}`);

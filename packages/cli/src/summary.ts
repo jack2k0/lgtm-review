@@ -1,4 +1,4 @@
-import { inheritedInfo } from "./format.js";
+import { inheritedInfo, inheritedOthers } from "./format.js";
 import { needsAttention, redact as coreRedact } from "@lgtm/core";
 import type { Hint, PromptAnalysis, RedactOptions, Recommendation, SessionAnalysis, Status } from "@lgtm/core";
 import { stripDroppedControls } from "./export-html.js";
@@ -152,14 +152,14 @@ export function formatSummary(s: SessionAnalysis, opts: SummaryOptions): string 
     .map(([st, n]) => `${n} ${st}`)
     .join(", ");
   if (inh && prompts.length === 0) {
-    out.push(`All ${inh.count} ${inh.count === 1 ? "prompt" : "prompts"} inherited from ${mdText(red(inh.from.slice(0, 8)))}. No prompts to review.`, "");
+    out.push(`All ${inh.count} ${inh.count === 1 ? "prompt" : "prompts"} inherited from ${mdText(red(inh.from.slice(0, 8)))}${inheritedOthers(inh)}. No prompts to review.`, "");
     return out.join("\n");
   }
   if (prompts.length === 0) {
     out.push("This session has no prompts.", "");
   } else {
     out.push(`${prompts.length} ${prompts.length === 1 ? "prompt" : "prompts"}: ${counts}.`, "");
-    if (inh) out.push(`${inh.count} ${inh.count === 1 ? "prompt" : "prompts"} inherited from ${mdText(red(inh.from.slice(0, 8)))} omitted`, "");
+    if (inh) out.push(`${inh.count} ${inh.count === 1 ? "prompt" : "prompts"} inherited from ${mdText(red(inh.from.slice(0, 8)))}${inheritedOthers(inh)} omitted`, "");
     out.push("| # | Status | Review | Prompt | Files | +/- |", "| ---: | --- | --- | --- | ---: | --- |");
     for (const p of prompts) {
       const t = totals(p);

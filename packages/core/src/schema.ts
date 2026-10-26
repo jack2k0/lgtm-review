@@ -119,7 +119,7 @@ export const SessionSummary = z.object({
   warningCount: z.number().int().nonnegative(),
   /** Number of inherited prompts (excluded from promptCount and statusCounts). */
   inheritedCount: z.number().int().nonnegative().default(0),
-  /** Session id that contributed the most inherited prompts (ties broken by ownership order: earliest startedAt, then smallest sessionId). Absent when inheritedCount is 0. */
+  /** Session id that contributed the most inherited prompts (ties broken by ownership order: earliest startedAt, then the session whose prompt set is a subset of the other's (the original), then smallest sessionId). Absent when inheritedCount is 0. */
   forkOf: z.string().optional(),
   /** True only when the session was read from the local archive. */
   archived: z.boolean().optional(),
