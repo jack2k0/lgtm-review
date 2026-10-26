@@ -178,6 +178,7 @@ describe("classifyShellMutation: order and paths", () => {
     expect(resolveTarget("./src/../x.js", "/home/u/p", false)).toBe("/home/u/p/x.js");
     expect(resolveTarget("src/x.js", "/home/u/p", true)).toBe("src/x.js");
     expect(resolveTarget("/abs/x.js", "/home/u/p", false)).toBe("/abs/x.js");
+    expect(resolveTarget("~/notes.md", "/home/u/p", false)).toBe("~/notes.md");
     expect(resolveTarget("src/x.js", null, false)).toBe("src/x.js");
     expect(resolveTarget(SHELL_EDIT_FILE, "/home/u/p", false)).toBe(SHELL_EDIT_FILE);
   });
@@ -215,6 +216,11 @@ describe("classifyShellMutation: history-moving git operations", () => {
     const m = classifyShellMutation("git mv context/changes/x context/archive/x");
     expect(m.edits.map((e) => [e.file, e.gitOp, e.kind])).toEqual([["context/changes/x", true, "D"], ["context/archive/x", true, "A"]]);
   });
+
+  test("git mv handles fewer than two operands", () => {
+    expect(classifyShellMutation("git mv").edits).toEqual([{ file: SHELL_EDIT_FILE, gitOp: true, kind: "M" }]);
+    expect(classifyShellMutation("git mv a.js").edits).toEqual([{ file: "a.js", gitOp: true, kind: "A" }]);
+  });
 });
 
 describe("classifyShellMutation: fail closed on unresolved shell writes (review round 1)", () => {
@@ -232,6 +238,7 @@ describe("classifyShellMutation: fail closed on unresolved shell writes (review 
     ["A8 prefix assignment does not reach python argv", "R=docs/x.md python3 - \"$R\" <<'EOF'\nimport sys\nopen(sys.argv[1], 'w').write('x')\nEOF", [SHELL_EDIT_FILE]],
     ["A8 prefix assignment does not persist", "R=docs/x.md true && sed -i s/a/b/ \"$R\"", [SHELL_EDIT_FILE]],
     ["A8 export persists", "export R=docs/x.md && sed -i s/a/b/ \"$R\"", ["docs/x.md"]],
+    ["A8 variable with glob characters stays dynamic", "export R=\"*.ts\" && sed -i s/a/b/ \"$R\"", [SHELL_EDIT_FILE]],
   ])("%s", (_name, cmd, expected) => {
     expect(files(cmd)).toEqual(expected);
   });

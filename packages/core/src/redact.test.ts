@@ -105,6 +105,7 @@ const POSITIVES: Sample[] = [
   sample("url query token", b(24, 58), (s) => `GET /cb?access_token=${s}&state=1`, "secret"),
   sample("cli flag", b(24, 59), (s) => `deploy --token ${s} --env prod`, "secret"),
   sample("cli flag quoted", "my pass" + b(8, 60), (s) => `login --password "${s}"`, "secret"),
+  sample("cli flag single quoted", "my pass" + b(8, 60), (s) => `login --password '${s}'`, "secret"),
   sample("cli flag equals", b(24, 61), (s) => `tool --api-key=${s}`, "secret"),
   sample("azure account key", b(44, 62, ALNUM) + "==", (s) => `DefaultEndpointsProtocol=https;AccountName=x;AccountKey=${s};EndpointSuffix=core`, "azure-key", []),
   sample("x-api-key lowercase json", b(28, 63), (s) => `{"x-api-key": "${s}"}`, "secret"),
@@ -369,6 +370,11 @@ describe("redact: identity", () => {
     expect(redact("edit /home/jack/git/lgtm-review/src/a.ts and /home/jack/git/lgtm-review", opts).text).toBe("edit <repo>/src/a.ts and <repo>");
     expect(redact("/home/jack/git/lgtm-review-other/x", opts).text).toBe("~/git/lgtm-review-other/x");
     expect(redact("file:///home/jack/git/lgtm-review/x", { repoDir: "/home/jack/git/lgtm-review/" }).text).toBe("file://<repo>/x");
+  });
+
+  test("repo dir root or dot is ignored", () => {
+    expect(redact("read /src/a.ts in /", { repoDir: "/" }).text).toBe("read /src/a.ts in /");
+    expect(redact("read ./src/a.ts in .", { repoDir: "." }).text).toBe("read ./src/a.ts in .");
   });
 
   test("e-mail addresses", () => {
