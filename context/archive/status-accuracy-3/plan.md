@@ -36,7 +36,7 @@ PRD rules are unchanged (S-11, S-16, S-18, S-20 already say what is right); this
 allow: ^packages/core/src/(check-patterns|shell-edits|analyze)(\.test)?\.ts$
 allow: ^packages/core/fixtures/sessions/(wrapped-checks|git-doc-mix|heredoc-targets|shell-gaps-2)\.(jsonl|labels\.json)$
 allow: ^packages/core/fixtures/sessions/__golden__/(wrapped-checks|git-doc-mix|heredoc-targets|shell-gaps-2)\.
-allow: ^context/changes/status-accuracy-3/
+allow: ^context/(changes|archive)/status-accuracy-3/
 allow: ^scripts/audit/
 goldens: (wrapped-checks|git-doc-mix|heredoc-targets|shell-gaps-2)\.
 labels: new-only
