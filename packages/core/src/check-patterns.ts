@@ -47,6 +47,10 @@ export interface Segment {
   text: string;
   /** Operator that follows this segment: "&&", "||", "|", ";", "&", "\n" or "" at the end. */
   op: string;
+  /** Unquoted "(" in the raw segment: a subshell starts before its command. */
+  opens: number;
+  /** Unquoted ")" in the raw segment: a subshell closes after its command. */
+  closes: number;
 }
 
 export function stripHeredocs(cmd: string): string {
@@ -70,14 +74,22 @@ export function splitSegments(cmd: string): Segment[] {
   const segs: Segment[] = [];
   let cur = "";
   let quote: string | null = null;
+  let opens = 0;
+  let closes = 0;
   const end = (op: string): void => {
     const text = cur.trim().replace(/\s*[)}]+$/, "");
+    const segOpens = opens;
+    const segCloses = closes;
     cur = "";
+    opens = 0;
+    closes = 0;
     if (text === "") {
       // An operator after an empty segment (e.g. "a;\n") keeps the earlier operator.
+      // A segment that held only closing parens still closes the preceding subshell.
+      if (segCloses > 0 && segs.length > 0) (segs[segs.length - 1] as Segment).closes += segCloses;
       return;
     }
-    segs.push({ text, op });
+    segs.push({ text, op, opens: segOpens, closes: segCloses });
   };
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i] as string;
@@ -117,6 +129,12 @@ export function splitSegments(cmd: string): Segment[] {
       const prev = cmd[i - 1];
       if (prev === ">" || prev === "<" || next === ">") cur += c;
       else end("&");
+    } else if (c === "(") {
+      opens++;
+      cur += c;
+    } else if (c === ")") {
+      closes++;
+      cur += c;
     } else {
       cur += c;
     }
@@ -422,18 +440,19 @@ function orDot(roots: string[]): string[] {
 
 /** pnpm/bun filter: only path-style filters can be placed without the file system. */
 function pathFilter(raw: string): string | null {
-  let f = raw;
-  const braced = /[{}]/.test(f);
-  f = f.replace(/[{}]/g, "").replace(/^(?:\.\.\.|\^)+/, "").replace(/(?:\.\.\.)+$/, "");
-  return braced || f.startsWith("./") || f.startsWith("../") ? f : null;
+  if (/[*?[{]/.test(raw)) return null; // a glob or brace selects several projects
+  const f = raw.replace(/^(?:\.\.\.|\^)+/, "").replace(/(?:\.\.\.)+$/, "");
+  return f.startsWith("./") || f.startsWith("../") ? f : null;
 }
 
 const PM_SCOPE_VALUE_OPTS = new Set(["-C", "--dir", "--filter", "-F", "--prefix", "-w", "--workspace", "--cwd"]);
 
 function pmRoots(head: string, toks: string[]): string[] | null {
-  const opts = parseArgs(toks, 1, new Set([...PM_SCOPE_VALUE_OPTS, ...(PM_VALUE_OPTS[head] ?? [])]), true);
+  // npm accepts its scope options after the script name (`npm test --prefix dir`), so scan every token.
+  const opts = parseArgs(toks, 1, new Set([...PM_SCOPE_VALUE_OPTS, ...(PM_VALUE_OPTS[head] ?? [])]), head !== "npm");
   const roots: string[] = [];
   if (head === "pnpm" || head === "bun") {
+    if (head === "pnpm" && (opts.flags.has("-r") || opts.flags.has("--recursive") || opts.vals.has("--recursive"))) return null;
     roots.push(...valsOf(opts, head === "pnpm" ? "-C" : "--cwd", "--dir"));
     for (const f of valsOf(opts, "--filter", "-F")) {
       const p = pathFilter(f);
@@ -453,8 +472,16 @@ function pmRoots(head: string, toks: string[]): string[] | null {
   return orDot(roots);
 }
 
-const VITEST_OPTS = new Set("-c --config -r --root --dir --project -t --testNamePattern --reporter --environment --pool --shard --outputFile --mode".split(" "));
-const JEST_OPTS = new Set("-c --config -t --testNamePattern --selectProjects --shard --reporters --outputFile --rootDir -w --maxWorkers --testPathPattern".split(" "));
+const VITEST_OPTS = new Set(
+  "-c --config -r --root --dir --project -t --testNamePattern --reporter --environment --pool --shard --outputFile --mode --bail --maxWorkers --minWorkers --testTimeout --hookTimeout --teardownTimeout --retry --repeats --exclude --include --workspace --setupFiles --env --maxConcurrency".split(
+    " ",
+  ),
+);
+const JEST_OPTS = new Set(
+  "-c --config -t --testNamePattern --selectProjects --shard --reporters --outputFile --rootDir -w --maxWorkers --testPathPattern --testPathPatterns --bail --minWorkers --testTimeout --retry --retryTimes --maxConcurrency --cacheDirectory --coverageDirectory --env --globals --globalSetup --globalTeardown --haste --moduleNameMapper --prettierPath --resolver --runner --setupFiles --setupFilesAfterEnv --snapshotResolver --testEnvironmentOptions --testResultsProcessor --testRunner --testSequencer --transform --workerIdleMemoryLimit --displayName --seed".split(
+    " ",
+  ),
+);
 const PYTEST_OPTS = new Set("-k -m -c -p -n -o --rootdir --maxfail --tb --junitxml --cov --ignore --deselect --durations".split(" "));
 const GO_OPTS = new Set("-run -bench -count -timeout -tags -coverprofile -cpu -parallel -p -benchtime -o -exec -covermode -coverpkg -ldflags -gcflags".split(" "));
 const TSC_OPTS = new Set("-p --project --outDir --target --module --lib --rootDir --declarationDir --jsx --moduleResolution".split(" "));
@@ -477,7 +504,10 @@ function segmentRoots(toks: string[], s: string): string[] | null {
   if (head === "pnpm" || head === "npm" || head === "yarn" || head === "bun") return pmRoots(head, toks);
   if (head === "make") {
     const o = parseArgs(toks, 1, MAKE_OPTS);
-    return orDot(valsOf(o, "-C", "--directory"));
+    const roots = valsOf(o, "-C", "--directory");
+    // GNU make also accepts the attached form (`-Cpackages/web`).
+    for (const t of toks) if (t.startsWith("-C") && t.length > 2) roots.push(t.slice(2));
+    return orDot(roots);
   }
   if (head === "gh") return null;
   if (!SIMPLE_RES.some((re) => re.test(s))) return null; // a script file: the script decides
@@ -498,7 +528,7 @@ function segmentRoots(toks: string[], s: string): string[] | null {
     }
     case "jest": {
       const o = parseArgs(args, 0, JEST_OPTS);
-      return orDot([...o.pos, ...valsOf(o, "--testPathPattern")]);
+      return orDot([...o.pos, ...valsOf(o, "--testPathPattern", "--testPathPatterns")]);
     }
     case "pytest":
     case "py.test":
@@ -581,8 +611,10 @@ export function checkScope(command: string, repo?: RepoScripts): string[] | null
   try {
     if (typeof command !== "string" || command.trim() === "") return null;
     let prefix: string | null = null;
+    const outerPrefixes: (string | null)[] = [];
     const roots: string[] = [];
     for (const seg of splitSegments(stripHeredocs(command))) {
+      for (let i = 0; i < seg.opens; i++) outerPrefixes.push(prefix);
       const s = normalizeFirstToken(stripPrefixes(seg.text));
       const toks = stripRedirects(tokens(s).map(unquote));
       const head = toks[0];
@@ -596,6 +628,8 @@ export function checkScope(command: string, repo?: RepoScripts): string[] | null
         if (r === null) return null;
         for (const x of r) roots.push(joinPrefix(prefix, x));
       }
+      // A `cd` inside `( … )` only affects that subshell: restore the outer prefix when it closes.
+      for (let i = 0; i < seg.closes; i++) prefix = outerPrefixes.pop() ?? null;
     }
     return roots.length === 0 ? null : [...new Set(roots)];
   } catch {

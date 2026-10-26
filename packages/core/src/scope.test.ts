@@ -78,6 +78,30 @@ describe("scopeCovers", () => {
     expect(scopeCovers("/tests", "/src/a.ts")).toBe(false);
     expect(scopeCovers("/r/tests", "/r/src/a.ts")).toBe(true);
   });
+
+  test("a non-test file only covers itself, not same-named files elsewhere", () => {
+    expect(scopeCovers("/r/packages/web/src/index.ts", "/r/packages/web/src/index.ts")).toBe(true);
+    expect(scopeCovers("/r/packages/web/src/index.ts", "/r/packages/web/src/index.tsx")).toBe(false);
+    expect(scopeCovers("/r/packages/web/src/index.ts", "/r/packages/core/src/index.ts")).toBe(false);
+    expect(scopeCovers("/r/scripts/deploy.sh", "/r/src/deploy.ts")).toBe(false);
+  });
+
+  test("the stem rule does not cross package boundaries", () => {
+    expect(scopeCovers("/r/packages/web/src/cart.test.ts", "/r/packages/web/src/cart.ts")).toBe(true);
+    expect(scopeCovers("/r/packages/web/src/cart.test.ts", "/r/packages/core/src/cart.ts")).toBe(false);
+  });
+
+  test("a test package keeps its own name instead of its container", () => {
+    expect(scopeCovers("/r/packages/e2e", "/r/packages/core/src/b.ts")).toBe(false);
+    expect(scopeCovers("/r/apps/e2e", "/r/apps/web/src/a.ts")).toBe(false);
+  });
+
+  test("directory-key coverage stays in the same package", () => {
+    expect(scopeCovers("/r/tests/api", "/r/src/api/route.ts")).toBe(true);
+    expect(scopeCovers("/r/tests/api", "/r/packages/billing/api/handler.ts")).toBe(false);
+    expect(scopeCovers("/r/packages/web/tests/api", "/r/packages/web/src/api/route.ts")).toBe(true);
+    expect(scopeCovers("/r/packages/web/tests/api", "/r/packages/core/src/api/route.ts")).toBe(false);
+  });
 });
 
 describe("scopeGaps", () => {

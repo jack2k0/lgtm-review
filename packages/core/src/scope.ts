@@ -10,6 +10,8 @@ export interface ResolvedScope {
 
 /** Folder names that hold tests; a root made only of these is the whole test suite. */
 const TEST_DIRS = new Set(["test", "tests", "__tests__", "spec", "specs", "e2e"]);
+/** Folder names whose child is a workspace package or app (`packages/web`). */
+const PACKAGE_CONTAINERS = new Set(["packages", "apps", "libs", "services"]);
 
 export const SCOPE_LABEL_MAX = 60;
 
@@ -61,14 +63,45 @@ function stemOf(name: string): string {
   return stem;
 }
 
+/** Does the file name follow a test naming convention (`cart.test.ts`, `test_cart.py`, `cart_test.go`, `CartTest.java`)? */
+function isTestFileName(name: string): boolean {
+  return (
+    /\.(?:test|spec)\.[^.]*$/i.test(name) ||
+    /^test_.+\.[^.]+$/i.test(name) ||
+    /_(?:test|spec)\.[^.]+$/i.test(name) ||
+    /(?:Test|Tests|Spec)\.[^.]+$/.test(name)
+  );
+}
+
+/** Is this root a test file, or does it live under a test directory? */
+function isTestRoot(root: string): boolean {
+  const segs = root.split("/").filter((s) => s !== "");
+  const last = segs[segs.length - 1];
+  if (last !== undefined && isTestFileName(last)) return true;
+  return segs.some((s) => TEST_DIRS.has(s.toLowerCase()));
+}
+
+/** Nearest `<container>/<name>` part of an absolute path, or null when it is outside every package container. */
+function packageOf(path: string): string | null {
+  const segs = path.split("/").filter((s) => s !== "");
+  for (let i = segs.length - 2; i >= 0; i--) {
+    if (PACKAGE_CONTAINERS.has((segs[i] as string).toLowerCase())) return `/${segs.slice(0, i + 2).join("/")}`;
+  }
+  return null;
+}
+
 /** The name a root is matched by when it is outside the file's own prefix, or null when it has none. */
 function keyOf(root: string): string | null {
   const segs = root.split("/").filter((s) => s !== "");
   if (segs.length === 0) return null;
-  const last = segs[segs.length - 1];
+  const last = segs[segs.length - 1] as string;
   if (last.includes(".")) return stemOf(last);
+  const lower = last.toLowerCase();
+  const parent = segs[segs.length - 2];
+  // `packages/e2e` is a test package, not the whole `packages` container.
+  if (TEST_DIRS.has(lower) && parent !== undefined && PACKAGE_CONTAINERS.has(parent.toLowerCase())) return lower;
   for (let i = segs.length - 1; i >= 0; i--) {
-    const seg = segs[i].toLowerCase();
+    const seg = (segs[i] as string).toLowerCase();
     if (!TEST_DIRS.has(seg)) return seg;
   }
   return null;
@@ -79,10 +112,12 @@ export function scopeCovers(root: string, file: string): boolean {
   if (file === root || file.startsWith(childPrefix(root))) return true;
   const key = keyOf(root);
   if (key === null) return false;
+  // Path-key matching (a stem, or a directory name such as `api`) never crosses into another package.
+  if (packageOf(root) !== packageOf(file)) return false;
   const segs = file.split("/").filter((s) => s !== "");
   if (segs.length === 0) return false;
-  const name = segs[segs.length - 1];
-  if (stemOf(name) === key) return true;
+  const name = segs[segs.length - 1] as string;
+  if (isTestRoot(root) && stemOf(name) === key) return true;
   return segs.slice(0, -1).some((d) => d.toLowerCase() === key);
 }
 
