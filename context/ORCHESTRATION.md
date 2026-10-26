@@ -55,6 +55,8 @@ brak
 
 - 2026-10-26 (cd. 4): testy czasowe (20 MB core, 20 MB e2e HTTP, długie komendy shell) przeniesione bez zmian progów do *.perf.test.ts (sekwencyjnie) — koniec flaky pod obciążeniem; eksport: nagłówek diffu ma liczniki pliku + '(diff truncated)' (S-03 3.2/3.3). Pierwszy merge przez bramkę: NEEDS-EYES, pozycje uzasadnione. Kickoff prompt: bramka w B3 i w briefie workera.
 
+- 2026-10-26 (cd. 5): wdrożony proces przeglądu na wzór Anthropic (AGENTS.md, CLAUDE.md, REVIEW.md, docs/prompts/03-review.md, `gate.mjs --merge`/`--tiers`). Pierwsza zmiana przez pełny proces High: recenzenci Sonnet + Agy, wzajemna weryfikacja, 11 uwag (10 fixed, 1 rejected), 1 runda, rejestr `context/archive/review-process/reviews/findings.md`, merge 25d599e. Nie wypchnięte.
+
 ## Bramki
 - Npm publish: czeka na decyzję właściciela.
 
