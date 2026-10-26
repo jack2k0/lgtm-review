@@ -57,6 +57,7 @@ case("no edits at all","no-changes","nc-none",lambda:s.bash("ls","a b"))
 case("failed check then fix, no recheck","unchecked","u-after",lambda:(s.edit(REPO+"/src/a.ts"),s.bash("pnpm test","1 failed",code=1),s.edit(REPO+"/src/a.ts")))
 case("lint and typecheck scripts","checked","c-passed",lambda:(s.edit(REPO+"/src/a.ts"),s.bash("pnpm typecheck && pnpm lint","ok")))
 case("syntax-only shell check is not a check","unchecked","u-nocheck",lambda:(s.edit(REPO+"/src/a.ts"),s.bash("bash -n scripts/check.sh","")))
+case("masked mutation probe prints expected red lines","checked","c-passed",lambda:(s.bash("sed -i 's/a/b/' src/a.ts"),s.bash("./scripts/check-gates-can-go-red.sh 2>&1 | tail -4","recipe one went RED (exit 1)\nrecipe two went RED (exit 1)\nall mutation recipes behaved")))
 # documentation written by an interpreter heredoc / next to git operations in one command (the target is a .md file)
 case("python heredoc writes a markdown file","no-changes","nc-doc",lambda:s.bash("python3 - <<'EOF'\np='context/roadmap.md'\nopen(p,'w').write('x')\nEOF"))
 case("git mv and sed on markdown in one command","no-changes","nc-doc",lambda:s.bash("sed -i 's/a/b/' context/x/plan.md && git mv context/x context/archive/x"))
@@ -77,27 +78,32 @@ exp.append({"label":"slash command turn","status":"checked","reason":"c-passed"}
 s.prompt("delegate to subagent")
 tid=s.tool("Agent",{"description":"impl","prompt":"do it","subagent_type":"general-purpose"},"done",tur={"status":"completed","agentId":"abc","prompt":"p"})
 exp.append({"label":"delegate to subagent","status":"checked","reason":"c-passed"})
+base1=s.recs[-2]["timestamp"]
+# two concurrent subagents: the file order (aaa before bbb) differs from the time order (bbb's test ran BEFORE aaa's late edit)
+s.prompt("two concurrent subagents")
+tidA=s.tool("Agent",{"description":"a","prompt":"p","subagent_type":"general-purpose"},"done",tur={"status":"completed","agentId":"aaa","prompt":"p"})
+tidB=s.tool("Agent",{"description":"b","prompt":"p","subagent_type":"general-purpose"},"done",tur={"status":"completed","agentId":"bbb","prompt":"p"})
+exp.append({"label":"two concurrent subagents","status":"unchecked","reason":"u-after"})
+base2=s.recs[-2]["timestamp"]
 s.write_file(SID+".jsonl")
-# subagent transcript (timestamps fall inside the parent turn: use times just before the parent's Agent result)
-sub=S(SID+"-sub")
-sub.recs=[]; sub.sid=SID
-os.makedirs(f"{OUT}/{ENC}/{SID}/subagents",exist_ok=True)
-base=s.recs[-2]["timestamp"]
-# write sub records with explicit timestamps earlier than the Agent result
-def subrec(rec,tsv):
-    rec.update({"uuid":uid(),"sessionId":SID,"cwd":REPO,"timestamp":tsv,"isSidechain":True}); return rec
-secs=int(base[-3:-1])
-def tsb(k): return base[:-3]+"%02dZ"%(secs-k)
-recs=[]
-def sub_tool(name,inp,res,k,err=False):
-    tid="toolu_sub_%d"%k
-    recs.append(subrec({"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":tid,"name":name,"input":inp}]}},tsb(k)))
-    recs.append(subrec({"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":tid,"content":res,"is_error":err}]},"toolUseResult":{"stdout":res,"stderr":"","interrupted":False}},tsb(k)))
-sub_tool("Edit",{"file_path":REPO+"/src/c.ts","old_string":"a","new_string":"b"},"edited",3)
-sub_tool("Bash",{"command":"pnpm test"},"ok",2)
-with open(f"{OUT}/{ENC}/{SID}/subagents/agent-abc.jsonl","w") as fh:
-    for r in recs: fh.write(json.dumps(r)+"\n")
-json.dump({"agentType":"general-purpose","description":"impl","toolUseId":tid},open(f"{OUT}/{ENC}/{SID}/subagents/agent-abc.meta.json","w"))
+import datetime
+def tsb(base,k):
+    d=datetime.datetime.strptime(base,"%Y-%m-%dT%H:%M:%SZ")-datetime.timedelta(seconds=k)
+    return d.strftime("%Y-%m-%dT%H:%M:%SZ")
+def write_sub(agent,tuid,base,events):
+    recs=[]
+    for k,(name,inp,res) in events:
+        tid="toolu_%s_%d"%(agent,k)
+        for rec in ({"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":tid,"name":name,"input":inp}]}},
+                    {"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":tid,"content":res,"is_error":False}]},"toolUseResult":{"stdout":res,"stderr":"","interrupted":False}}):
+            rec.update({"uuid":uid(),"sessionId":SID,"cwd":REPO,"timestamp":tsb(base,k),"isSidechain":True}); recs.append(rec)
+    os.makedirs(f"{OUT}/{ENC}/{SID}/subagents",exist_ok=True)
+    with open(f"{OUT}/{ENC}/{SID}/subagents/agent-{agent}.jsonl","w") as fh:
+        for r in recs: fh.write(json.dumps(r)+"\n")
+    json.dump({"agentType":"general-purpose","description":agent,"toolUseId":tuid},open(f"{OUT}/{ENC}/{SID}/subagents/agent-{agent}.meta.json","w"))
+write_sub("abc",tid,base1,[(3,("Edit",{"file_path":REPO+"/src/c.ts","old_string":"a","new_string":"b"},"edited")),(2,("Bash",{"command":"pnpm test"},"ok"))])
+write_sub("aaa",tidA,base2,[(1,("Edit",{"file_path":REPO+"/src/d.ts","old_string":"a","new_string":"b"},"edited"))])
+write_sub("bbb",tidB,base2,[(4,("Edit",{"file_path":REPO+"/src/e.ts","old_string":"a","new_string":"b"},"edited")),(3,("Bash",{"command":"pnpm test"},"ok"))])
 # fork copy: second session repeats the first two prompts with the same uuids
 f=S(SID2); cut=next(i for i,r in enumerate(s.recs) if r.get("message",{}).get("content")=="edit then test fails")
 f.recs=[dict(r,sessionId=SID2) for r in s.recs[:cut]]

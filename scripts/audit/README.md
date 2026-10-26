@@ -49,5 +49,5 @@ directory) and never commit them or paste their content. Only aggregates go into
 
 ## Fixtures
 
-`fixtures/make_fixture.py` regenerates `fixtures/projects` (synthetic logs: one session of 27 prompts, one subagent transcript, one fork copy)
+`fixtures/make_fixture.py` regenerates `fixtures/projects` (synthetic logs: one session of 29 prompts, one subagent transcript, one fork copy)
 and `fixtures/expected.json` (the truth status and reason class per prompt, from the PRD rules). Nothing comes from real logs.

@@ -498,12 +498,15 @@ def _worst(classes):
 # ---------------------------------------------------------------------------------------------------------------------
 EVIDENCE_RES = [
     re.compile(r"\b[1-9]\d* (?:failed|failures?|errors?)\b", re.I),
-    re.compile(r"(?:EXIT|exit|rc|RC|status|STATUS|check)[=:\s]+[1-9]\d*\b"),
+    re.compile(r"\b(?:EXIT|exit|rc|RC|status|STATUS|check)[=:]\s*[1-9]\d*\b"),
     re.compile(r"BUILD FAILURE"),
     re.compile(r"Tests run:.*(?:Failures|Errors): [1-9]"),
     re.compile(r"^(?:FAILED|FAIL)\b", re.M),
     re.compile(r"\bFAILED\b"),
 ]
+
+
+EXPECTED_RED_RE = re.compile(r"\bRED\b|expected (?:to )?(?:fail|red)|\bbehaved\b", re.I)
 
 
 def block_text(c):
@@ -668,7 +671,9 @@ def _emit(use, rec, block, pos, ts, events, ctx, cur):
                 outcome = "pass"
             evidence = False
             if outcome == "pass" and ck["masked"]:
-                evidence = any(r.search(ri["text"]) for r in EVIDENCE_RES)
+                # lines that announce an expected failure (mutation probes: "went RED (exit 1)") are not evidence
+                shown = "\n".join(x for x in ri["text"].split("\n") if not EXPECTED_RED_RE.search(x))
+                evidence = any(r.search(shown) for r in EVIDENCE_RES)
                 if evidence:
                     outcome = "fail"
             events.append({**base, "kind": "check", "seg": ck["seg"], "ck": ck, "outcome": outcome, "bgid": use["id"] if is_bg else None, "evidence": evidence, "multi": len(checks) > 1})
@@ -799,7 +804,7 @@ def build_orders(prompt_events):
         for p in parent_sorted:
             if p["ts"] and e["ts"] and p["ts"] <= e["ts"]:
                 anchor = p["pos"]
-        e["order"] = (anchor, 1, e["fileidx"], e["pos"], e["seg"])
+        e["order"] = (anchor, 1, e["ts"] or "", e["fileidx"] * 10**7 + e["pos"], e["seg"])  # different transcripts: by time, not by file
 
 
 # ---------------------------------------------------------------------------------------------------------------------

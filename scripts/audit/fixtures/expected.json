@@ -96,6 +96,11 @@
    "reason": "u-nocheck"
   },
   {
+   "label": "masked mutation probe prints expected red lines",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
    "label": "python heredoc writes a markdown file",
    "status": "no-changes",
    "reason": "nc-doc"
@@ -134,6 +139,11 @@
    "label": "delegate to subagent",
    "status": "checked",
    "reason": "c-passed"
+  },
+  {
+   "label": "two concurrent subagents",
+   "status": "unchecked",
+   "reason": "u-after"
   }
  ],
  "fork": {
