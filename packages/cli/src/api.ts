@@ -128,7 +128,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
     } catch {
       return null;
     }
-    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}`;
+    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}\0${f.worktree ?? ""}`;
     let hit = detailCache.get(f.path);
     if (hit && hit.key === key) {
       detailCache.delete(f.path); // refresh recency
@@ -168,7 +168,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
     } catch {
       return null;
     }
-    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}`;
+    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}\0${f.worktree ?? ""}`;
     let entry = cache.get(f.path);
     if (!entry || entry.key !== key) {
       const analysis = loadRepoScripts(f.root ?? opts.dir).then(async (repo) => {
