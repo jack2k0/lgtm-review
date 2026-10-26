@@ -220,51 +220,152 @@ function teeFiles(args: Word[]): string[] {
 
 const GIT_APPLY_READONLY = new Set(["--check", "--stat", "--numstat", "--summary"]);
 
-const PY_OPEN_RE = /\bopen\s*\(\s*([^,()]+?)\s*,\s*(?:mode\s*=\s*)?(['"])[wax][bt+]*\2/g;
 const PY_WRITE_RE = /\.write_(?:text|bytes)\s*\(/g;
-const PY_STR = String.raw`(?:"[^"\n]*"|'[^'\n]*')`;
-const PY_ARGV = String.raw`sys\.argv\[\s*\d+\s*\]`;
-const PY_VALUE = String.raw`(?:${PY_STR}|${PY_ARGV})`;
-const PY_BIND_RE = new RegExp(String.raw`(?:^|[;\n])[ \t]*(\w+)[ \t]*=(?!=)[ \t]*(?:(?:pathlib\.)?Path\(\s*(${PY_VALUE})\s*\)|(${PY_VALUE}))[ \t]*(?=$|[;\n#])`, "gm");
-const PY_RECEIVER_RE = new RegExp(String.raw`(?:\b(?:pathlib\.)?Path\(\s*(${PY_VALUE}|\w+)\s*\)|\b(\w+))\s*$`);
+const PY_OPEN_CALL_RE = /\bopen\s*\(/g;
+const PY_BIND_RE = /(?:^|[;\n])[ \t]*(\w+)[ \t]*=(?!=)[ \t]*([^;\n]+)/g;
 
-/** Resolves a Python expression to a path: a string literal, `sys.argv[N]`, or a name bound to one of them; null otherwise. */
-function pyValue(expr: string, bound: Map<string, string | null>, argv: (string | null)[]): string | null {
-  const e = expr.trim();
-  const lit = /^(['"])([^'"\n]*)\1$/.exec(e);
-  if (lit) return lit[2] === "" ? null : (lit[2] as string);
-  const arg = /^sys\.argv\[\s*(\d+)\s*\]$/.exec(e);
-  if (arg) return argv[Number(arg[1]) - 1] ?? null;
-  return bound.get(e) ?? null;
+/** Splits `s` at the top-level occurrences of `sep` (outside quotes and brackets). */
+function splitTop(s: string, sep: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote = "";
+  let cur = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i] as string;
+    if (quote !== "") {
+      cur += c;
+      if (c === "\\") cur += s[++i] ?? "";
+      else if (c === quote) quote = "";
+      continue;
+    }
+    if (c === '"' || c === "'") quote = c;
+    else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) depth--;
+    else if (c === sep && depth === 0) {
+      parts.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += c;
+  }
+  parts.push(cur);
+  return parts;
+}
+
+function joinPath(a: string, b: string): string {
+  if (b.startsWith("/")) return b;
+  return a === "" || a.endsWith("/") ? a + b : `${a}/${b}`;
 }
 
 /**
- * Files written by the Python code of a heredoc (`open(path, 'w')`, `.write_text(`). A path resolves when it is a
- * string literal, `sys.argv[N]` (of `python3 - args`, an argument being a literal or a shell variable assigned a
- * literal earlier in the command), or a name bound to one of those by `name = "x"` / `name = Path("x")`.
+ * Resolves a Python expression to a string: a literal, `sys.argv[N]`, a bound name, `Path(x)` / `str(x)` / `(x)`,
+ * `a + b`, `a / b` and `os.path.join(a, b, ...)` of resolvable parts. Null when any part is unknown.
  */
-function pythonWrites(command: string, argv: (string | null)[]): string[] {
+function pyValue(expr: string, bound: ReadonlyMap<string, string | null>, argv: (string | null)[], depth = 0): string | null {
+  const e = expr.trim();
+  if (e === "" || depth > 6) return null;
+  const lit = /^(['"])([^'"\n]*)\1$/.exec(e);
+  if (lit) return lit[2] as string;
+  for (const [sep, join] of [
+    ["+", (x: string, y: string) => x + y],
+    ["/", joinPath],
+  ] as const) {
+    const parts = splitTop(e, sep);
+    if (parts.length > 1) {
+      let acc: string | null = null;
+      for (const part of parts) {
+        const v = pyValue(part, bound, argv, depth + 1);
+        if (v === null) return null;
+        acc = acc === null ? v : join(acc, v);
+      }
+      return acc;
+    }
+  }
+  const wrapped = /^(?:(?:pathlib\.)?Path|PurePath|str|os\.fspath)?\(([\s\S]*)\)$/.exec(e);
+  if (wrapped) return pyValue(wrapped[1] as string, bound, argv, depth + 1);
+  const joinCall = /^os\.path\.join\(([\s\S]*)\)$/.exec(e);
+  if (joinCall) {
+    let acc: string | null = null;
+    for (const part of splitTop(joinCall[1] as string, ",")) {
+      const v = pyValue(part, bound, argv, depth + 1);
+      if (v === null) return null;
+      acc = acc === null ? v : joinPath(acc, v);
+    }
+    return acc;
+  }
+  const arg = /^sys\.argv\[\s*(\d+)\s*\]$/.exec(e);
+  if (arg) return argv[Number(arg[1]) - 1] ?? null;
+  return /^\w+$/.test(e) ? (bound.get(e) ?? null) : null;
+}
+
+/** The text between the parenthesis at `open` and its match (quote-aware), or null when it is not closed. */
+function balancedArgs(s: string, open: number): string | null {
+  let depth = 0;
+  let quote = "";
+  for (let i = open; i < s.length; i++) {
+    const c = s[i] as string;
+    if (quote !== "") {
+      if (c === "\\") i++;
+      else if (c === quote) quote = "";
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === "(") depth++;
+    else if (c === ")" && --depth === 0) return s.slice(open + 1, i);
+  }
+  return null;
+}
+
+/** Start of the receiver expression that ends `prefix` (`Path("x")`, `(a / "b")`, `p`), or null. */
+function receiverOf(prefix: string): string | null {
+  const t = prefix.trimEnd();
+  if (t.endsWith(")")) {
+    let depth = 0;
+    for (let i = t.length - 1; i >= 0; i--) {
+      if (t[i] === ")") depth++;
+      else if (t[i] === "(" && --depth === 0) {
+        const head = /[\w.]*$/.exec(t.slice(0, i));
+        return (head?.[0] ?? "") + t.slice(i);
+      }
+    }
+    return null;
+  }
+  return /\w+$/.exec(t)?.[0] ?? null;
+}
+
+/**
+ * Files written by the Python code of one heredoc (`open(path, 'w')`, `.write_text(`). A path resolves when it is a
+ * string literal, `sys.argv[N]` (of `python3 - args`), a name bound to such a value by an assignment above the
+ * write (the binding in effect at the write counts), or a concatenation / `Path` / `os.path.join` of those.
+ */
+function pythonWrites(body: string, argv: (string | null)[]): string[] {
   const out: string[] = [];
   let unknown = false;
-  const names = new Map<string, string | null>();
-  for (const m of command.matchAll(PY_BIND_RE)) {
-    const name = m[1] as string;
-    const v = pyValue((m[2] ?? m[3]) as string, names, argv);
-    // Rebinding to a different value leaves the name unresolved.
-    names.set(name, names.has(name) && names.get(name) !== v ? null : v);
+  const binds: { at: number; name: string; expr: string }[] = [];
+  for (const m of body.matchAll(PY_BIND_RE)) binds.push({ at: m.index ?? 0, name: m[1] as string, expr: m[2] as string });
+  const writes: { at: number; expr: string | null }[] = [];
+  for (const m of body.matchAll(PY_OPEN_CALL_RE)) {
+    const at = m.index ?? 0;
+    const args = balancedArgs(body, at + m[0].length - 1);
+    if (args === null) continue;
+    const parts = splitTop(args, ",").map((x) => x.trim());
+    const mode = parts[1] !== undefined && !/^\w+\s*=/.test(parts[1]) ? parts[1] : (parts.find((x) => /^mode\s*=/.test(x)) ?? "").replace(/^mode\s*=\s*/, "");
+    if (!/^(['"])[wax][bt+]*\1$/.test(mode)) continue;
+    writes.push({ at, expr: parts[0] ?? null });
   }
-  const note = (path: string | null): void => {
-    if (path === null) unknown = true;
-    else if (!isIgnoredPath(path)) out.push(path);
-  };
-  for (const m of command.matchAll(PY_OPEN_RE)) {
-    note(pyValue(m[1] as string, names, argv));
-    if (out.length >= FILES_MAX) break;
+  for (const m of body.matchAll(PY_WRITE_RE)) {
+    const at = m.index ?? 0;
+    writes.push({ at, expr: receiverOf(body.slice(Math.max(0, at - 300), at)) });
   }
-  for (const m of command.matchAll(PY_WRITE_RE)) {
-    const prefix = command.slice(Math.max(0, (m.index ?? 0) - 200), m.index ?? 0);
-    const r = PY_RECEIVER_RE.exec(prefix);
-    note(r === null ? null : pyValue((r[1] ?? r[2]) as string, names, argv));
+  writes.sort((x, y) => x.at - y.at);
+  const bound = new Map<string, string | null>();
+  let bi = 0;
+  for (const w of writes) {
+    while (bi < binds.length && (binds[bi] as { at: number }).at < w.at) {
+      const b = binds[bi++] as { name: string; expr: string };
+      bound.set(b.name, pyValue(b.expr, bound, argv));
+    }
+    const v = w.expr === null ? null : pyValue(w.expr, bound, argv);
+    if (v === null || v === "") unknown = true;
+    else if (!isIgnoredPath(v)) out.push(v);
     if (out.length >= FILES_MAX) break;
   }
   if (unknown) out.push(SHELL_EDIT_FILE);
@@ -289,6 +390,44 @@ function shellArg(w: Word, vars: ReadonlyMap<string, string>): string | null {
   if (ref) return vars.get((ref[1] ?? ref[2]) as string) ?? null;
   return w.dynamic ? null : w.text;
 }
+
+const VAR_REF_RE = /\$(?:\{(\w+)\}|(\w+))/g;
+
+/** Replaces `$VAR` / `${VAR}` in a word by the literal assigned earlier in the command, when all of them are known. */
+function substituteVars(w: Word, vars: ReadonlyMap<string, string>): Word {
+  if (!w.dynamic || vars.size === 0 || !w.text.includes("$")) return w;
+  let unknown = false;
+  const text = w.text.replace(VAR_REF_RE, (_all, braced: string | undefined, bare: string | undefined) => {
+    const v = vars.get((braced ?? bare) as string);
+    if (v === undefined) unknown = true;
+    return v ?? "";
+  });
+  if (unknown || /[$`*?[{()]/.test(text)) return w;
+  return { text, dynamic: false };
+}
+
+/** Bodies of the heredocs of a command, in order of their start. */
+function heredocBodies(cmd: string): string[] {
+  const out: string[] = [];
+  let delim: string | null = null;
+  let body: string[] = [];
+  for (const line of cmd.split("\n")) {
+    if (delim !== null) {
+      if (line.trim() === delim) {
+        out.push(body.join("\n"));
+        delim = null;
+        body = [];
+      } else body.push(line);
+      continue;
+    }
+    const m = HEREDOC_START_RE.exec(line);
+    if (m) delim = m[1] ?? m[2] ?? m[3] ?? null;
+  }
+  if (delim !== null) out.push(body.join("\n"));
+  return out;
+}
+
+const HEREDOC_START_RE = /(?<!<)<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_]\w*))/;
 
 const ASSIGN_RE = /^(?:export\s+)?([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|"'`$]*)(?=\s|$)\s*/;
 
@@ -321,10 +460,11 @@ function segmentMutation(
   redirects: Redirect[],
   isCheck: boolean,
   pipedFromCheck: boolean,
-  command: string,
+  heredoc: string | null,
   vars: ReadonlyMap<string, string>,
 ): SegMut | null {
-  const words = unwrapXargs(rawWords);
+  const words = unwrapXargs(rawWords.map((w) => substituteVars(w, vars)));
+  for (const r of redirects) if (r.target !== null) r.target = substituteVars(r.target, vars);
   const head = words[0]?.text ?? "";
   const files: MutFile[] = [];
   let gitOp = false;
@@ -391,10 +531,10 @@ function segmentMutation(
     const f = teeFiles(words.slice(1));
     mutating = f.length > 0;
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
-  } else if (/^python[\d.]*$/.test(head) && command.includes("<<")) {
+  } else if (/^python[\d.]*$/.test(head) && heredoc !== null) {
     const dash = words.findIndex((w) => w.text === "-");
     const argv = dash < 0 ? [] : words.slice(dash + 1).map((w) => shellArg(w, vars));
-    const f = pythonWrites(command, argv);
+    const f = pythonWrites(heredoc, argv);
     mutating = f.length > 0;
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
   }
@@ -451,13 +591,21 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
     let prevCheck = false;
     let prevPipe = false;
     const vars = new Map<string, string>();
+    const bodies = command.includes("<<") ? heredocBodies(command) : [];
+    let heredocs = 0;
+    let prevHeredoc: number | null = null;
     segs.forEach((seg, i) => {
       collectAssignments(seg.text, vars);
+      // The heredoc fed to this segment's stdin: its own, or the one of the previous segment of a pipe.
+      const own = HEREDOC_START_RE.test(seg.text) ? heredocs++ : null;
+      const fed = own ?? (prevPipe ? prevHeredoc : null);
+      prevHeredoc = own;
+      const heredoc = fed === null ? null : (bodies[fed] ?? null);
       const isCheck = matchSegment(seg.text, repo);
       const { words, redirects } = parseWords(normalizeFirstToken(stripPrefixes(seg.text)));
       const head = words[0]?.text;
       if (head === "cd" || head === "pushd") hasCd = true;
-      const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, command, vars);
+      const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, heredoc, vars);
       prevCheck = isCheck;
       prevPipe = seg.op === "|";
       if (isCheck) checkIdx.push(i);

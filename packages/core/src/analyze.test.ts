@@ -1082,7 +1082,12 @@ describe("mixed git and plain commands (status-accuracy-3, G)", () => {
   test("(e) an unresolved plain target keeps the old behaviour: everything is a plain edit", () => {
     const glob = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge b && sed -i 's/x/y/' src/*.md", [`${P}src/a.ts`, `${P}src/a.md`])]);
     expect(glob.status).toBe("unchecked");
-    const nomatch = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge b && sed -i 's/x/y/' gone.md", [`${P}src/a.ts`])]);
+    const nomatch = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge b && sed -i 's/x/y/' gone.ts", [`${P}src/a.ts`])]);
     expect(nomatch.status).toBe("unchecked");
+  });
+
+  test("(R3) a doc target missing from a capped diff does not turn the merged files into plain edits", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge b && sed -i 's/x/y/' plan.md", [`${P}src/a.ts`])]);
+    expect(p).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit" });
   });
 });

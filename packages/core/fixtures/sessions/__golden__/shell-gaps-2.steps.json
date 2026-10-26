@@ -1,0 +1,310 @@
+[
+  {
+    "index": 0,
+    "text": "Fix add, then update two docs with one script.",
+    "status": "checked",
+    "reason": "pnpm test passed after last code edit; 1 documentation edit after it (shell edits may be incomplete)",
+    "headline": "Mostly writing (33%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "read",
+        "title": "Edit docs/a.md (+0 -0), edit docs/b.md (+0 -0)",
+        "startedAt": "2026-01-01T00:00:06.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "python3 - <<'EOF' p = \"docs/a.md\" open(p, \"w\").write('x') p = \"docs/b.md\" open(p, \"w\").write('y') EOF",
+            "ok": true,
+            "ts": "2026-01-01T00:00:06.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/docs/a.md",
+          "/home/user/project/docs/b.md"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Fix sub, then tick the plan through a shell variable.",
+    "status": "checked",
+    "reason": "pnpm test passed after last code edit; 1 documentation edit after it (shell edits may be incomplete)",
+    "headline": "Mostly writing (33%), 1 check",
+    "startedAt": "2026-01-01T00:00:09.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/sub.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:10.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/sub.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:10.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/sub.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:12.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:12.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "read",
+        "title": "Edit context/plan.md (+0 -0)",
+        "startedAt": "2026-01-01T00:00:14.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "F=context/plan.md && sed -i 's/todo/done/' \"$F\"",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/context/plan.md"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Fix mul, then write a helper script with a heredoc and run it.",
+    "status": "unchecked",
+    "reason": "1 edit after last check (shell edits may be incomplete)",
+    "headline": "Mostly writing (33%), 1 check",
+    "startedAt": "2026-01-01T00:00:17.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/tool.py",
+        "reason": "edited after the last completed check"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/mul.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:18.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/mul.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:18.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/mul.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:20.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:20.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "read",
+        "title": "Edit tool.py (+0 -0)",
+        "startedAt": "2026-01-01T00:00:22.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "cat > tool.py <<'EOF' import sys open(sys.argv[1], 'w').write('x') EOF python3 tool.py out.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:22.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/tool.py"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 3,
+    "text": "Fix div, merge, tick the plan; the logged diff is capped.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit",
+    "headline": "Mostly writing (67%), 1 check",
+    "startedAt": "2026-01-01T00:00:25.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/div.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:26.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/div.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:26.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/div.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:28.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:28.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "write",
+        "title": "Edit src/feature.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:30.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git merge feature && sed -i 's/todo/done/' plan.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:30.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/feature.js"
+        ]
+      }
+    ]
+  }
+]

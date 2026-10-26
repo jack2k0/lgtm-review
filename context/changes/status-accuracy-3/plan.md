@@ -84,7 +84,7 @@ POST after phases 1-3: A 85.5%, B 83.5% (from 74.0% / 68.9%); 27 disagreements l
 - R3 `analyze.ts` `plainDiffPaths`: a doc/scratch plain target absent from a capped `bashEditDiff.files` does not make the match fail (it cannot change the code attribution); a code target absent from the diff still does.
 - R4 `shell-edits.ts` `segmentMutation`: only the heredoc fed to the python segment's stdin is scanned for python writes, not every heredoc in the command.
 - Tests for each, failing on the code before this phase; extend the `heredoc-targets` / `git-doc-mix` fixtures only by NEW fixtures (e.g. `heredoc-targets-2`), never by editing the new ones' labels after the fact unless the label was wrong by the plan (then say so).
-- [ ] done when: tests pass; `pnpm check` green; gate exit 0/2.
+- [x] done when: tests pass; `pnpm check` green; gate exit 0/2.
 
 ## Phase 6: Truth-script fixes (audit tool, a different agent than the tool phases)
 

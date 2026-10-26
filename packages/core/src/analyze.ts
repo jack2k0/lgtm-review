@@ -222,10 +222,10 @@ function aggregateFiles(edits: EditRec[]): FileChange[] {
 /** Sequence number of an edit made in the same command as a check, ordered by segment. */
 /**
  * Diff paths made by the plain (non-git) edits of a command that also runs a history-moving git operation,
- * matched by the resolved targets of those edits (A2). Null when a target is unresolved or matches no diff path:
+ * matched by the resolved targets of those edits (A2). Null when a target is unresolved or a code target matches no diff path:
  * the whole diff is then attributed as one, as before.
  */
-function plainDiffPaths(sm: ShellMutation, diff: readonly { path: string }[], cwd: string | null): Set<string> | null {
+function plainDiffPaths(sm: ShellMutation, diff: readonly { path: string }[], cwd: string | null, codeLike: (path: string) => boolean): Set<string> | null {
   const out = new Set<string>();
   for (const e of sm.edits) {
     if (e.gitOp) continue;
@@ -239,7 +239,8 @@ function plainDiffPaths(sm: ShellMutation, diff: readonly { path: string }[], cw
         hit = true;
       }
     }
-    if (!hit) return null;
+    // A documentation or scratch target missing from a (capped) diff cannot change which files are code edits.
+    if (!hit && (codeLike(target) || target.startsWith("~"))) return null;
   }
   return out;
 }
@@ -649,7 +650,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           const sm = classifyShellMutation(use.input.command, opts.repo);
           const cwd = use.cwd ?? parser.meta().cwd;
           if (ev.bashEditDiff !== undefined && ev.bashEditDiff.length > 0) {
-            const plain = sm.hasHistoryGitOp && !sm.gitOnly ? plainDiffPaths(sm, ev.bashEditDiff, cwd) : null;
+            const plain = sm.hasHistoryGitOp && !sm.gitOnly ? plainDiffPaths(sm, ev.bashEditDiff, cwd, (path) => classify(path, use) === "code") : null;
             const all = ev.bashEditDiff.map((f) => {
               const gitMade = plain === null ? sm.gitOnly : !plain.has(f.path);
               const t: FileTouch = {
