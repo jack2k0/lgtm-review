@@ -1,3 +1,4 @@
+import { inheritedSource } from "@lgtm/core";
 import type { Hint, PromptAnalysis, Recommendation, SessionSummary, Severity, Status, Step, StepCheck, TimeSplit } from "@lgtm/core";
 
 export const PROMPT_PAGE = 500;
@@ -450,26 +451,20 @@ export function retainKeys<K>(set: ReadonlySet<K>, existing: Iterable<K>): Reado
 }
 
 /** Split prompts into own (non-inherited) and inherited groups.
- *  Returns {own, inherited, from} where:
+ *  Returns {own, inherited, from, others} where:
  *   - own: prompts without inheritedFrom
  *   - inherited: prompts with inheritedFrom
- *   - from: the sessionId the inherited prompts came from (first one, or empty string)
+ *   - from: the session most inherited prompts came from (shared `inheritedSource` rule), or empty string
+ *   - others: number of further source sessions
  */
 export function splitInherited(prompts: readonly PromptAnalysis[]): {
   own: readonly PromptAnalysis[];
   inherited: readonly PromptAnalysis[];
   from: string;
+  others: number;
 } {
-  const own: PromptAnalysis[] = [];
-  const inherited: PromptAnalysis[] = [];
-  let from: string = "";
-  for (const p of prompts) {
-    if (p.inheritedFrom) {
-      inherited.push(p);
-      if (!from) from = p.inheritedFrom;
-    } else {
-      own.push(p);
-    }
-  }
-  return { own, inherited, from: from };
+  const own = prompts.filter((p) => !p.inheritedFrom);
+  const inherited = prompts.filter((p) => p.inheritedFrom);
+  const src = inheritedSource(inherited);
+  return { own, inherited, from: src?.from ?? "", others: src?.others ?? 0 };
 }

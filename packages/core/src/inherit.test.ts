@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { SessionAnalysis } from "./schema.js";
-import { markInherited } from "./inherit.js";
+import { inheritedSource, markInherited, ownershipRanks } from "./inherit.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -201,5 +201,82 @@ describe("markInherited", () => {
     markInherited([a, b]);
     expect(a.prompts[0]).toBe(origAPrompt0);
     expect((a.prompts[0] as Record<string, unknown>)["inheritedFrom"]).toBeUndefined();
+  });
+});
+
+describe("fork ties (same startedAt)", () => {
+  const T = "2026-01-01T00:00:00.000Z";
+  const perms = <X>(xs: X[]): X[][] => (xs.length <= 1 ? [xs] : xs.flatMap((x, i) => perms([...xs.slice(0, i), ...xs.slice(i + 1)]).map((r) => [x, ...r])));
+
+  test("fork with tied startedAt and smaller sessionId is not the owner", () => {
+    const original = makeSession("zz-original", T, ["u1", "u2"]);
+    const fork = makeSession("aa-fork", T, ["u1", "u2", "u3"]);
+    for (const order of perms([original, fork])) {
+      const r = markInherited(order);
+      expect(inheritedFrom(r, "zz-original")).toEqual([]);
+      expect(inheritedFrom(r, "aa-fork")).toEqual(["zz-original", "zz-original"]);
+      expect(ownedUuids(r, "aa-fork")).toEqual(["u3"]);
+    }
+  });
+
+  test("equal prompt sets tie by smallest sessionId", () => {
+    const r = markInherited([makeSession("b", T, ["u1"]), makeSession("a", T, ["u1"])]);
+    expect(inheritedFrom(r, "b")).toEqual(["a"]);
+    expect(inheritedFrom(r, "a")).toEqual([]);
+  });
+
+  test("both continued after the fork: incomparable sets, smallest id owns shared prompts, any order", () => {
+    const a = makeSession("a", T, ["u1", "u2", "ua"]);
+    const b = makeSession("b", T, ["u1", "u2", "ub"]);
+    const outs = perms([a, b]).map((o) => JSON.stringify(markInherited(o).map((s) => [s.sessionId, s.prompts.map((p) => p.inheritedFrom ?? null)]).sort()));
+    expect(new Set(outs).size).toBe(1);
+    const r = markInherited([b, a]);
+    expect(inheritedFrom(r, "b")).toEqual(["a", "a"]);
+    expect(ownedUuids(r, "b")).toEqual(["ub"]);
+  });
+
+  test("three sessions with non-transitive pairwise rules give the same ranks in every order", () => {
+    // s1 subset of s3; s2 incomparable to both; ids would order s1 < s2 < s3 but s3 < s1 never holds
+    const s1 = makeSession("s1", T, ["u1"]);
+    const s2 = makeSession("s2", T, ["x"]);
+    const s3 = makeSession("s0", T, ["u1", "u2"]);
+    const ranks = perms([s1, s2, s3]).map((o) => JSON.stringify([...ownershipRanks(o)].sort()));
+    expect(new Set(ranks).size).toBe(1);
+    const m = ownershipRanks([s1, s2, s3]);
+    expect(m.get("s1")!).toBeLessThan(m.get("s0")!);
+  });
+
+  test("earlier startedAt still wins over subset; null startedAt is last", () => {
+    const early = makeSession("z", "2025-12-31T00:00:00.000Z", ["u1", "u2"]);
+    const late = makeSession("a", T, ["u1"]);
+    const none = makeSession("0", null, ["u1"]);
+    const r = markInherited([none, late, early]);
+    expect(inheritedFrom(r, "a")).toEqual(["z"]);
+    expect(inheritedFrom(r, "0")).toEqual(["z"]);
+  });
+});
+
+describe("synthetic line-<n> uuids", () => {
+  test("never match across sessions", () => {
+    const a = makeSession("a", "2026-01-01T00:00:00.000Z", ["line-1", "u1"]);
+    const b = makeSession("b", "2026-01-02T00:00:00.000Z", ["line-1", "u1"]);
+    const r = markInherited([a, b]);
+    expect(inheritedFrom(r, "b")).toEqual(["a"]);
+    expect(ownedUuids(r, "b")).toEqual(["line-1"]);
+  });
+});
+
+describe("inheritedSource", () => {
+  const ps = (...ids: (string | undefined)[]) => ids.map((inheritedFrom) => ({ inheritedFrom }));
+  test("null when nothing is inherited", () => {
+    expect(inheritedSource(ps(undefined))).toBeNull();
+  });
+  test("most frequent source, others counted", () => {
+    expect(inheritedSource(ps("b", "a", "b", undefined))).toEqual({ count: 3, from: "b", others: 1 });
+  });
+  test("ties go to the lower rank, then the smaller id", () => {
+    const ranks = new Map([["z", 0], ["a", 1]]);
+    expect(inheritedSource(ps("a", "z"), ranks)?.from).toBe("z");
+    expect(inheritedSource(ps("z", "a"))?.from).toBe("a");
   });
 });

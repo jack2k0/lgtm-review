@@ -84,12 +84,12 @@ function PromptHead() {
 }
 
 /** Collapsed-by-default group of prompts inherited from an earlier session; its rows use the same Row as own prompts. */
-function InheritedGroup({ sessionId, rows, from, openIdx, onToggle }: { sessionId: string; rows: readonly PromptAnalysis[]; from: string; openIdx: ReadonlySet<number>; onToggle: (i: number) => void }) {
+function InheritedGroup({ sessionId, rows, from, others, openIdx, onToggle }: { sessionId: string; rows: readonly PromptAnalysis[]; from: string; others: number; openIdx: ReadonlySet<number>; onToggle: (i: number) => void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="inherited-group">
       <button type="button" className="inherited-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        {`${plural(rows.length, "inherited prompt")} from ${from.slice(0, 8)}`}
+        {`${plural(rows.length, "inherited prompt")} from ${from.slice(0, 8)}${others > 0 ? ` and ${plural(others, "other session")}` : ""}`}
       </button>
       {open ? (
         <table className="prompts">
@@ -110,7 +110,7 @@ export function PromptTable({ session, show = "all" }: { session: SessionAnalysi
   // Keyed by prompt index (append-only in a session file), so rows stay expanded across live refreshes.
   const [openState, setOpenIdx] = useState<ReadonlySet<number>>(new Set());
   const openIdx = retainKeys(openState, session.prompts.map((p) => p.index));
-  const { own, inherited, from } = splitInherited(session.prompts);
+  const { own, inherited, from, others } = splitInherited(session.prompts);
   const attention = attentionPrompts(session.prompts);
   const rows = show === "attention" ? attention : own;
   const { shown, hidden } = visiblePrompts(rows, limit);
@@ -209,7 +209,7 @@ export function PromptTable({ session, show = "all" }: { session: SessionAnalysi
                 ) : null}
               </>
             )}
-            {inheritedCount > 0 ? <InheritedGroup sessionId={id} rows={inherited} from={from} openIdx={openIdx} onToggle={toggle} /> : null}
+            {inheritedCount > 0 ? <InheritedGroup sessionId={id} rows={inherited} from={from} others={others} openIdx={openIdx} onToggle={toggle} /> : null}
           </div>
           {rows.length > 0 ? <p className="muted keys">Keys: Tab to a prompt, ↑/↓ move, Enter expands, s Steps, m Map, Esc back to sessions.</p> : null}
         </>
