@@ -93,6 +93,7 @@ Skille z tego etapu zadają mi pytania, więc robisz je sam, w tej sesji.
 
 1. Sam uruchom komendę weryfikacji repo w worktree. Nie wierz raportowi workera.
 2. Przejrzyj `git -C <worktree> diff main...change/<id> --stat` pod kątem scope creep.
+   - Uruchom w worktree `node scripts/gate.mjs --base main --plan context/changes/<id>/plan.md` (blok ```gate w planie: `allow:`, `goldens:`, `labels:`, `deps:`, `schema:`). Exit 1 = nie merguj; exit 2 = przejrzyj wypisane pozycje. Wynik wklej do opisu merge.
 3. Czerwono:
    - pierwsza poprawka na tym samym effort, z dosłownym błędem w briefie;
    - druga porażka: eskalacja o jeden poziom (medium → high), nigdy od razu max;
@@ -141,6 +142,7 @@ Zakres:
 Done, gdy:
 - <kryteria done z planu, 1:1>
 - komendy przechodzą: <komendy weryfikacji z planu / AGENTS.md>
+- `node scripts/gate.mjs --base main --plan context/changes/<id>/plan.md` kończy się kodem 0 (albo 2 z wyjaśnieniem każdej pozycji w raporcie); nigdy nie zmieniaj istniejących *.labels.json
 - odhaczone checkboxy fazy <n> w plan.md
 
 Na koniec:
