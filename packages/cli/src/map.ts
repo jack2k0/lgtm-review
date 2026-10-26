@@ -56,17 +56,33 @@ export function isMapSource(path: string): boolean {
   return !path.split("/").some((seg) => SKIP_DIRS.has(seg));
 }
 
-function listFiles(dir: string): Promise<string[] | null> {
+export const DEFAULT_LIST_FILES_TIMEOUT = 10_000;
+export const DEFAULT_LIST_FILES_MAX_BUFFER = 64 * 1024 * 1024;
+
+export function listFiles(
+  dir: string,
+  opts?: { timeout?: number; maxBuffer?: number; exec?: typeof execFile },
+): Promise<string[] | null> {
+  const runner = opts?.exec ?? execFile;
   return new Promise((resolve) => {
-    execFile(
-      "git",
-      ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-      { cwd: dir, maxBuffer: 256 * 1024 * 1024, windowsHide: true },
-      (err, stdout) => {
-        if (err) resolve(null);
-        else resolve(stdout.split("\0").filter((p) => p !== ""));
-      },
-    );
+    try {
+      runner(
+        "git",
+        ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        {
+          cwd: dir,
+          timeout: opts?.timeout ?? DEFAULT_LIST_FILES_TIMEOUT,
+          maxBuffer: opts?.maxBuffer ?? DEFAULT_LIST_FILES_MAX_BUFFER,
+          windowsHide: true,
+        },
+        (err, stdout) => {
+          if (err) resolve(null);
+          else resolve(stdout.split("\0").filter((p) => p !== ""));
+        },
+      );
+    } catch {
+      resolve(null);
+    }
   });
 }
 

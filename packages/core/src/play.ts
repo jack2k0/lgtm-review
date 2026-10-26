@@ -93,6 +93,22 @@ export function buildBeats(input: BuildBeatsInput): BuildBeatsResult {
 
   const seenFiles = new Set<string>();
 
+  const promptFiles = new Set<string>();
+  for (const step of steps) {
+    for (const path of step.files) {
+      promptFiles.add(path);
+    }
+  }
+
+  const basenameCounts = new Map<string, number>();
+  for (const path of promptFiles) {
+    const base = basename(path);
+    basenameCounts.set(base, (basenameCounts.get(base) ?? 0) + 1);
+  }
+
+  const fileName = (path: string): string =>
+    (basenameCounts.get(basename(path)) ?? 0) > 1 ? path : basename(path);
+
   const tryAddBeat = (beat: Omit<PlayBeat, "n">): boolean => {
     if (beats.length >= BEATS_MAX) {
       truncated = true;
@@ -117,7 +133,7 @@ export function buildBeats(input: BuildBeatsInput): BuildBeatsResult {
         const diff = getDiff(diffs, path);
         const kind = diff?.kind ?? "M";
         const { added, removed } = countDiffLines(diff);
-        const name = basename(path);
+        const name = fileName(path);
 
         let beatKind: PlayBeatKind;
         let text: string;
@@ -153,8 +169,8 @@ export function buildBeats(input: BuildBeatsInput): BuildBeatsResult {
         // Emit import-added beats for each new edge whose `from` is that path, sorted by `to`
         const newEdges = [...(newEdgesByFrom.get(path) ?? [])].sort((a, b) => (a.to < b.to ? -1 : a.to > b.to ? 1 : 0));
         for (const e of newEdges) {
-          const fromName = basename(e.from) === basename(e.to) ? e.from : basename(e.from);
-          const toName = basename(e.from) === basename(e.to) ? e.to : basename(e.to);
+          const fromName = basename(e.from) === basename(e.to) || (basenameCounts.get(basename(e.from)) ?? 0) > 1 ? e.from : basename(e.from);
+          const toName = basename(e.from) === basename(e.to) || (basenameCounts.get(basename(e.to)) ?? 0) > 1 ? e.to : basename(e.to);
           const importText = `${fromName} now imports ${toName}`;
 
           const importFocusNodes = [e.from, e.to].filter((p) => nodeSet.has(p));
@@ -176,7 +192,7 @@ export function buildBeats(input: BuildBeatsInput): BuildBeatsResult {
         const diff = getDiff(diffs, path);
         const kind = diff?.kind ?? "M";
         const { added, removed } = countDiffLines(diff);
-        const name = basename(path);
+        const name = fileName(path);
 
         let beatKind: PlayBeatKind;
         let text: string;

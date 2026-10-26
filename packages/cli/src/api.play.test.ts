@@ -181,6 +181,11 @@ describe("GET /api/sessions/:id/prompts/:n/play", () => {
     expect(r.status).toBe(404);
   });
 
+  test("404 on inherited prompt for map route", async () => {
+    const r = await get(srv, "/api/sessions/fork-b/map?prompt=0");
+    expect(r.status).toBe(404);
+  });
+
   test("200 with PlayResponse: beat sequence order, text templates and focus", async () => {
     const r = await get(srv, "/api/sessions/play-session/prompts/0/play");
     expect(r.status).toBe(200);

@@ -1,11 +1,13 @@
+import * as childProcess from "node:child_process";
 import { execFileSync } from "node:child_process";
 import { request } from "node:http";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { ImportMapResponse } from "@lgtm/core";
 import { startServer, type RunningServer } from "./server.js";
+import { DEFAULT_LIST_FILES_MAX_BUFFER, DEFAULT_LIST_FILES_TIMEOUT, listFiles } from "./map.js";
 
 let tmp: string;
 let repo: string;
@@ -432,5 +434,73 @@ describe("GET /api/sessions/:id/map", () => {
     } finally {
       await newSrv.close();
     }
+  });
+
+  describe("listFiles", () => {
+    test("default options and timeout / error behavior", async () => {
+      expect(DEFAULT_LIST_FILES_TIMEOUT).toBe(10_000);
+      expect(DEFAULT_LIST_FILES_MAX_BUFFER).toBe(64 * 1024 * 1024);
+
+      const files = await listFiles(repo);
+      expect(files).not.toBeNull();
+      expect(files).toContain("src/a.ts");
+
+      // Injected exec check: verifies default options
+      let capturedOpts: any;
+      await listFiles(repo, {
+        exec: ((cmd: string, args: string[], options: any, cb: any) => {
+          capturedOpts = options;
+          cb(null, "src/a.ts\0");
+          return {} as any;
+        }) as any,
+      });
+      expect(capturedOpts).toEqual({
+        cwd: repo,
+        timeout: 10_000,
+        maxBuffer: 64 * 1024 * 1024,
+        windowsHide: true,
+      });
+
+      // Injected exec check: verifies overrides
+      let overrideOpts: any;
+      await listFiles(repo, {
+        timeout: 500,
+        maxBuffer: 1024,
+        exec: ((cmd: string, args: string[], options: any, cb: any) => {
+          overrideOpts = options;
+          cb(null, "src/a.ts\0");
+          return {} as any;
+        }) as any,
+      });
+      expect(overrideOpts).toEqual({
+        cwd: repo,
+        timeout: 500,
+        maxBuffer: 1024,
+        windowsHide: true,
+      });
+
+      // Timeout / error handling returns null via injected runner
+      const timeoutErr = new Error("Command timed out");
+      (timeoutErr as any).killed = true;
+      (timeoutErr as any).signal = "SIGTERM";
+      const timedOut = await listFiles(repo, {
+        exec: ((cmd: string, args: string[], options: any, cb: any) => {
+          cb(timeoutErr, "");
+          return {} as any;
+        }) as any,
+      });
+      expect(timedOut).toBeNull();
+
+      // Synchronous throw in exec returns null
+      const syncErr = await listFiles(repo, {
+        exec: (() => {
+          throw new Error("spawn error");
+        }) as any,
+      });
+      expect(syncErr).toBeNull();
+
+      // Real non-existent directory returns null
+      expect(await listFiles(join(tmp, "does-not-exist"))).toBeNull();
+    });
   });
 });

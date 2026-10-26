@@ -286,7 +286,10 @@ export function createApi(opts: ServerOptions): ApiHandler {
     if (!file || (await versionOf(file)) === null) return false;
     const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
-    if (prompt !== null && !analysis.prompts[prompt]) return false;
+    if (prompt !== null) {
+      const p = analysis.prompts[prompt];
+      if (!p || p.inheritedFrom !== undefined) return false;
+    }
     const plan = await planImportMap(file.root ?? opts.dir, analysis, prompt, opts.mapCaps, async () => {
       const d = await detailFor(file);
       if (!d) return null;
