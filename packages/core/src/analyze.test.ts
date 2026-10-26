@@ -25,6 +25,13 @@ describe("status rule", () => {
     });
   });
 
+  test("edit, 'turbo run test' => checked", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "turbo run test")])).toMatchObject({
+      status: "checked",
+      reason: "turbo run test passed after last edit",
+    });
+  });
+
   test("edit, failing check => failing with single-line output", () => {
     const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pytest -q", { exit: 1, output: "line one\n\nline   two" })]);
     expect(p).toMatchObject({ status: "failing", reason: "pytest -q failed: line one line two" });
