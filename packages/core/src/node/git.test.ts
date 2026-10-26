@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -36,21 +36,50 @@ describe("parseStatusZ", () => {
 });
 
 describe("parseLogNameStatus", () => {
-  it("parses commits and files, newest commit wins for duplicates", () => {
+  it("handles empty string", () => {
+    expect(parseLogNameStatus("")).toEqual({ commits: 0, files: [] });
+  });
+
+  it("parses plain entries and newest commit wins for duplicates", () => {
     const raw =
-      "\x01h2\nM\tsrc/a.ts\nR100\told.ts\tnew.ts\n\n\x01h1\nA\tsrc/a.ts\nD\tgone.ts\n";
+      "\x01h2\0\nM\0src/a.ts\0A\0src/b.ts\0\x01h1\0\nA\0src/a.ts\0D\0gone.ts\0";
     expect(parseLogNameStatus(raw)).toEqual({
       commits: 2,
       files: [
         { path: "src/a.ts", status: "M" },
-        { path: "new.ts", status: "R" },
+        { path: "src/b.ts", status: "A" },
         { path: "gone.ts", status: "D" },
       ],
     });
   });
 
-  it("handles empty string", () => {
-    expect(parseLogNameStatus("")).toEqual({ commits: 0, files: [] });
+  it("parses rename entries taking the new path", () => {
+    const raw = "\x01h1\0\nR100\0old.ts\0new.ts\0";
+    expect(parseLogNameStatus(raw)).toEqual({
+      commits: 1,
+      files: [{ path: "new.ts", status: "R" }],
+    });
+  });
+
+  it("parses paths containing tabs without corruption", () => {
+    const raw = "\x01h1\0\nM\0src/path\twith\ttab/file.ts\0";
+    expect(parseLogNameStatus(raw)).toEqual({
+      commits: 1,
+      files: [{ path: "src/path\twith\ttab/file.ts", status: "M" }],
+    });
+  });
+
+  it("parses paths containing quotes, backslashes, and newlines unquoted", () => {
+    const raw = '\x01h1\0\nA\0src/"quoted"\\path\nwith\nnewlines.ts\0';
+    expect(parseLogNameStatus(raw)).toEqual({
+      commits: 1,
+      files: [
+        {
+          path: 'src/"quoted"\\path\nwith\nnewlines.ts',
+          status: "A",
+        },
+      ],
+    });
   });
 });
 
@@ -206,7 +235,7 @@ describe("gitCrosscheck (mocked run)", () => {
       if (cmd === "log") {
         let commits = "";
         for (let i = 0; i < 500; i++) {
-          commits += `\x01commit${i}\n`;
+          commits += `\x01commit${i}\0`;
         }
         return commits;
       }
@@ -308,5 +337,148 @@ describe("gitCrosscheck (real git integration)", () => {
     expect(res.notInGit).toEqual(["x.txt"]);
     expect(res.outsideRepo).toBe(1);
     expect(res.truncated).toBe(false);
+  });
+
+  it("detects a committed file with a tab in its filename", async () => {
+    const tabRepo = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-git-tab-")));
+    try {
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "-C", tabRepo, "init", "-q", "-b", "main"],
+        { stdio: "ignore" },
+      );
+      const tabFile = "tab\tfile.txt";
+      writeFileSync(join(tabRepo, tabFile), "tab content");
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "-C", tabRepo, "add", "."],
+        { stdio: "ignore" },
+      );
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "-C", tabRepo, "commit", "-q", "-m", "add tab file"],
+        {
+          env: {
+            ...process.env,
+            GIT_AUTHOR_DATE: "2026-01-01T10:05:00Z",
+            GIT_COMMITTER_DATE: "2026-01-01T10:05:00Z",
+          },
+          stdio: "ignore",
+        },
+      );
+
+      const res = await gitCrosscheck({
+        dir: tabRepo,
+        branch: "main",
+        startedAt: "2026-01-01T10:00:00Z",
+        endedAtMs: Date.parse("2026-01-01T11:00:00Z"),
+        sessionFiles: [join(tabRepo, tabFile)],
+      });
+
+      expect(res.available).toBe(true);
+      expect(res.committed).toEqual([{ path: tabFile, status: "A", inLog: true }]);
+      expect(res.outsideRepo).toBe(0);
+    } finally {
+      rmSync(tabRepo, { recursive: true, force: true });
+    }
+  });
+
+  it("handles dir being a symlink to the repository", async () => {
+    const realRepo = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-real-repo-")));
+    const symDir = mkdtempSync(join(tmpdir(), "lgtm-sym-root-"));
+    const symRepo = join(symDir, "sym-repo");
+    symlinkSync(realRepo, symRepo);
+
+    try {
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "-C", realRepo, "init", "-q", "-b", "main"],
+        { stdio: "ignore" },
+      );
+      writeFileSync(join(realRepo, "app.ts"), "export const x = 1;");
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "-C", realRepo, "add", "."],
+        { stdio: "ignore" },
+      );
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "-C", realRepo, "commit", "-q", "-m", "init"],
+        {
+          env: {
+            ...process.env,
+            GIT_AUTHOR_DATE: "2026-01-01T10:05:00Z",
+            GIT_COMMITTER_DATE: "2026-01-01T10:05:00Z",
+          },
+          stdio: "ignore",
+        },
+      );
+
+      const res = await gitCrosscheck({
+        dir: symRepo,
+        branch: "main",
+        startedAt: "2026-01-01T10:00:00Z",
+        endedAtMs: Date.parse("2026-01-01T11:00:00Z"),
+        sessionFiles: [join(symRepo, "app.ts")],
+      });
+
+      expect(res.available).toBe(true);
+      expect(res.committed).toEqual([{ path: "app.ts", status: "A", inLog: true }]);
+      expect(res.outsideRepo).toBe(0);
+    } finally {
+      rmSync(realRepo, { recursive: true, force: true });
+      rmSync(symDir, { recursive: true, force: true });
+    }
+  });
+
+  it("handles dir being a symlink to a subdirectory", async () => {
+    const realRepo = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-real-sub-")));
+    const realSub = join(realRepo, "pkg");
+    mkdirSync(realSub);
+
+    const symDir = mkdtempSync(join(tmpdir(), "lgtm-sym-subroot-"));
+    const symSub = join(symDir, "pkg");
+    symlinkSync(realSub, symSub);
+
+    try {
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "-C", realRepo, "init", "-q", "-b", "main"],
+        { stdio: "ignore" },
+      );
+      writeFileSync(join(realSub, "subfile.ts"), "export const sub = true;");
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "-C", realRepo, "add", "."],
+        { stdio: "ignore" },
+      );
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "-C", realRepo, "commit", "-q", "-m", "sub commit"],
+        {
+          env: {
+            ...process.env,
+            GIT_AUTHOR_DATE: "2026-01-01T10:05:00Z",
+            GIT_COMMITTER_DATE: "2026-01-01T10:05:00Z",
+          },
+          stdio: "ignore",
+        },
+      );
+
+      const res = await gitCrosscheck({
+        dir: symSub,
+        branch: "main",
+        startedAt: "2026-01-01T10:00:00Z",
+        endedAtMs: Date.parse("2026-01-01T11:00:00Z"),
+        sessionFiles: [join(symSub, "subfile.ts")],
+      });
+
+      expect(res.available).toBe(true);
+      expect(res.committed).toEqual([{ path: "pkg/subfile.ts", status: "A", inLog: true }]);
+      expect(res.outsideRepo).toBe(0);
+    } finally {
+      rmSync(realRepo, { recursive: true, force: true });
+      rmSync(symDir, { recursive: true, force: true });
+    }
   });
 });
