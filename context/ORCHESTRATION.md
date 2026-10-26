@@ -4,7 +4,7 @@
 Każda pozycja: akcja → dowód → ile minut.
 - Push lokalnych commitów → bloki bramki w opisach merge od ostatniego pushu (`git log origin/main..main --merges`), High czytać przed pushem → ~5 min na merge High.
 - S-08 LLM: decyzje O-1..O-3 → `context/foundation/prd.md` → ~15 min.
-- Przegląd UI w przeglądarce (S-17/S-19/S-21) → `npx lgtm-review` w repo → ~15 min.
+- Przegląd UI (S-17/S-19/S-21): wstępny przegląd headless zrobiony przez Opusa (`context/archive/prompt-triage/reviews/browser-check-2026-10-26.md`, bez błędów; 4 obserwacje do decyzji: wąskie ekrany, Esc w Steps/Map/Git, szum Git cross-check przy wielu agentach, etykieta worktree niewidoczna bez danych) → zostaje smak/odczucie → ~10 min.
 - Audyt celu ≥97% na prawdziwych logach → skrypty audytu (scratchpad, agregaty) → ~30 min.
 - Nazwa/znak towarowy, publikacja npm → ~?
 
