@@ -70,7 +70,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Blockers:** —
 - **Unknowns:** —
 - **Risk:** sequenced first because every later slice is verified against fixtures and the packaged CLI; risk is over-building the fixture corpus here — keep it to a seed set that S-01 grows after its log-format spike.
-- **Status:** ready
+- **Status:** done (2026-10-23)
 
 ## Slices
 
@@ -86,7 +86,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   - Which session-log edge cases (command exit format, compaction, resume, subagents, interrupts, parallel tool calls) must the parser handle? Resolve via a read-only scan of 10–20 real local sessions at plan start. — Owner: team. Block: no.
   - How are the repo's own test/check scripts auto-detected so real checks are not misread as missing? — Owner: team. Block: no.
 - **Risk:** this tests the riskiest assumption — the one belief that, if wrong, makes the product useless — (that the status rule can be computed reliably from the log), so it goes first; keep it thin — terminal output is a by-product, the browser is the goal.
-- **Status:** proposed
+- **Status:** done (2026-10-23)
 
 ### S-02: Sessions and prompts in the browser (north star)
 
@@ -100,7 +100,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   - How is the local UI kept reachable only by the person who started it (other pages in the same browser cannot read sessions), while staying a single command? — Owner: team. Block: no.
   - Does a 20 MB session open in < 3 s end to end, or does the parser need work first? — Owner: team. Block: no.
 - **Risk:** the first browser view is the owner's top priority, so it follows S-01 immediately; the UI may be built against the S-01 output contract and fixtures, but must land on real sessions to count. Security properties (local-only, no markup rendering of log content) are part of this slice, not deferred.
-- **Status:** proposed
+- **Status:** done (2026-10-23)
 
 ### S-03: Steps and diff for a prompt
 
@@ -113,7 +113,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Unknowns:**
   - Edits made through shell commands, removals and moves may be missing from the log; how is "may be incomplete" shown on a diff? — Owner: team. Block: no.
 - **Risk:** depends on the S-02 browser shell; closes the MVP. Keep the diff minimal (unified, no split view, no custom highlighter) so the 7-week budget holds.
-- **Status:** proposed
+- **Status:** done (2026-10-23)
 
 ### S-05: Review hints and markdown summary (v0.2)
 
