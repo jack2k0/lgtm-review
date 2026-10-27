@@ -69,8 +69,8 @@ describe("projectDirFor", () => {
 describe("discoverSessions", () => {
   test("newest first, only top-level jsonl", () =>
     withTmp(async (dir) => {
-      writeFileSync(join(dir, "old.jsonl"), "");
-      writeFileSync(join(dir, "new.jsonl"), "");
+      writeFileSync(join(dir, "old.jsonl"), "old");
+      writeFileSync(join(dir, "new.jsonl"), "new");
       writeFileSync(join(dir, "notes.txt"), "");
       mkdirSync(join(dir, "old", "subagents"), { recursive: true });
       writeFileSync(join(dir, "old", "subagents", "agent-1.jsonl"), "");
@@ -78,6 +78,16 @@ describe("discoverSessions", () => {
       utimesSync(join(dir, "new.jsonl"), 2000, 2000);
       const found = await discoverSessions(dir);
       expect(found.map((f) => f.id)).toEqual(["new", "old"]);
+    }));
+
+  test("skips dotfiles and 0-byte files", () =>
+    withTmp(async (dir) => {
+      writeFileSync(join(dir, "empty.jsonl"), "");
+      writeFileSync(join(dir, ".temp.jsonl"), "data");
+      writeFileSync(join(dir, ".jsonl"), "data");
+      writeFileSync(join(dir, "valid.jsonl"), "valid");
+      const found = await discoverSessions(dir);
+      expect(found.map((f) => f.id)).toEqual(["valid"]);
     }));
 
   test("missing dir rejects", async () => {
