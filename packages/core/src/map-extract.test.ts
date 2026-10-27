@@ -330,3 +330,57 @@ describe("workspace packages", () => {
     expect(createResolver({ host: all }).resolve("raw", "a.ts")).toBe("packages/raw/dist/index.js");
   });
 });
+
+describe("extractImports line lookup (perf parity)", () => {
+  const COUNT = 3000;
+  const lines = Array.from({ length: COUNT }, (_, i) => `import v${i} from "./m${i}";`);
+  const expected = Array.from({ length: COUNT }, (_, i) => ({ specifier: `./m${i}`, syntax: "import", line: i + 1 }));
+
+  test("identical output: every import of a many-line file keeps its 1-based line", () => {
+    expect(extractImports(lines.join("\n"))).toEqual(expected);
+  });
+
+  test("line numbers stay exact with CRLF endings and a last line without a newline", () => {
+    const crlf = 'import a from "./a";\r\nimport b from "./b";\r\nimport c from "./c";';
+    expect(extractImports(crlf)).toEqual([
+      { specifier: "./a", syntax: "import", line: 1 },
+      { specifier: "./b", syntax: "import", line: 2 },
+      { specifier: "./c", syntax: "import", line: 3 },
+    ]);
+    const tail = 'export { x } from "./x";\nimport y from "./y";';
+    expect(extractImports(tail)).toEqual([
+      { specifier: "./x", syntax: "export", line: 1 },
+      { specifier: "./y", syntax: "import", line: 2 },
+    ]);
+  });
+});
+
+describe("tsconfig paths without a baseUrl", () => {
+  test("paths of an extended config resolve against the declaring config's directory", () => {
+    const host = makeHost(["tsconfig.json", "tsconfigs/base.json", "tsconfigs/lib/base.ts", "lib/base.ts", "app.ts"], {
+      "tsconfig.json": { extends: "./tsconfigs/base.json" },
+      "tsconfigs/base.json": { compilerOptions: { paths: { "@base": ["lib/base.ts"] } } },
+    });
+    const aliases = loadTsconfigAliases("", host);
+    expect(aliases).toEqual([{ pattern: "@base", targets: ["tsconfigs/lib/base.ts"] }]);
+    const r = createResolver({ host, aliases });
+    expect(r.resolve("@base", "app.ts")).toBe("tsconfigs/lib/base.ts");
+  });
+
+  test("the extended config's own baseUrl is relative to it; child-declared paths stay root-anchored", () => {
+    const host = makeHost(["tsconfig.json", "tsconfigs/base.json", "tsconfigs/lib/base.ts", "app.ts"], {
+      "tsconfig.json": { extends: "./tsconfigs/base.json", compilerOptions: { paths: { "@root": ["lib/root.ts"] } } },
+      "tsconfigs/base.json": { compilerOptions: { baseUrl: "lib", paths: { "@base/*": ["*"] } } },
+    });
+    const aliases = loadTsconfigAliases("", host);
+    expect(aliases).toEqual([
+      { pattern: "@base/*", targets: ["tsconfigs/lib/*"] },
+      { pattern: "@root", targets: ["lib/root.ts"] },
+      { pattern: "*", targets: ["tsconfigs/lib/*"] },
+    ]);
+    const r = createResolver({ host, aliases });
+    expect(r.resolve("@base/base", "app.ts")).toBe("tsconfigs/lib/base.ts");
+    // lib/root.ts does not exist on disk: the child's own alias stays declared but does not resolve
+    expect(r.resolve("@root", "app.ts")).toBeNull();
+  });
+});

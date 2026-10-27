@@ -324,6 +324,38 @@ describe("GET /api/sessions/:id/map", () => {
     ]);
   });
 
+  test("a new Python project marker flips the ETag (fingerprint covers root-steering files)", async () => {
+    const fpRepo = join(tmp, "fp-repo");
+    mkdirSync(fpRepo);
+    write(fpRepo, "vendor/libx/libx/__init__.py", "");
+    write(fpRepo, "vendor/libx/libx/core.py", "def f():\n    return 1\n");
+    write(fpRepo, "app/main.py", "from libx.core import f\n");
+    execFileSync("git", ["init", "-q"], { cwd: fpRepo });
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"], { cwd: fpRepo });
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"], { cwd: fpRepo });
+
+    const root = join(tmp, "p-fp");
+    writeFileSync(join(projectDir(root, fpRepo), "fp-session.jsonl"), session(fpRepo, [{ text: "edit main", files: ["app/main.py"] }]));
+    const fpSrv = await startServer({ dir: fpRepo, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web") });
+    try {
+      const before = await get(fpSrv, "/api/sessions/fp-session/map");
+      expect(before.status).toBe(200);
+      // Without a marker file, libx is not an import root: the Python edge is missing.
+      expect(edgeKeys(before).some((e) => e.startsWith("app/main.py>"))).toBe(false);
+      // Each marker's appearance must flip the fingerprint, so a held tag gets 200, never a stale 304.
+      let tag = before.headers.etag as string;
+      for (const marker of ["pyproject.toml", "setup.py", "setup.cfg"]) {
+        write(fpRepo, `vendor/libx/${marker}`, "# marker\n");
+        const r = await get(fpSrv, "/api/sessions/fp-session/map", { "If-None-Match": tag });
+        expect(r.status, `after writing vendor/libx/${marker}`).toBe(200);
+        expect(edgeKeys(r)).toContain("app/main.py>vendor/libx/libx/core.py:import");
+        tag = r.headers.etag as string;
+      }
+    } finally {
+      await fpSrv.close();
+    }
+  });
+
   test("new-edge detection in TS and Python, created file, unrelated edit", async () => {
     const newRepo = join(tmp, "new-edge-repo");
     mkdirSync(newRepo);
