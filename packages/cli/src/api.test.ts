@@ -1,9 +1,9 @@
 import { request } from "node:http";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { copyFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { FileDiff, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
 import { summarize } from "./api.js";
 import { startServer, type RunningServer } from "./server.js";
@@ -97,6 +97,49 @@ describe("GET /api/sessions", () => {
 
   test("trailing slash is accepted", async () => {
     expect((await get(srv, "/api/sessions/")).status).toBe(200);
+  });
+
+  test.skipIf(process.platform === "win32")("discovery warnings are printed to stderr once per server run as 'warning: <text>'", async () => {
+    const unreadableLive = join(tmp, "unreadable-live");
+    const archiveDir = join(tmp, "test-archive");
+    mkdirSync(unreadableLive, { recursive: true });
+    mkdirSync(archiveDir, { recursive: true });
+    writeFileSync(join(archiveDir, "sess-1.jsonl"), "data\n");
+    chmodSync(unreadableLive, 0o000);
+
+    const warnSrv = await startServer({
+      dir: PROJECT,
+      projectsDir: join(tmp, "projects"),
+      roots: [{ dir: PROJECT, worktree: ".", projectDir: unreadableLive, archiveDir }],
+      webRoot: join(tmp, "no-web"),
+    });
+
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      // First request -> logs warning
+      const r1 = await get(warnSrv, "/api/sessions");
+      expect(r1.status).toBe(200);
+      const warningsFirst = errSpy.mock.calls
+        .map((c) => c[0])
+        .filter((msg) => typeof msg === "string" && msg.startsWith("warning:"));
+      expect(warningsFirst.length).toBe(1);
+      expect(warningsFirst[0]).toContain(`${unreadableLive}: unreadable`);
+      expect(warningsFirst[0]).toContain("showing archived sessions only");
+
+      // Second request -> does NOT log the warning again
+      const r2 = await get(warnSrv, "/api/sessions");
+      expect(r2.status).toBe(200);
+      const warningsSecond = errSpy.mock.calls
+        .map((c) => c[0])
+        .filter((msg) => typeof msg === "string" && msg.startsWith("warning:"));
+      expect(warningsSecond.length).toBe(1);
+    } finally {
+      errSpy.mockRestore();
+      chmodSync(unreadableLive, 0o755);
+      await warnSrv.close();
+      rmSync(unreadableLive, { recursive: true, force: true });
+      rmSync(archiveDir, { recursive: true, force: true });
+    }
   });
 });
 

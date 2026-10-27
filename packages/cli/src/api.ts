@@ -79,13 +79,22 @@ function pathParam(rawUrl: string): PathParam {
 export function createApi(opts: ServerOptions): ApiHandler {
   const roots: SessionRoot[] = opts.roots ?? [{ dir: opts.dir, worktree: ".", projectDir: projectDirFor(opts.dir, opts.projectsDir), archiveDir: opts.archiveDir ?? null }];
   const cache = new Map<string, { key: string; analysis: Promise<SessionAnalysis> }>();
+  const loggedWarnings = new Set<string>();
 
   async function discover(): Promise<SessionFile[]> {
+    const warnings: string[] = [];
     try {
-      return await discoverRootSessions(roots);
+      return await discoverRootSessions(roots, warnings);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;
+    } finally {
+      for (const w of warnings) {
+        if (!loggedWarnings.has(w)) {
+          loggedWarnings.add(w);
+          console.error(`warning: ${w}`);
+        }
+      }
     }
   }
 

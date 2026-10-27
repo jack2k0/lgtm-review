@@ -280,6 +280,31 @@ describe("discoverAllSessions", () => {
       expect(found[0].archived).toBe(true);
     }));
 
+  test.skipIf(process.platform === "win32")("returns archived sessions with warning when live projectDir is unreadable (EACCES)", () =>
+    withTmp(async (dir) => {
+      const liveDir = join(dir, "live");
+      const archiveDir = join(dir, "archive");
+      mkdirSync(liveDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
+      writeFileSync(join(archiveDir, "sess-arch.jsonl"), "content");
+      chmodSync(liveDir, 0o000);
+      try {
+        const warnings: string[] = [];
+        const found = await discoverAllSessions(liveDir, archiveDir, warnings);
+        expect(found).toHaveLength(1);
+        expect(found[0].id).toBe("sess-arch");
+        expect(found[0].archived).toBe(true);
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain(`${liveDir}: unreadable`);
+        expect(warnings[0]).toContain("showing archived sessions only");
+
+        // without archive, keeps throwing
+        await expect(discoverAllSessions(liveDir, null)).rejects.toThrow();
+      } finally {
+        chmodSync(liveDir, 0o755);
+      }
+    }));
+
   test("skips dotfiles and 0-byte files in live and archive directories", () =>
     withTmp(async (dir) => {
       const liveDir = join(dir, "live");
@@ -477,5 +502,21 @@ describe("discoverRootSessions live vs archived", () => {
       expect(r).toHaveLength(1);
       expect(r[0]?.root).toBe(b.dir);
       expect(r[0]?.archived).toBeUndefined();
+    }));
+
+  test("for the same id across roots, the larger copy wins even if the earlier root is archived", () =>
+    withTmp(async (dir) => {
+      const mk = (n: string) => ({ dir: join(dir, n), worktree: n, projectDir: join(dir, "pd", n), archiveDir: join(dir, "ad", n) });
+      const a = mk("a");
+      const b = mk("b");
+      mkdirSync(a.archiveDir, { recursive: true });
+      mkdirSync(b.projectDir, { recursive: true });
+      writeFileSync(join(a.archiveDir, "s1.jsonl"), "long-intact-archived-content");
+      writeFileSync(join(b.projectDir, "s1.jsonl"), "short");
+      const r = await discoverRootSessions([a, b]);
+      expect(r).toHaveLength(1);
+      expect(r[0]?.root).toBe(a.dir);
+      expect(r[0]?.archived).toBe(true);
+      expect(r[0]?.path).toBe(join(a.archiveDir, "s1.jsonl"));
     }));
 });
