@@ -130,11 +130,11 @@ export function toRepoRelative(p: string, roots: readonly string[]): string | nu
   return n === "." || n === ".." || n.startsWith("../") || n.startsWith("/") ? null : n;
 }
 
-function pseudoSourceFromDiff(diff: FileDiff): string {
+function pseudoSourceFromDiff(diff: FileDiff, lineType: "+" | "-" = "+"): string {
   if (!diff.hunks || diff.hunks.length === 0) return "";
   const hunkTexts: string[] = [];
   for (const h of diff.hunks) {
-    const lines = h.lines.filter((l) => l.t === "+").map((l) => l.s);
+    const lines = h.lines.filter((l) => l.t === lineType).map((l) => l.s);
     if (lines.length > 0) {
       hunkTexts.push(lines.join("\n"));
     }
@@ -398,21 +398,46 @@ export async function planImportMap(
             if (diff.kind === "A") {
               createdFiles.add(rel);
             }
-            const pseudo = pseudoSourceFromDiff(diff);
-            if (pseudo === "") continue;
             const lang = mapLanguageOf(rel);
             if (lang === "ts") {
-              for (const imp of extractImports(pseudo)) {
-                const to = tsResolver.resolve(imp.specifier, rel);
-                if (to !== null && to !== rel) {
-                  newEdgeKeys.add(`${rel}\0${to}`);
+              const removedTargets = new Set<string>();
+              const pseudoMinus = pseudoSourceFromDiff(diff, "-");
+              if (pseudoMinus !== "") {
+                for (const imp of extractImports(pseudoMinus)) {
+                  const to = tsResolver.resolve(imp.specifier, rel);
+                  if (to !== null && to !== rel) {
+                    removedTargets.add(to);
+                  }
+                }
+              }
+              const pseudoPlus = pseudoSourceFromDiff(diff, "+");
+              if (pseudoPlus !== "") {
+                for (const imp of extractImports(pseudoPlus)) {
+                  const to = tsResolver.resolve(imp.specifier, rel);
+                  if (to !== null && to !== rel && !removedTargets.has(to)) {
+                    newEdgeKeys.add(`${rel}\0${to}`);
+                  }
                 }
               }
             } else if (lang === "py") {
-              for (const imp of extractPythonImports(pseudo)) {
-                for (const to of pyResolver.resolve(imp, rel)) {
-                  if (to !== rel) {
-                    newEdgeKeys.add(`${rel}\0${to}`);
+              const removedTargets = new Set<string>();
+              const pseudoMinus = pseudoSourceFromDiff(diff, "-");
+              if (pseudoMinus !== "") {
+                for (const imp of extractPythonImports(pseudoMinus)) {
+                  for (const to of pyResolver.resolve(imp, rel)) {
+                    if (to !== rel) {
+                      removedTargets.add(to);
+                    }
+                  }
+                }
+              }
+              const pseudoPlus = pseudoSourceFromDiff(diff, "+");
+              if (pseudoPlus !== "") {
+                for (const imp of extractPythonImports(pseudoPlus)) {
+                  for (const to of pyResolver.resolve(imp, rel)) {
+                    if (to !== rel && !removedTargets.has(to)) {
+                      newEdgeKeys.add(`${rel}\0${to}`);
+                    }
                   }
                 }
               }
@@ -425,7 +450,14 @@ export async function planImportMap(
       if (promptIndex !== null) {
         const pr = analysis.prompts[promptIndex];
         if (pr && pr.inheritedFrom === undefined) {
-          if (steps && steps.some((s) => (s.files && s.files.length > 0) || s.check != null)) {
+          if (
+            steps &&
+            steps.some(
+              (s) =>
+                (s.files && s.files.some((f) => toRepoRelative(f, [dir, root]) !== null)) ||
+                s.check != null,
+            )
+          ) {
             isPlayable = true;
           }
         }

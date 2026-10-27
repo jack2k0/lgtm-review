@@ -151,6 +151,40 @@ beforeAll(async () => {
   ];
   writeFileSync(join(pDir, "fork-b.jsonl"), forkBLines.join("\n") + "\n");
 
+  // Session with > 200 steps (caps at STEPS_MAX):
+  const truncLines: string[] = [];
+  truncLines.push(rec("user", repo, { sessionId: "trunc-session", message: { role: "user", content: "Many steps" } }));
+  for (let i = 1; i <= 105; i++) {
+    const idRead = `trunc_r_${i}`;
+    truncLines.push(
+      rec("assistant", repo, {
+        sessionId: "trunc-session",
+        message: { role: "assistant", content: [{ type: "tool_use", id: idRead, name: "Read", input: { file_path: join(repo, "src/b.ts") } }] },
+      }),
+    );
+    truncLines.push(
+      rec("user", repo, {
+        sessionId: "trunc-session",
+        message: { role: "user", content: [{ type: "tool_result", tool_use_id: idRead, content: "ok" }] },
+      }),
+    );
+    const idEdit = `trunc_e_${i}`;
+    truncLines.push(
+      rec("assistant", repo, {
+        sessionId: "trunc-session",
+        message: { role: "assistant", content: [{ type: "tool_use", id: idEdit, name: "Edit", input: { file_path: join(repo, "src/b.ts") } }] },
+      }),
+    );
+    truncLines.push(
+      rec("user", repo, {
+        sessionId: "trunc-session",
+        message: { role: "user", content: [{ type: "tool_result", tool_use_id: idEdit, content: "ok" }] },
+        toolUseResult: { type: "update", structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-b=2", "+b=3"] }] },
+      }),
+    );
+  }
+  writeFileSync(join(pDir, "trunc-session.jsonl"), truncLines.join("\n") + "\n");
+
   srv = await startServer({ dir: repo, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web") });
 });
 
@@ -240,5 +274,13 @@ describe("GET /api/sessions/:id/prompts/:n/play", () => {
     const mapRes = await get(srv, "/api/sessions/play-session/map?prompt=0");
     expect(mapRes.status).toBe(200);
     expect(mapRes.json.playable).toBe(true);
+  });
+
+  test("PlayResponse.truncated is true when prompt steps were truncated even if beats < 60", async () => {
+    const r = await get(srv, "/api/sessions/trunc-session/prompts/0/play");
+    expect(r.status).toBe(200);
+    const play = PlayResponse.parse(r.json);
+    expect(play.beats.length).toBeLessThan(60);
+    expect(play.truncated).toBe(true);
   });
 });
