@@ -43,7 +43,7 @@ function SessionView({ token, id, show }: { token: string | null; id: string; sh
 function StepsRoute({ token, id, index }: { token: string | null; id: string; index: number }) {
   const res = useLive<PromptDetail>((e, s) => fetchPromptDetail(token, id, index, e, s), `p:${id}:${index}`);
   return (
-    <Status res={res}>
+    <Status res={res} back={routeHref({ kind: "session", id })} backLabel="← Back to session">
       {(d) => <StepsView sessionId={id} detail={d} onOpenFile={(path) => { window.location.hash = routeHref({ kind: "diff", id, index, path }); }} />}
     </Status>
   );
@@ -69,7 +69,7 @@ function DiffRoute({ token, id, index, path }: { token: string | null; id: strin
 
 function MapRoute({ token, id, index }: { token: string | null; id: string; index: number | null }) {
   const res = useLive<ImportMapResponse>((e, s) => fetchImportMap(token, id, index, e, s), `m:${id}:${index ?? "all"}`);
-  return <Status res={res}>{(d) => <MapView sessionId={id} map={d} />}</Status>;
+  return <Status res={res} back={routeHref({ kind: "session", id })} backLabel="← Back to session">{(d) => <MapView sessionId={id} map={d} />}</Status>;
 }
 
 function PlayRoute({ token, id, index, beat }: { token: string | null; id: string; index: number; beat: number }) {

@@ -431,6 +431,9 @@ export function rulesByPath(hints: readonly Hint[]): Map<string, string[]> {
 /** Shown instead of a path for prompt-level hints. */
 export const PROMPT_LEVEL = "(whole prompt)";
 
+/** Synthetic target for unparseable shell mutations (mirrors core SHELL_EDIT_FILE). */
+export const SHELL_EDIT_FILE = "(shell edit)";
+
 /**
  * Expanded rows / step lists are keyed by prompt index / step number, which are append-only within a session
  * file, so they survive a data refresh. `toggleKey` flips one key without mutating the set.

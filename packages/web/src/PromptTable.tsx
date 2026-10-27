@@ -4,7 +4,7 @@ import { HintList, ReviewCell, RuleMarkers } from "./Hints";
 import { StatusTag } from "./StatusDot";
 import { TimeBar, TimeLegend } from "./TimeBar";
 import { attentionPrompts, escapeToList, needText, rowKey, type Show } from "./triage";
-import { PROMPT_PAGE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, navigateToList, plural, routeHref, retainKeys, rulesByPath, shortPath, toggleKey, visiblePrompts, splitInherited } from "./viewmodel";
+import { PROMPT_PAGE, SHELL_EDIT_FILE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, navigateToList, plural, routeHref, retainKeys, rulesByPath, shortPath, toggleKey, visiblePrompts, splitInherited } from "./viewmodel";
 
 /** Changed files of a prompt; each path links to its diff (the link carries the exact path from the list). */
 export function FileList({ sessionId, p }: { sessionId: string; p: PromptAnalysis }) {
@@ -16,7 +16,11 @@ export function FileList({ sessionId, p }: { sessionId: string; p: PromptAnalysi
       {p.files.map((f) => (
         <li key={f.path}>
           <span className="kind" title={kindLabel(f.kind)}>{f.kind}</span>{" "}
-          <a className="mono file-link" href={routeHref({ kind: "diff", id: sessionId, index: p.index, path: f.path })} title={`Open diff of ${f.path}`}>{shortPath(f.path, paths)}</a>{" "}
+          {f.path === SHELL_EDIT_FILE ? (
+            <span className="mono">{f.path}</span>
+          ) : (
+            <a className="mono file-link" href={routeHref({ kind: "diff", id: sessionId, index: p.index, path: f.path })} title={`Open diff of ${f.path}`}>{shortPath(f.path, paths)}</a>
+          )}{" "}
           +{f.added} -{f.removed}
           {f.maybeIncomplete ? <span className="marker">may be incomplete</span> : null}
           {flagged.has(f.path) ? <RuleMarkers rules={flagged.get(f.path)!} /> : null}
@@ -37,7 +41,7 @@ export function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: Pr
         <td className="title">
           <button type="button" className="rowbtn" data-index={p.index} aria-expanded={open} aria-controls={open ? detailId : undefined} onClick={onToggle}>
             <span className="chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
-            <span className={open ? "text" : "text clamp"}>{p.text || "(empty prompt)"}</span>
+            <span className={open ? "text" : "text clamp"}>{p.text.trim() || "(empty prompt)"}</span>
           </button>
         </td>
         <td className="reason"><span className={open ? "" : "clamp"}>{p.reason}</span></td>
