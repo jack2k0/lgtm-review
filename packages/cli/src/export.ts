@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { chmod, link, lstat, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { chmod, link, lstat, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { markInherited } from "@lgtm/core";
 import type { Analyzer, FileDiff, RepoScripts, SessionAnalysis } from "@lgtm/core";
 import { analyzeFile, analyzeFileDetail, discoverRootSessions, loadRepoScripts, projectDirFor, type SessionFile, type SessionRoot } from "@lgtm/core/node";
@@ -89,6 +89,31 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+/** True when `path` is `dir` itself or sits below it (both absolute). */
+function insideDir(path: string, dir: string): boolean {
+  const rel = relative(dir, path);
+  return rel === "" || !(rel.startsWith("..") || isAbsolute(rel));
+}
+
+/**
+ * The place a write to `path` would land at: the real path of the closest existing ancestor (symlinked directories
+ * in the parent chain are followed) with the missing names joined on lexically. An existing `path` resolves to its
+ * real path.
+ */
+async function resolveTarget(path: string): Promise<string> {
+  const tail: string[] = [];
+  let p = resolve(path);
+  for (;;) {
+    try {
+      return join(await realpath(p), ...tail.reverse());
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT" || dirname(p) === p) throw err;
+      tail.push(basename(p));
+      p = dirname(p);
+    }
+  }
+}
+
 /** Writes through a temp file in the target directory; without `force` the target is never replaced (hard link fails if it exists). */
 async function writeAtomic(target: string, data: string, force: boolean): Promise<void> {
   const tmp = join(dirname(target), `.${basename(target)}.${randomBytes(6).toString("hex")}.tmp`);
@@ -130,6 +155,27 @@ export async function runExport(cmd: ExportCommand): Promise<number> {
   }
   const file = pool[0]!;
   const out = resolve(cmd.out ?? `lgtm-review-${file.id.slice(0, 8)}.html`);
+  try {
+    // `--out` must never land on the session log being read, or inside the Claude projects dir or the archive dir,
+    // with or without --force (it would destroy the log or pollute session storage). Symlinks in the parent chain
+    // are resolved before comparing.
+    const target = await resolveTarget(out);
+    if (target === (await resolveTarget(file.path))) {
+      console.error(`lgtm-review: --out ${out} is the session log ${file.path} that is being read; refusing to overwrite it; choose another --out`);
+      return 1;
+    }
+    const storage: Array<{ what: string; dir: string }> = [{ what: "the Claude projects directory", dir: await resolveTarget(cmd.projectsDir) }];
+    if (cmd.archiveDir !== undefined) storage.push({ what: "the archive directory", dir: await resolveTarget(cmd.archiveDir) });
+    for (const { what, dir } of storage) {
+      if (insideDir(target, dir)) {
+        console.error(`lgtm-review: --out ${out} resolves to ${target}, inside ${dir} (${what}); refusing to write there; choose another --out`);
+        return 1;
+      }
+    }
+  } catch (err) {
+    console.error(`lgtm-review: cannot check --out ${out}: ${err instanceof Error ? err.message : err}; refusing to write it`);
+    return 1;
+  }
   try {
     if (!cmd.force && (await exists(out))) {
       console.error(`lgtm-review: ${out} already exists; use --force to overwrite or --out to choose another file`);
