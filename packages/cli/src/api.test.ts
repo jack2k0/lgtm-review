@@ -99,7 +99,7 @@ describe("GET /api/sessions", () => {
     expect((await get(srv, "/api/sessions/")).status).toBe(200);
   });
 
-  test.skipIf(process.platform === "win32")("discovery warnings are printed to stderr once per server run as 'warning: <text>'", async () => {
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)("discovery warnings are printed to stderr once per server run as 'warning: <text>'", async () => {
     const unreadableLive = join(tmp, "unreadable-live");
     const archiveDir = join(tmp, "test-archive");
     mkdirSync(unreadableLive, { recursive: true });

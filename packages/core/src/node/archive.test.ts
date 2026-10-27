@@ -280,7 +280,7 @@ describe("discoverAllSessions", () => {
       expect(found[0].archived).toBe(true);
     }));
 
-  test.skipIf(process.platform === "win32")("returns archived sessions with warning when live projectDir is unreadable (EACCES)", () =>
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)("returns archived sessions with warning when live projectDir is unreadable (EACCES)", () =>
     withTmp(async (dir) => {
       const liveDir = join(dir, "live");
       const archiveDir = join(dir, "archive");
