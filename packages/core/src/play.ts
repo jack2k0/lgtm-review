@@ -31,6 +31,12 @@ function basename(path: string): string {
   return i === -1 ? path : path.slice(i + 1);
 }
 
+const ANSI_RE = /(?:\x1b|\u001b)(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g;
+
+function stripAnsi(s: string): string {
+  return s.replace(ANSI_RE, "");
+}
+
 function oneLine(s: string, max: number): string {
   const t = s.replace(/\s+/g, " ").trim();
   if (t.length <= max) return t;
@@ -93,15 +99,21 @@ export function buildBeats(input: BuildBeatsInput): BuildBeatsResult {
 
   const seenFiles = new Set<string>();
 
-  const promptFiles = new Set<string>();
+  const beatFiles = new Set<string>();
   for (const step of steps) {
     for (const path of step.files) {
-      promptFiles.add(path);
+      beatFiles.add(path);
+      const newEdges = newEdgesByFrom.get(path);
+      if (newEdges) {
+        for (const e of newEdges) {
+          beatFiles.add(e.to);
+        }
+      }
     }
   }
 
   const basenameCounts = new Map<string, number>();
-  for (const path of promptFiles) {
+  for (const path of beatFiles) {
     const base = basename(path);
     basenameCounts.set(base, (basenameCounts.get(base) ?? 0) + 1);
   }
@@ -241,7 +253,7 @@ export function buildBeats(input: BuildBeatsInput): BuildBeatsResult {
         beatKind = "check-failed";
         outcome = "failed";
         if (step.check.excerpt) {
-          detail = oneLine(step.check.excerpt, 200);
+          detail = oneLine(stripAnsi(step.check.excerpt), 200);
         }
       } else {
         beatKind = "check-unknown";

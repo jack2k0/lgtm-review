@@ -60,6 +60,20 @@ describe("extractImports", () => {
     ]);
   });
 
+  test("extracts dynamic import and require with comments inside the call", () => {
+    const src = [
+      'const a = await import(/* slow */ "./a");',
+      'const b = await import( "./b" /* note */ );',
+      'const c = import /* lazy */ ( "./c" );',
+      'const d = require(/* sync */ "./d");',
+      'const e = require( "./e" /* req */ );',
+      'const f = require // note\n ( "./f" );',
+      'const g = import( // line\n "./g" );',
+    ].join("\n");
+    const imps = extractImports(src);
+    expect(imps.map((i) => i.specifier)).toEqual(["./a", "./b", "./c", "./d", "./e", "./f", "./g"]);
+  });
+
   test("template-literal dynamic imports are ignored", () => {
     expect(extractImports("const x = import(`./x`); const y = import(name);")).toEqual([]);
   });
@@ -382,5 +396,27 @@ describe("tsconfig paths without a baseUrl", () => {
     expect(r.resolve("@base/base", "app.ts")).toBe("tsconfigs/lib/base.ts");
     // lib/root.ts does not exist on disk: the child's own alias stays declared but does not resolve
     expect(r.resolve("@root", "app.ts")).toBeNull();
+  });
+
+  test("a baseUrl set only in the extending config anchors paths declared in the extended base", () => {
+    const host = makeHost(
+      ["tsconfig.json", "tsconfigs/base.json", "lib/base.ts", "tsconfigs/lib/base.ts", "app.ts"],
+      {
+        "tsconfig.json": {
+          extends: "./tsconfigs/base.json",
+          compilerOptions: { baseUrl: "." },
+        },
+        "tsconfigs/base.json": {
+          compilerOptions: { paths: { "@base": ["lib/base.ts"] } },
+        },
+      },
+    );
+    const aliases = loadTsconfigAliases("", host);
+    expect(aliases).toEqual([
+      { pattern: "@base", targets: ["lib/base.ts"] },
+      { pattern: "*", targets: ["*"] },
+    ]);
+    const r = createResolver({ host, aliases });
+    expect(r.resolve("@base", "app.ts")).toBe("lib/base.ts");
   });
 });

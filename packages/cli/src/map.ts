@@ -389,6 +389,33 @@ export async function planImportMap(
           return true;
         });
 
+        const addNewEdges = <T>(
+          diff: FileDiff,
+          rel: string,
+          extract: (src: string) => T[],
+          resolve: (imp: T, from: string) => string[],
+        ): void => {
+          const removedTargets = new Set<string>();
+          const pseudoMinus = pseudoSourceFromDiff(diff, "-");
+          if (pseudoMinus !== "") {
+            for (const imp of extract(pseudoMinus)) {
+              for (const to of resolve(imp, rel)) {
+                removedTargets.add(to);
+              }
+            }
+          }
+          const pseudoPlus = pseudoSourceFromDiff(diff, "+");
+          if (pseudoPlus !== "") {
+            for (const imp of extract(pseudoPlus)) {
+              for (const to of resolve(imp, rel)) {
+                if (!removedTargets.has(to)) {
+                  newEdgeKeys.add(`${rel}\0${to}`);
+                }
+              }
+            }
+          }
+        };
+
         for (const p of relevantPrompts) {
           for (const f of p.files) {
             const rel = toRepoRelative(f.path, [dir, root]);
@@ -400,47 +427,14 @@ export async function planImportMap(
             }
             const lang = mapLanguageOf(rel);
             if (lang === "ts") {
-              const removedTargets = new Set<string>();
-              const pseudoMinus = pseudoSourceFromDiff(diff, "-");
-              if (pseudoMinus !== "") {
-                for (const imp of extractImports(pseudoMinus)) {
-                  const to = tsResolver.resolve(imp.specifier, rel);
-                  if (to !== null && to !== rel) {
-                    removedTargets.add(to);
-                  }
-                }
-              }
-              const pseudoPlus = pseudoSourceFromDiff(diff, "+");
-              if (pseudoPlus !== "") {
-                for (const imp of extractImports(pseudoPlus)) {
-                  const to = tsResolver.resolve(imp.specifier, rel);
-                  if (to !== null && to !== rel && !removedTargets.has(to)) {
-                    newEdgeKeys.add(`${rel}\0${to}`);
-                  }
-                }
-              }
+              addNewEdges(diff, rel, extractImports, (imp, from) => {
+                const to = tsResolver.resolve(imp.specifier, from);
+                return to !== null && to !== from ? [to] : [];
+              });
             } else if (lang === "py") {
-              const removedTargets = new Set<string>();
-              const pseudoMinus = pseudoSourceFromDiff(diff, "-");
-              if (pseudoMinus !== "") {
-                for (const imp of extractPythonImports(pseudoMinus)) {
-                  for (const to of pyResolver.resolve(imp, rel)) {
-                    if (to !== rel) {
-                      removedTargets.add(to);
-                    }
-                  }
-                }
-              }
-              const pseudoPlus = pseudoSourceFromDiff(diff, "+");
-              if (pseudoPlus !== "") {
-                for (const imp of extractPythonImports(pseudoPlus)) {
-                  for (const to of pyResolver.resolve(imp, rel)) {
-                    if (to !== rel && !removedTargets.has(to)) {
-                      newEdgeKeys.add(`${rel}\0${to}`);
-                    }
-                  }
-                }
-              }
+              addNewEdges(diff, rel, extractPythonImports, (imp, from) =>
+                pyResolver.resolve(imp, from).filter((to) => to !== from),
+              );
             }
           }
         }

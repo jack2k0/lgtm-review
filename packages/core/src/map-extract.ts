@@ -52,8 +52,15 @@ export function mapLanguageOf(path: string): "ts" | "py" | null {
 const FROM_IMPORT_RE = /\bimport\s+(type\s+)?([^;'"`]*?)\bfrom\s*(["'])([^"'`\n]+)\3/g;
 const SIDE_EFFECT_RE = /\bimport\s*(["'])([^"'`\n]+)\1/g;
 const EXPORT_FROM_RE = /\bexport\s+(type\s+)?(?:[^;'"`]*?)\bfrom\s*(["'])([^"'`\n]+)\2/g;
-const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*(["'])([^"'`\n]+)\1\s*\)/g;
-const REQUIRE_RE = /\brequire\s*\(\s*(["'])([^"'`\n]+)\1\s*\)/g;
+const WS_OR_COMMENT = "(?:\\s|/\\*[\\s\\S]*?\\*/|//[^\\n]*)*";
+const DYNAMIC_IMPORT_RE = new RegExp(
+  "\\bimport" + WS_OR_COMMENT + "\\(" + WS_OR_COMMENT + "(['\"])([^'\"`\\n]+)\\1" + WS_OR_COMMENT + "\\)",
+  "g",
+);
+const REQUIRE_RE = new RegExp(
+  "\\brequire" + WS_OR_COMMENT + "\\(" + WS_OR_COMMENT + "(['\"])([^'\"`\\n]+)\\1" + WS_OR_COMMENT + "\\)",
+  "g",
+);
 
 /** The map draws `type` imports dashed and every other kind as a normal import. */
 export function edgeKindFor(syntax: ImportSyntax): "import" | "type" {
@@ -277,19 +284,21 @@ export function loadTsconfigAliases(root: string, host: MapHost): TsconfigAlias[
   const rootPrefix = root === "" ? "" : `${root.replace(/\/+$/, "")}/`;
   const withinRoot = (path: string): boolean => (rootPrefix === "" ? insideRoot(path) : path.startsWith(rootPrefix));
 
-  const add = (configPath: string, depth: number): void => {
-    if (depth > 1 || seen.has(configPath) || !withinRoot(configPath)) return;
+  const add = (configPath: string, depth: number, inheritedBaseUrl?: string | null): void => {
+    if (depth > 1 || !withinRoot(configPath)) return;
+    if (seen.has(configPath) && inheritedBaseUrl === undefined) return;
     seen.add(configPath);
     const config = readJson(host, configPath);
     if (config === null) return;
-    const parent = config["extends"];
-    if (typeof parent === "string" && parent !== "") {
-      add(configFile(normalizePath(joinPath(root, parent))), depth + 1);
-    }
     const configDir = dirOf(configPath);
     const baseUrl = baseUrlOf(config, configDir);
     if (baseUrl !== null) baseFallback = baseUrl;
-    for (const alias of aliasesOf(config, baseUrl === null ? configDir : baseUrl)) byPattern.set(alias.pattern, alias);
+    const parent = config["extends"];
+    if (typeof parent === "string" && parent !== "") {
+      add(configFile(normalizePath(joinPath(root, parent))), depth + 1, baseUrl ?? inheritedBaseUrl);
+    }
+    const targetBase = inheritedBaseUrl ?? (baseUrl === null ? configDir : baseUrl);
+    for (const alias of aliasesOf(config, targetBase)) byPattern.set(alias.pattern, alias);
   };
 
   add(configFile(normalizePath(joinPath(root, "tsconfig.base.json"))), 0);
