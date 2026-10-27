@@ -65,6 +65,8 @@ brak
 
 - 2026-10-27 (cd.): przeglądy read-only bez decyzji właściciela. Web (Agy): 5/9 przyjętych (klawisze Play, `(shell edit)` bez linku, powrót przy błędzie Steps/Map, a11y), merge 523bd80 (Medium). Eksport (OpenCode): `--out <log sesji> --force` nadpisywał log HTML-em — poprawka OpenCode, przegląd Opus + Agy, merge High (owner: przeczytać blok bramki przed push). Czytanie logów (Agy, 8 uwag): na real logs (209 plików, agregaty) 0 wystąpień każdego formatu — 2 odrzucone, 6 odłożonych (BOM, prompt bez tekstu, `\ No newline`, Windows, content asystenta jako string). Nie wypchnięte.
 
+- 2026-10-27 (cd. 2): kolejne przeglądy read-only. --summary (Agy): bez uwag. Discovery (Agy): nazwa katalogu projektu jak w Claude Code 2.1.311 (`[^a-zA-Z0-9]`->`-`, >200 znaków z hashem; repo z `_`/spacją/unicode miały 0 sesji), realpath repo, pomijanie dotfile'i i pustych plików — merge 3e02847, 4f14132 (Medium). Mapa (OpenCode): fingerprint obejmuje pyproject/setup/manage.py, liniowe numery linii, paths z rozszerzanego tsconfig — daa474c (Medium). Play (Agy): fałszywe 'now imports' przy przeformatowaniu, obcięcie kroków w /play, Play bez plików w --dir — High, recenzja Opus + Sonnet. Czytanie logów (Agy): 0 wystąpień formatów na real logs, odłożone. OpenCode: zgubił kontekst raz (pytanie blokowało prompt; Esc przez `herdr pane send-keys`), limit do 28.10 01:00. Nie wypchnięte.
+
 ## Bramki
 - Npm publish: czeka na decyzję właściciela.
 
