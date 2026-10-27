@@ -26,6 +26,10 @@ Reguły: `AGENTS.md` (wszyscy agenci), `REVIEW.md` (tiery, uwagi, rejestr, maks.
 ## Faza łańcucha
 Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-lite (live-refresh, FR-011) S-06 (html-export z redakcją, FR-008) i S-11 (status-accuracy, audyt realnych logów: status 97.1% bez subagentów) zmergowane (+ S-12 subagent-prompts, + S-13 fork-dedupe 2026-10-23): F-01, S-01, S-02, S-03 zmergowane lokalnie na main i zarchiwizowane (2026-10-23). Czeka na właściciela: nazwa/trademark, kredyt autora pomysłu, publikacja npm; PRD v2 dodaje FR-009/010 (zrobione w S-05). + S-14 bg-checks (zmergowane, audyt realnych logów zrobiony) + S-09 python-map (2026-10-23). Brak kolejnych slice'ów bez decyzji produktowych. Zaparkowane: S-04 import map, S-07 Play the change, S-08 LLM, S-10 demo page (wymagają decyzji produktowych/rozszerzenia PRD). Procedura: plan Opus -> plan-review agy -> impl Sonnet -> weryfikacja Opus.
 
+## Decyzje właściciela (2026-10-27)
+- Przyjęte wszystkie rekomendacje Opusa: audyt Q1–Q5 (merge/rebase → no-changes; padający check subagenta po zielonym głównym → failing, kolejność wg czasu; zapis do nieustalonej ścieżki = kod; późny check w tle bez powiadomienia nie unieważnia zielonego; exit 144 po pkill ≠ failing), S-08 O-1..O-3 (opt-in, tylko loopback, bez modelu domyślnego, nie w --summary/--export), UI (tabela przewijana poziomo, Esc poziom wyżej w Steps/Map/Git, Git cross-check grupowany wg worktree).
+- Grok dostępny do zadań („możesz używać groka i jego limitów”).
+
 ## Decyzje właściciela (2026-10-23)
 - Nazwa projektu/pakietu npm: `lgtm-review` (wolne na npm 2026-10-23; GitHub/znak towarowy do sprawdzenia przed publikacją). Hasło robocze: "Earn your LGTM."
 - Licencja: Apache-2.0
