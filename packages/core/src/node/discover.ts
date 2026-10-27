@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -30,9 +31,31 @@ export function defaultProjectsDir(): string {
   return join(homedir(), ".claude", "projects");
 }
 
-/** Claude Code names a project dir after the cwd with `/` and `.` replaced by `-`. */
+/**
+ * Claude Code names a project dir after the cwd with trailing slashes stripped (keeping `/` itself)
+ * and every non-alphanumeric character replaced by `-`.
+ * When longer than 200 characters, Claude Code appends a hash (`name.slice(0, 200) + '-' + hash`);
+ * if a single entry in `projectsDir` matches `name.slice(0, 200) + '-'`, it is used; otherwise,
+ * `name.slice(0, 200)` is returned so no wrong session is read.
+ */
 export function projectDirFor(cwd: string, projectsDir: string = defaultProjectsDir()): string {
-  return join(projectsDir, cwd.replace(/[/.]/g, "-"));
+  const stripped = cwd.replace(/[/\\]+$/, "");
+  const clean = stripped === "" && cwd !== "" ? "/" : stripped;
+  const name = clean.replace(/[^a-zA-Z0-9]/g, "-");
+  if (name.length <= 200) {
+    return join(projectsDir, name);
+  }
+  const prefix = name.slice(0, 200) + "-";
+  let matches: string[] = [];
+  try {
+    matches = readdirSync(projectsDir).filter((e) => e.startsWith(prefix));
+  } catch {
+    // projectsDir missing or unreadable
+  }
+  if (matches.length === 1) {
+    return join(projectsDir, matches[0]!);
+  }
+  return join(projectsDir, name.slice(0, 200));
 }
 
 /**
