@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { chmod, link, lstat, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { markInherited } from "@lgtm/core";
 import type { Analyzer, FileDiff, RepoScripts, SessionAnalysis } from "@lgtm/core";
 import { analyzeFile, analyzeFileDetail, discoverRootSessions, loadRepoScripts, projectDirFor, type SessionFile, type SessionRoot } from "@lgtm/core/node";
@@ -89,10 +89,10 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-/** True when `path` is `dir` itself or sits below it (both absolute). */
+/** True when `path` is `dir` itself or sits below it (both absolute); a child named `..foo` still sits below it. */
 function insideDir(path: string, dir: string): boolean {
   const rel = relative(dir, path);
-  return rel === "" || !(rel.startsWith("..") || isAbsolute(rel));
+  return rel === "" || !(rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel));
 }
 
 /**
@@ -156,19 +156,25 @@ export async function runExport(cmd: ExportCommand): Promise<number> {
   const file = pool[0]!;
   const out = resolve(cmd.out ?? `lgtm-review-${file.id.slice(0, 8)}.html`);
   try {
-    // `--out` must never land on the session log being read, or inside the Claude projects dir or the archive dir,
-    // with or without --force (it would destroy the log or pollute session storage). Symlinks in the parent chain
-    // are resolved before comparing.
+    // `--out` must never land on the session log being read, or inside session storage, with or without --force
+    // (it would destroy the log or pollute session storage). Symlinks in the parent chain are resolved before
+    // comparing. Storage is the projects dir plus every root's project dir and archive dir (other worktrees have
+    // their own of both), so all of them are checked.
     const target = await resolveTarget(out);
     if (target === (await resolveTarget(file.path))) {
       console.error(`lgtm-review: --out ${out} is the session log ${file.path} that is being read; refusing to overwrite it; choose another --out`);
       return 1;
     }
-    const storage: Array<{ what: string; dir: string }> = [{ what: "the Claude projects directory", dir: await resolveTarget(cmd.projectsDir) }];
-    if (cmd.archiveDir !== undefined) storage.push({ what: "the archive directory", dir: await resolveTarget(cmd.archiveDir) });
-    for (const { what, dir } of storage) {
-      if (insideDir(target, dir)) {
-        console.error(`lgtm-review: --out ${out} resolves to ${target}, inside ${dir} (${what}); refusing to write there; choose another --out`);
+    const storage = new Map<string, string>([[cmd.projectsDir, "a Claude projects directory"]]);
+    if (cmd.archiveDir !== undefined) storage.set(cmd.archiveDir, "an archive directory");
+    for (const root of cmd.roots ?? []) {
+      storage.set(root.projectDir, "a Claude projects directory");
+      if (root.archiveDir !== null) storage.set(root.archiveDir, "an archive directory");
+    }
+    for (const [dir, what] of storage) {
+      const real = await resolveTarget(dir);
+      if (insideDir(target, real)) {
+        console.error(`lgtm-review: --out ${out} resolves to ${target}, inside ${real} (${what}); refusing to write there; choose another --out`);
         return 1;
       }
     }
