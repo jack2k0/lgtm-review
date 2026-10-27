@@ -1,4 +1,4 @@
-import { inheritedSource } from "@lgtm/core";
+import { SHELL_EDIT_FILE, inheritedSource } from "@lgtm/core";
 import type { Hint, PromptAnalysis, Recommendation, SessionSummary, Severity, Status, Step, StepCheck, TimeSplit } from "@lgtm/core";
 
 export const PROMPT_PAGE = 500;
@@ -431,8 +431,8 @@ export function rulesByPath(hints: readonly Hint[]): Map<string, string[]> {
 /** Shown instead of a path for prompt-level hints. */
 export const PROMPT_LEVEL = "(whole prompt)";
 
-/** Synthetic target for unparseable shell mutations (mirrors core SHELL_EDIT_FILE). */
-export const SHELL_EDIT_FILE = "(shell edit)";
+/** Synthetic target for unparseable shell mutations; it has no diff. */
+export { SHELL_EDIT_FILE };
 
 /**
  * Expanded rows / step lists are keyed by prompt index / step number, which are append-only within a session
