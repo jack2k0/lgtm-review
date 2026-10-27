@@ -78,29 +78,29 @@ export async function sessionRoots(
   opts: { worktrees: boolean },
   list: typeof listWorktrees = listWorktrees,
 ): Promise<SessionRoot[]> {
-  const mk = (d: string, worktree: string): SessionRoot => {
-    const projectDir = projectDirFor(d, projectsDir);
-    return { dir: d, worktree, projectDir, archiveDir: archiveRoot === null ? null : archiveDirFor(projectDir, archiveRoot) };
-  };
-  const single = [mk(dir, ".")];
-  if (!opts.worktrees) return single;
-  const res = await list(dir);
-  if (res === null || res.main === null || res.worktrees.length <= 1) return single;
-  const main = res.main;
-
   let real = dir;
   try {
     real = realpathSync(dir);
   } catch {
     // keep dir
   }
+  const mk = (d: string, worktree: string, pdirTarget: string = d): SessionRoot => {
+    const projectDir = projectDirFor(pdirTarget, projectsDir);
+    return { dir: d, worktree, projectDir, archiveDir: archiveRoot === null ? null : archiveDirFor(projectDir, archiveRoot) };
+  };
+  const single = [mk(dir, ".", real)];
+  if (!opts.worktrees) return single;
+  const res = await list(dir);
+  if (res === null || res.main === null || res.worktrees.length <= 1) return single;
+  const main = res.main;
+
   let own: Worktree | null = null;
   for (const w of res.worktrees) {
     if (real === w.path || real.startsWith(w.path.endsWith("/") ? w.path : w.path + "/")) {
       if (own === null || w.path.length > own.path.length) own = w;
     }
   }
-  const roots = [mk(dir, own === null ? "." : labelFor(main, own.path))];
+  const roots = [mk(dir, own === null ? "." : labelFor(main, own.path), real)];
   for (const w of res.worktrees) {
     if (w === own) continue;
     roots.push(mk(w.path, labelFor(main, w.path)));

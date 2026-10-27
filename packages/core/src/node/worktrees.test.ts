@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { discoverRootSessions, type SessionRoot } from "./discover.js";
+import { discoverRootSessions, projectDirFor, type SessionRoot } from "./discover.js";
 import { listWorktrees, parseWorktreeList, sessionRoots } from "./worktrees.js";
 
 const tmp = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-wt-")));
@@ -92,6 +92,17 @@ describe("sessionRoots", () => {
       worktrees: [{ path: main, branch: null }, { path: nested, branch: null }],
     }));
     expect(r[1]?.worktree).toBe(".claude/worktrees/x");
+  });
+  it("derives roots[0] project dir from realpath of symlinked repo dir", async () => {
+    const realRepo = join(tmp, "real-symlink-repo");
+    const symlinkRepo = join(tmp, "symlink-to-repo");
+    mkdirSync(realRepo, { recursive: true });
+    symlinkSync(realRepo, symlinkRepo);
+    const r = await sessionRoots(symlinkRepo, pd, null, { worktrees: false });
+    expect(r).toHaveLength(1);
+    expect(r[0]?.dir).toBe(symlinkRepo);
+    expect(r[0]?.projectDir).toBe(projectDirFor(realRepo, pd));
+    expect(r[0]?.projectDir).not.toBe(projectDirFor(symlinkRepo, pd));
   });
 });
 
