@@ -376,7 +376,7 @@ describe("GET /api/sessions/:id/map", () => {
       sessionLines.push(rec("user", newRepo, { message: { role: "user", content: text } }));
       for (const e of edits) {
         const id = `toolu_ne_${++t}`;
-        const filePath = join(newRepo, e.file);
+        const filePath = e.file.startsWith("/") ? e.file : join(newRepo, e.file);
         if (e.isCreate) {
           sessionLines.push(
             rec("assistant", newRepo, {
@@ -416,6 +416,10 @@ describe("GET /api/sessions/:id/map", () => {
     addPrompt("create file", [{ file: "src/newfile.ts", isCreate: true, content: 'import { b } from "./b";\n' }]);
     // Prompt 3: python file adds import
     addPrompt("python import", [{ file: "shop/views.py", patchLines: ["-def v():", "+from .models import M", "+def v():"] }]);
+    // Prompt 4: rewritten/reformatted existing import in src/a.ts (not a new edge)
+    addPrompt("reformat import", [{ file: "src/a.ts", patchLines: ['-import { b } from "./b";', '+import { b as bAlias } from "./b";'] }]);
+    // Prompt 5: external file only outside --dir without checks -> not playable
+    addPrompt("external edit only", [{ file: join(tmp, "outside/scratch.txt"), patchLines: ["-x", "+y"] }]);
 
     writeFileSync(join(projectDir(root, newRepo), "new-edge-session.jsonl"), sessionLines.join("\n") + "\n");
     const newSrv = await startServer({ dir: newRepo, projectsDir: join(root, "projects"), webRoot: join(tmp, "no-web") });
@@ -449,6 +453,17 @@ describe("GET /api/sessions/:id/map", () => {
       expect(p3.status).toBe(200);
       const e3 = p3.json.edges.find((e: any) => e.from === "shop/views.py" && e.to === "shop/models.py");
       expect(e3?.new).toBe(true);
+
+      // Prompt 4: reformatted existing import -> not new
+      const p4 = await get(newSrv, "/api/sessions/new-edge-session/map?prompt=4");
+      expect(p4.status).toBe(200);
+      const e4_ab = p4.json.edges.find((e: any) => e.from === "src/a.ts" && e.to === "src/b.ts");
+      expect(e4_ab?.new).toBeUndefined();
+
+      // Prompt 5: external file outside --dir without check -> playable is false
+      const p5 = await get(newSrv, "/api/sessions/new-edge-session/map?prompt=5");
+      expect(p5.status).toBe(200);
+      expect(p5.json.playable).toBe(false);
 
       // Session map: prompt is null, playable is omitted, union of new edges
       const s = await get(newSrv, "/api/sessions/new-edge-session/map");

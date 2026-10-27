@@ -393,7 +393,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
         sessionId: file.id,
         prompt: index,
         beats,
-        truncated,
+        truncated: truncated || Boolean(promptDetail.truncated),
       };
       hit = { key: playKey, body };
       playCache.delete(slot);
