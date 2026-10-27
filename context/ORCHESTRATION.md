@@ -67,6 +67,8 @@ brak
 
 - 2026-10-27 (cd. 2): kolejne przeglądy read-only. --summary (Agy): bez uwag. Discovery (Agy): nazwa katalogu projektu jak w Claude Code 2.1.311 (`[^a-zA-Z0-9]`->`-`, >200 znaków z hashem; repo z `_`/spacją/unicode miały 0 sesji), realpath repo, pomijanie dotfile'i i pustych plików — merge 3e02847, 4f14132 (Medium). Mapa (OpenCode): fingerprint obejmuje pyproject/setup/manage.py, liniowe numery linii, paths z rozszerzanego tsconfig — daa474c (Medium). Play (Agy): fałszywe 'now imports' przy przeformatowaniu, obcięcie kroków w /play, Play bez plików w --dir — High, recenzja Opus + Sonnet. Czytanie logów (Agy): 0 wystąpień formatów na real logs, odłożone. OpenCode: zgubił kontekst raz (pytanie blokowało prompt; Esc przez `herdr pane send-keys`), limit do 28.10 01:00. Nie wypchnięte.
 
+- 2026-10-27 (cd. 3): archiwum (Agy, 8 uwag: 7 przyjętych, 3 odrzucona — brak archiwów pod starą nazwą, narzędzie nieopublikowane, właściciel bez archiwum): czytana jest dłuższa kopia (archiwum vs uszkodzony żywy log), archiwa dla nazw >200 znaków, tylko pliki agent-*.jsonl/meta.json, pominięcia jak w discovery, realpath wszystkich worktree. High, recenzja Opus + Sonnet. Nie wypchnięte.
+
 ## Bramki
 - Npm publish: czeka na decyzję właściciela.
 
