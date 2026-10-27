@@ -67,10 +67,23 @@ export function cleanSpecifier(raw: string): string {
   return (cut === -1 ? s : s.slice(0, cut)).trim();
 }
 
-function lineAt(source: string, index: number): number {
-  let line = 1;
-  for (let i = 0; i < index; i++) if (source.charCodeAt(i) === 10) line++;
-  return line;
+function computeLineStarts(source: string): number[] {
+  const starts = [0];
+  for (let i = 0; i < source.length; i++) {
+    if (source.charCodeAt(i) === 10) starts.push(i + 1);
+  }
+  return starts;
+}
+
+function lineAtOffset(lineStarts: readonly number[], offset: number): number {
+  let low = 0;
+  let high = lineStarts.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (lineStarts[mid]! <= offset) low = mid + 1;
+    else high = mid - 1;
+  }
+  return low;
 }
 
 interface Match {
@@ -106,7 +119,8 @@ export function extractImports(source: string): ExtractedImport[] {
   collect(source, DYNAMIC_IMPORT_RE, 2, "dynamic-import", undefined, matches);
   collect(source, REQUIRE_RE, 2, "require", undefined, matches);
   matches.sort((a, b) => a.index - b.index);
-  return matches.map((m) => ({ specifier: m.specifier, syntax: m.syntax, line: lineAt(source, m.index) }));
+  const lineStarts = computeLineStarts(source);
+  return matches.map((m) => ({ specifier: m.specifier, syntax: m.syntax, line: lineAtOffset(lineStarts, m.index) }));
 }
 
 // --- paths (posix, node-free) -----------------------------------------------------------------
@@ -221,7 +235,12 @@ function baseUrlOf(config: Record<string, unknown>, configDir: string): string |
   return base === "." ? "" : base;
 }
 
-function aliasesOf(config: Record<string, unknown>, baseUrl: string | null): TsconfigAlias[] {
+/**
+ * `compilerOptions.paths` of one config, resolved against `targetBase` — the config's `baseUrl` when set,
+ * else the directory of the config that declares them (TypeScript resolves `paths` without a `baseUrl`
+ * relative to the declaring file, so a base config in a subdirectory anchors its own targets there).
+ */
+function aliasesOf(config: Record<string, unknown>, targetBase: string | null): TsconfigAlias[] {
   const co = config["compilerOptions"];
   if (!isObj(co)) return [];
   const paths = co["paths"];
@@ -232,7 +251,7 @@ function aliasesOf(config: Record<string, unknown>, baseUrl: string | null): Tsc
     const targets: string[] = [];
     for (const t of value) {
       if (typeof t !== "string" || t === "" || starCount(t) > 1) continue;
-      const normalized = baseUrl === null ? normalizeTarget(t) : normalizePath(joinPath(baseUrl, normalizeTarget(t)));
+      const normalized = targetBase === null ? normalizeTarget(t) : normalizePath(joinPath(targetBase, normalizeTarget(t)));
       if (insideRoot(normalized)) targets.push(normalized);
     }
     if (targets.length > 0) out.push({ pattern, targets });
@@ -245,7 +264,8 @@ function configFile(path: string): string {
 }
 
 /**
- * Loads `compilerOptions.paths` (targets relative to `baseUrl` when set) from `<root>/tsconfig.base.json` and `<root>/tsconfig.json`
+ * Loads `compilerOptions.paths` (each path relative to that config's `baseUrl` when set, else to the
+ * directory of the config declaring it) from `<root>/tsconfig.base.json` and `<root>/tsconfig.json`
  * (one `extends` level, JSON-with-comments tolerated). Any unreadable or malformed file is ignored.
  * A `baseUrl` also yields a trailing catch-all `*` alias so bare specifiers resolve under it (TypeScript
  * behaviour); the resolver only accepts it when the file exists, otherwise the import stays external.
@@ -266,9 +286,10 @@ export function loadTsconfigAliases(root: string, host: MapHost): TsconfigAlias[
     if (typeof parent === "string" && parent !== "") {
       add(configFile(normalizePath(joinPath(root, parent))), depth + 1);
     }
-    const baseUrl = baseUrlOf(config, dirOf(configPath));
+    const configDir = dirOf(configPath);
+    const baseUrl = baseUrlOf(config, configDir);
     if (baseUrl !== null) baseFallback = baseUrl;
-    for (const alias of aliasesOf(config, baseUrl)) byPattern.set(alias.pattern, alias);
+    for (const alias of aliasesOf(config, baseUrl === null ? configDir : baseUrl)) byPattern.set(alias.pattern, alias);
   };
 
   add(configFile(normalizePath(joinPath(root, "tsconfig.base.json"))), 0);

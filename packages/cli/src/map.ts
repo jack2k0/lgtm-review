@@ -199,6 +199,7 @@ export async function planImportMap(
   // Candidate scan (incoming edges) and Python roots (D4, A5).
   let candidates: string[] = [];
   let manageDirs: string[] = [];
+  let projectDirs: string[] = [];
   let pyRoots: string[] = [""];
   let hasSrc = false;
   const listed = await listFiles(dir);
@@ -206,7 +207,6 @@ export async function planImportMap(
     notes.push("Neighbour scan unavailable (git ls-files failed): showing outgoing imports only.");
   } else {
     const rawFiles = listed.map((p) => p.replaceAll("\\", "/"));
-    let projectDirs: string[] = [];
     const srcLayoutDirs = new Set<string>();
     for (const p of rawFiles) {
       if (p.endsWith("/manage.py") && !p.split("/").some((seg) => SKIP_DIRS.has(seg))) {
@@ -271,6 +271,16 @@ export async function planImportMap(
   // tsconfig and workspace manifests feed the resolver
   const manifests = (listed ?? []).filter((p) => /^(?:[^/]+\/){1,2}package\.json$/.test(p.replaceAll("\\", "/"))).sort();
   for (const p of ["tsconfig.json", "tsconfig.base.json", "package.json", "pnpm-workspace.yaml", ...manifests]) {
+    const st = safeStat(p);
+    fp.update(`${p}:${st === null ? "-" : `${st.mtimeMs}:${st.size}`}\0`);
+  }
+  // Files that steer Python import-root discovery: one manage.py per Django project dir, one project
+  // marker per nested project dir (same fingerprint stat rule as the other scanned files).
+  const pySteering = [
+    ...manageDirs.map((d) => `${d}/manage.py`),
+    ...projectDirs.flatMap((d) => [...PROJECT_FILES].map((f) => `${d}/${f}`)),
+  ].sort();
+  for (const p of pySteering) {
     const st = safeStat(p);
     fp.update(`${p}:${st === null ? "-" : `${st.mtimeMs}:${st.size}`}\0`);
   }
