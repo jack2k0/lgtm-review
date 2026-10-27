@@ -246,6 +246,25 @@ describe("discoverAllSessions", () => {
       expect(found[0].id).toBe("old-sess");
       expect(found[0].archived).toBe(true);
     }));
+
+  test("skips dotfiles and 0-byte files in live and archive directories", () =>
+    withTmp(async (dir) => {
+      const liveDir = join(dir, "live");
+      const archiveDir = join(dir, "archive");
+      mkdirSync(liveDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
+
+      writeFileSync(join(liveDir, "empty-live.jsonl"), "");
+      writeFileSync(join(liveDir, ".dot-live.jsonl"), "content");
+      writeFileSync(join(liveDir, "valid-live.jsonl"), "content");
+
+      writeFileSync(join(archiveDir, "empty-arch.jsonl"), "");
+      writeFileSync(join(archiveDir, ".dot-arch.jsonl"), "content");
+      writeFileSync(join(archiveDir, "valid-arch.jsonl"), "content");
+
+      const found = await discoverAllSessions(liveDir, archiveDir);
+      expect(found.map((f) => f.id).sort()).toEqual(["valid-arch", "valid-live"]);
+    }));
 });
 
 describe("archiveSessions safety", () => {

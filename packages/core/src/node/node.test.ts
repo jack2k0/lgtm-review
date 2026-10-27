@@ -16,13 +16,61 @@ describe("projectDirFor", () => {
   test("replaces / and . with -", () => {
     expect(projectDirFor("/home/user/my.repo", "/p")).toBe("/p/-home-user-my-repo");
   });
+
+  test("replaces underscore in path", () => {
+    expect(projectDirFor("/home/user/my_repo", "/p")).toBe("/p/-home-user-my-repo");
+  });
+
+  test("replaces space in path", () => {
+    expect(projectDirFor("/home/user/my repo", "/p")).toBe("/p/-home-user-my-repo");
+  });
+
+  test("replaces unicode characters in path", () => {
+    expect(projectDirFor("/home/user/café", "/p")).toBe("/p/-home-user-caf-");
+  });
+
+  test("replaces + in path", () => {
+    expect(projectDirFor("/home/user/repo+extra", "/p")).toBe("/p/-home-user-repo-extra");
+  });
+
+  test("strips trailing slash but keeps root slash", () => {
+    expect(projectDirFor("/home/user/repo/", "/p")).toBe("/p/-home-user-repo");
+    expect(projectDirFor("/", "/p")).toBe("/p/-");
+  });
+
+  test("path longer than 200 chars matches unique prefix in projectsDir", () =>
+    withTmp((pdir) => {
+      const longPath = "/home/user/" + "a".repeat(250);
+      const sanitized = longPath.replace(/[^a-zA-Z0-9]/g, "-");
+      const prefix = sanitized.slice(0, 200);
+      mkdirSync(join(pdir, `${prefix}-hash123`));
+      expect(projectDirFor(longPath, pdir)).toBe(join(pdir, `${prefix}-hash123`));
+    }));
+
+  test("path longer than 200 chars falls back when no matching dir exists", () =>
+    withTmp((pdir) => {
+      const longPath = "/home/user/" + "a".repeat(250);
+      const sanitized = longPath.replace(/[^a-zA-Z0-9]/g, "-");
+      const prefix = sanitized.slice(0, 200);
+      expect(projectDirFor(longPath, pdir)).toBe(join(pdir, prefix));
+    }));
+
+  test("path longer than 200 chars falls back when two matching dirs exist", () =>
+    withTmp((pdir) => {
+      const longPath = "/home/user/" + "a".repeat(250);
+      const sanitized = longPath.replace(/[^a-zA-Z0-9]/g, "-");
+      const prefix = sanitized.slice(0, 200);
+      mkdirSync(join(pdir, `${prefix}-hash1`));
+      mkdirSync(join(pdir, `${prefix}-hash2`));
+      expect(projectDirFor(longPath, pdir)).toBe(join(pdir, prefix));
+    }));
 });
 
 describe("discoverSessions", () => {
   test("newest first, only top-level jsonl", () =>
     withTmp(async (dir) => {
-      writeFileSync(join(dir, "old.jsonl"), "");
-      writeFileSync(join(dir, "new.jsonl"), "");
+      writeFileSync(join(dir, "old.jsonl"), "old");
+      writeFileSync(join(dir, "new.jsonl"), "new");
       writeFileSync(join(dir, "notes.txt"), "");
       mkdirSync(join(dir, "old", "subagents"), { recursive: true });
       writeFileSync(join(dir, "old", "subagents", "agent-1.jsonl"), "");
@@ -30,6 +78,16 @@ describe("discoverSessions", () => {
       utimesSync(join(dir, "new.jsonl"), 2000, 2000);
       const found = await discoverSessions(dir);
       expect(found.map((f) => f.id)).toEqual(["new", "old"]);
+    }));
+
+  test("skips dotfiles and 0-byte files", () =>
+    withTmp(async (dir) => {
+      writeFileSync(join(dir, "empty.jsonl"), "");
+      writeFileSync(join(dir, ".temp.jsonl"), "data");
+      writeFileSync(join(dir, ".jsonl"), "data");
+      writeFileSync(join(dir, "valid.jsonl"), "valid");
+      const found = await discoverSessions(dir);
+      expect(found.map((f) => f.id)).toEqual(["valid"]);
     }));
 
   test("missing dir rejects", async () => {

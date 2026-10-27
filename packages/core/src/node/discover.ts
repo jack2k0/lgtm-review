@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -30,24 +31,47 @@ export function defaultProjectsDir(): string {
   return join(homedir(), ".claude", "projects");
 }
 
-/** Claude Code names a project dir after the cwd with `/` and `.` replaced by `-`. */
+/**
+ * Claude Code names a project dir after the cwd with trailing slashes stripped (keeping `/` itself)
+ * and every non-alphanumeric character replaced by `-`.
+ * When longer than 200 characters, Claude Code appends a hash (`name.slice(0, 200) + '-' + hash`);
+ * if a single entry in `projectsDir` matches `name.slice(0, 200) + '-'`, it is used; otherwise,
+ * `name.slice(0, 200)` is returned so no wrong session is read.
+ */
 export function projectDirFor(cwd: string, projectsDir: string = defaultProjectsDir()): string {
-  return join(projectsDir, cwd.replace(/[/.]/g, "-"));
+  const stripped = cwd.replace(/[/\\]+$/, "");
+  const clean = stripped === "" && cwd !== "" ? "/" : stripped;
+  const name = clean.replace(/[^a-zA-Z0-9]/g, "-");
+  if (name.length <= 200) {
+    return join(projectsDir, name);
+  }
+  const prefix = name.slice(0, 200) + "-";
+  let matches: string[] = [];
+  try {
+    matches = readdirSync(projectsDir).filter((e) => e.startsWith(prefix));
+  } catch {
+    // projectsDir missing or unreadable
+  }
+  if (matches.length === 1) {
+    return join(projectsDir, matches[0]!);
+  }
+  return join(projectsDir, name.slice(0, 200));
 }
 
 /**
- * `*.jsonl` files directly in the project dir (subagent transcripts live deeper and are not read),
- * newest first. Unreadable entries are skipped and described in `warnings` when given.
- * Throws if the directory itself cannot be read.
+ * Non-empty `*.jsonl` files directly in the project dir (subagent transcripts live deeper and are not read;
+ * dotfiles and 0-byte files are skipped), newest first. Unreadable entries are skipped and described in
+ * `warnings` when given. Throws if the directory itself cannot be read.
  */
 export async function discoverSessions(dir: string, warnings?: string[]): Promise<SessionFile[]> {
   const entries = await readdir(dir, { withFileTypes: true });
   const out: SessionFile[] = [];
   for (const e of entries) {
-    if (!e.isFile() || !e.name.endsWith(".jsonl")) continue;
+    if (!e.isFile() || e.name.startsWith(".") || !e.name.endsWith(".jsonl")) continue;
     const path = join(dir, e.name);
     try {
       const st = await stat(path);
+      if (st.size === 0) continue;
       out.push({ path, id: e.name.slice(0, -".jsonl".length), mtimeMs: st.mtimeMs });
     } catch (err) {
       warnings?.push(`${e.name}: unreadable (${err instanceof Error ? err.message : "error"})`);
