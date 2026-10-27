@@ -369,4 +369,49 @@ describe("buildBeats", () => {
     expect(beats[0]!.n).toBe(1);
     expect(beats[59]!.n).toBe(60);
   });
+
+  test("strips ANSI CSI and OSC escape sequences from check failure excerpts", () => {
+    const steps: Step[] = [
+      makeStep({
+        n: 1,
+        phase: "check",
+        check: {
+          command: "vitest run",
+          exitCode: 1,
+          passed: false,
+          excerpt: "\u001b[31mFAIL\u001b[39m \u001b]0;title\u0007src/test.ts",
+        },
+      }),
+    ];
+    const map = makeMap([{ path: "src/a.ts", changed: true }]);
+    const { beats } = buildBeats({ steps, diffs: new Map(), map });
+    expect(beats).toHaveLength(1);
+    expect(beats[0]!.detail).toBe("FAIL src/test.ts");
+  });
+
+  test("disambiguates import-added targets against all names shown in prompt beats", () => {
+    const diffs = new Map([
+      ["src/a.ts", makeDiff("src/a.ts", "M", 1, 0)],
+      ["src/b.ts", makeDiff("src/b.ts", "M", 1, 0)],
+    ]);
+    const steps: Step[] = [
+      makeStep({ n: 1, phase: "write", files: ["src/a.ts", "src/b.ts"] }),
+    ];
+    const map = makeMap(
+      [
+        { path: "src/a.ts", changed: true },
+        { path: "src/b.ts", changed: true },
+        { path: "packages/core/src/types.ts" },
+        { path: "packages/web/src/types.ts" },
+      ],
+      [
+        { from: "src/a.ts", to: "packages/core/src/types.ts", new: true },
+        { from: "src/b.ts", to: "packages/web/src/types.ts", new: true },
+      ],
+    );
+    const { beats } = buildBeats({ steps, diffs, map });
+    expect(beats).toHaveLength(4);
+    expect(beats[1]!.text).toBe("a.ts now imports packages/core/src/types.ts");
+    expect(beats[3]!.text).toBe("b.ts now imports packages/web/src/types.ts");
+  });
 });
