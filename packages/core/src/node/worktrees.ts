@@ -78,12 +78,14 @@ export async function sessionRoots(
   opts: { worktrees: boolean },
   list: typeof listWorktrees = listWorktrees,
 ): Promise<SessionRoot[]> {
-  let real = dir;
-  try {
-    real = realpathSync(dir);
-  } catch {
-    // keep dir
-  }
+  const realOf = (p: string): string => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return p;
+    }
+  };
+  const real = realOf(dir);
   const mk = (d: string, worktree: string, pdirTarget: string = d): SessionRoot => {
     const projectDir = projectDirFor(pdirTarget, projectsDir);
     return { dir: d, worktree, projectDir, archiveDir: archiveRoot === null ? null : archiveDirFor(projectDir, archiveRoot) };
@@ -103,7 +105,7 @@ export async function sessionRoots(
   const roots = [mk(dir, own === null ? "." : labelFor(main, own.path), real)];
   for (const w of res.worktrees) {
     if (w === own) continue;
-    roots.push(mk(w.path, labelFor(main, w.path)));
+    roots.push(mk(w.path, labelFor(main, w.path), realOf(w.path)));
   }
   return roots;
 }

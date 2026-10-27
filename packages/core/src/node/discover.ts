@@ -9,6 +9,8 @@ export interface SessionFile {
   /** File name without ".jsonl". */
   id: string;
   mtimeMs: number;
+  /** File size in bytes. */
+  size?: number;
   /** True only when the session was discovered from the local archive. */
   archived?: true;
   /** Directory of the root the session was found under. */
@@ -72,7 +74,7 @@ export async function discoverSessions(dir: string, warnings?: string[]): Promis
     try {
       const st = await stat(path);
       if (st.size === 0) continue;
-      out.push({ path, id: e.name.slice(0, -".jsonl".length), mtimeMs: st.mtimeMs });
+      out.push({ path, id: e.name.slice(0, -".jsonl".length), mtimeMs: st.mtimeMs, size: st.size });
     } catch (err) {
       warnings?.push(`${e.name}: unreadable (${err instanceof Error ? err.message : "error"})`);
     }
@@ -84,7 +86,9 @@ export async function discoverSessions(dir: string, warnings?: string[]): Promis
  * Discovers all sessions by merging live sessions from `projectDir` with archived sessions
  * from `archiveDir` (when provided).
  *
- * - A session present in the live project dir is read from live (live wins; archive entry dropped).
+ * - When a session is present in both: if the archived copy is larger than the live copy,
+ *   the archived copy is used with `archived: true` (a shorter live log is considered damaged);
+ *   otherwise the live copy wins.
  * - A session present only in the archive is returned with `archived: true`.
  * - If `projectDir` is missing (ENOENT) but `archiveDir` exists, returns the archived sessions without throwing.
  * - If both directories are missing, throws the ENOENT for `projectDir` (identical to `discoverSessions`).
@@ -123,13 +127,31 @@ export async function discoverAllSessions(
     }
   }
 
-  const liveIds = new Set(liveFiles.map((f) => f.id));
-  const archivedOnly = archiveFiles
-    .filter((f) => !liveIds.has(f.id))
-    .map((f) => ({ ...f, archived: true as const }));
+  const archiveMap = new Map<string, SessionFile>();
+  for (const f of archiveFiles) {
+    archiveMap.set(f.id, f);
+  }
 
-  const combined = [...liveFiles, ...archivedOnly];
-  return combined.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const resultFiles: SessionFile[] = [];
+  const processedIds = new Set<string>();
+
+  for (const live of liveFiles) {
+    processedIds.add(live.id);
+    const arch = archiveMap.get(live.id);
+    if (arch !== undefined && (arch.size ?? 0) > (live.size ?? 0)) {
+      resultFiles.push({ ...arch, archived: true as const });
+    } else {
+      resultFiles.push(live);
+    }
+  }
+
+  for (const arch of archiveFiles) {
+    if (!processedIds.has(arch.id)) {
+      resultFiles.push({ ...arch, archived: true as const });
+    }
+  }
+
+  return resultFiles.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /** Sessions of every root: live and archived (`discoverAllSessions` per root), tagged with `root`; a live session wins over an archived one of the same id in any root, otherwise an id seen in an earlier root wins; newest first like `discoverSessions`. */
