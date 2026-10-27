@@ -125,7 +125,9 @@ export function PlayView({ sessionId, map, play, initialBeat = 1, initialPlaying
   // Keyboard navigation: ←/→ prev/next, Space play/pause, Escape done
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      handlePlayKey(e, dispatch, onDone);
+      if (handlePlayKey(e, dispatch, onDone)) {
+        e.preventDefault();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

@@ -76,9 +76,9 @@ export function GitView({
         <table>
           <thead>
             <tr>
-              <th>Path</th>
-              <th>Where</th>
-              <th>Status</th>
+              <th scope="col">Path</th>
+              <th scope="col">Where</th>
+              <th scope="col">Status</th>
             </tr>
           </thead>
           <tbody>

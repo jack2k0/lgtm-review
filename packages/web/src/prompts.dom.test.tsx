@@ -125,4 +125,22 @@ describe("prompt table triage", () => {
     await press("Escape", {}, document.body);
     expect(window.location.hash).toBe("#/?show=attention&worktree=X");
   });
+
+  test("FileList renders SHELL_EDIT_FILE as plain text without a diff link", async () => {
+    const s = makeSession([
+      makePrompt(0, { files: [{ path: "(shell edit)", kind: "M", added: 1, removed: 0, maybeIncomplete: true }] }),
+    ]);
+    const c = await mount(<PromptTable session={s} />);
+    await click(c.querySelector("button.rowbtn")!);
+    const fileItem = c.querySelector(".files li")!;
+    expect(fileItem.textContent).toContain("(shell edit)");
+    expect(fileItem.querySelector("a")).toBeNull();
+  });
+
+  test("whitespace-only prompt button displays (empty prompt)", async () => {
+    const s = makeSession([makePrompt(0, { text: "   \n\t  " })]);
+    const c = await mount(<PromptTable session={s} />);
+    const btnText = c.querySelector("button.rowbtn .text");
+    expect(btnText?.textContent).toBe("(empty prompt)");
+  });
 });

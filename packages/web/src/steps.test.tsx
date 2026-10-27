@@ -85,4 +85,18 @@ describe("StepsView markup", () => {
     expect(renderToStaticMarkup(<StepsView sessionId="s" detail={detail()} />)).toContain("disabled");
     expect(renderToStaticMarkup(<StepsView sessionId="s" detail={detail()} onOpenFile={() => {}} />)).not.toContain("disabled");
   });
+  test("SHELL_EDIT_FILE file chip is disabled in StepCard even when onOpenFile is provided", () => {
+    const s = {
+      n: 1,
+      phase: "write" as const,
+      title: "edit",
+      startedAt: null,
+      durationMs: 100,
+      quotes: [],
+      actions: [],
+      files: ["(shell edit)", "src/a.ts"],
+    };
+    const html = renderToStaticMarkup(<StepCard step={s} open={false} onToggle={() => {}} onOpenFile={() => {}} />);
+    expect(html).toContain('disabled="" title="Diff not available for shell edits">(shell edit)</button>');
+  });
 });

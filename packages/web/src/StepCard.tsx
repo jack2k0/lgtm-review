@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Step } from "@lgtm/core";
-import { actionsLabel, checkOutcome, formatClock, formatStepDuration, phaseLabel, stepTitle } from "./viewmodel";
+import { SHELL_EDIT_FILE, actionsLabel, checkOutcome, formatClock, formatStepDuration, phaseLabel, stepTitle } from "./viewmodel";
 
 /** Raw action rows rendered per click; a step can hold thousands of calls. */
 export const ACTION_PAGE = 200;
@@ -35,19 +35,22 @@ export function StepCard({ step, open, onToggle, onOpenFile, pathLabel }: { step
       ) : null}
       {step.files.length > 0 ? (
         <ul className="chips" aria-label="Files edited in this step">
-          {step.files.map((f) => (
-            <li key={f}>
-              <button
-                type="button"
-                className="chip mono"
-                disabled={!onOpenFile}
-                title={onOpenFile ? `Open diff of ${f}` : "The diff view is not available yet"}
-                onClick={() => onOpenFile?.(f)}
-              >
-                {pathLabel ? pathLabel(f) : f}
-              </button>
-            </li>
-          ))}
+          {step.files.map((f) => {
+            const isShellEdit = f === SHELL_EDIT_FILE;
+            return (
+              <li key={f}>
+                <button
+                  type="button"
+                  className="chip mono"
+                  disabled={!onOpenFile || isShellEdit}
+                  title={isShellEdit ? "Diff not available for shell edits" : onOpenFile ? `Open diff of ${f}` : "The diff view is not available yet"}
+                  onClick={isShellEdit ? undefined : () => onOpenFile?.(f)}
+                >
+                  {pathLabel ? pathLabel(f) : f}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       {step.actions.length > 0 ? (

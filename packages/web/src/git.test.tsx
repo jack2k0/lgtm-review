@@ -110,4 +110,14 @@ describe("GitView", () => {
     await click(btn!);
     expect(clicked).toBe(true);
   });
+
+  test("table headers have scope=col for accessibility", () => {
+    const data = makeGit({
+      uncommitted: [{ path: "uncommitted.txt", status: "M", inLog: false }],
+    });
+    const html = renderToStaticMarkup(<GitView data={data} />);
+    expect(html).toContain('<th scope="col">Path</th>');
+    expect(html).toContain('<th scope="col">Where</th>');
+    expect(html).toContain('<th scope="col">Status</th>');
+  });
 });
