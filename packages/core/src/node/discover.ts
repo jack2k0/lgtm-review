@@ -91,6 +91,8 @@ export async function discoverSessions(dir: string, warnings?: string[]): Promis
  *   otherwise the live copy wins.
  * - A session present only in the archive is returned with `archived: true`.
  * - If `projectDir` is missing (ENOENT) but `archiveDir` exists, returns the archived sessions without throwing.
+ * - If `projectDir` is unreadable (e.g. EACCES) but `archiveDir` exists, returns the archived sessions and
+ *   records a warning; with no archive, throws.
  * - If both directories are missing, throws the ENOENT for `projectDir` (identical to `discoverSessions`).
  * - Sorted newest first by mtime, then by id.
  */
@@ -121,6 +123,11 @@ export async function discoverAllSessions(
       if (!archiveExists) {
         throw err;
       }
+      liveFiles = [];
+    } else if (archiveExists) {
+      warnings?.push(
+        `${projectDir}: unreadable (${err instanceof Error ? err.message : "error"}), showing archived sessions only`,
+      );
       liveFiles = [];
     } else {
       throw err;
@@ -154,7 +161,7 @@ export async function discoverAllSessions(
   return resultFiles.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-/** Sessions of every root: live and archived (`discoverAllSessions` per root), tagged with `root`; a live session wins over an archived one of the same id in any root, otherwise an id seen in an earlier root wins; newest first like `discoverSessions`. */
+/** Sessions of every root: live and archived (`discoverAllSessions` per root), tagged with `root`; for one id, the larger copy wins (`size`), on equal size a live copy beats an archived one, otherwise an id seen in an earlier root wins; newest first like `discoverSessions`. */
 export async function discoverRootSessions(
   roots: readonly SessionRoot[],
   warnings?: string[],
@@ -172,7 +179,18 @@ export async function discoverRootSessions(
     }
     for (const f of files) {
       const prev = byId.get(f.id);
-      if (prev && !(prev.archived && !f.archived)) continue;
+      if (prev) {
+        const prevSize = prev.size ?? 0;
+        const fSize = f.size ?? 0;
+        if (fSize > prevSize) {
+          // larger copy wins
+        } else if (fSize === prevSize && prev.archived && !f.archived) {
+          // on equal size, live beats archived
+        } else {
+          // prev is larger, or equal size and earlier root wins
+          continue;
+        }
+      }
       byId.set(f.id, { ...f, root: root.dir, worktree: root.worktree });
     }
   }
