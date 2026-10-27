@@ -59,18 +59,19 @@ export function projectDirFor(cwd: string, projectsDir: string = defaultProjects
 }
 
 /**
- * `*.jsonl` files directly in the project dir (subagent transcripts live deeper and are not read),
- * newest first. Unreadable entries are skipped and described in `warnings` when given.
- * Throws if the directory itself cannot be read.
+ * Non-empty `*.jsonl` files directly in the project dir (subagent transcripts live deeper and are not read;
+ * dotfiles and 0-byte files are skipped), newest first. Unreadable entries are skipped and described in
+ * `warnings` when given. Throws if the directory itself cannot be read.
  */
 export async function discoverSessions(dir: string, warnings?: string[]): Promise<SessionFile[]> {
   const entries = await readdir(dir, { withFileTypes: true });
   const out: SessionFile[] = [];
   for (const e of entries) {
-    if (!e.isFile() || !e.name.endsWith(".jsonl")) continue;
+    if (!e.isFile() || e.name.startsWith(".") || !e.name.endsWith(".jsonl")) continue;
     const path = join(dir, e.name);
     try {
       const st = await stat(path);
+      if (st.size === 0) continue;
       out.push({ path, id: e.name.slice(0, -".jsonl".length), mtimeMs: st.mtimeMs });
     } catch (err) {
       warnings?.push(`${e.name}: unreadable (${err instanceof Error ? err.message : "error"})`);
