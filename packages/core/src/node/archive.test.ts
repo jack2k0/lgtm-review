@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { lstat, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,6 +33,22 @@ describe("archiveDirFor", () => {
       "/home/user/.lgtm-review/archive/-home-user-repo",
     );
   });
+
+  test("finds hashed archive dir for >200 char repo path when live projectDir is gone", () =>
+    withTmp(async (dir) => {
+      const archiveRoot = join(dir, "archiveRoot");
+      mkdirSync(archiveRoot, { recursive: true });
+
+      const longPrefix = "a".repeat(200);
+      const hashedName = `${longPrefix}-hash9876`;
+      mkdirSync(join(archiveRoot, hashedName));
+      writeFileSync(join(archiveRoot, hashedName, "s.jsonl"), "{}\n");
+
+      // projectDir does not exist, name is 200 chars prefix
+      const nonExistentLive = join(dir, "projects", longPrefix);
+      const resolvedArchive = archiveDirFor(nonExistentLive, archiveRoot);
+      expect(resolvedArchive).toBe(join(archiveRoot, hashedName));
+    }));
 });
 
 describe("archiveSessions", () => {
@@ -191,7 +207,7 @@ describe("discoverAllSessions", () => {
       mkdirSync(liveDir, { recursive: true });
       mkdirSync(archiveDir, { recursive: true });
 
-      writeFileSync(join(liveDir, "sess-a.jsonl"), "live");
+      writeFileSync(join(liveDir, "sess-a.jsonl"), "live-data");
       writeFileSync(join(archiveDir, "sess-a.jsonl"), "archive");
       utimesSync(join(liveDir, "sess-a.jsonl"), 2000, 2000);
       utimesSync(join(archiveDir, "sess-a.jsonl"), 1000, 1000);
@@ -201,6 +217,23 @@ describe("discoverAllSessions", () => {
       expect(found[0].id).toBe("sess-a");
       expect(found[0].path).toBe(join(liveDir, "sess-a.jsonl"));
       expect(found[0].archived).toBeUndefined();
+    }));
+
+  test("archived copy wins when session exists in both live and archive and archive is larger", () =>
+    withTmp(async (dir) => {
+      const liveDir = join(dir, "live");
+      const archiveDir = join(dir, "archive");
+      mkdirSync(liveDir, { recursive: true });
+      mkdirSync(archiveDir, { recursive: true });
+
+      writeFileSync(join(liveDir, "sess-a.jsonl"), "short");
+      writeFileSync(join(archiveDir, "sess-a.jsonl"), "longer-archived-content");
+
+      const found = await discoverAllSessions(liveDir, archiveDir);
+      expect(found).toHaveLength(1);
+      expect(found[0].id).toBe("sess-a");
+      expect(found[0].path).toBe(join(archiveDir, "sess-a.jsonl"));
+      expect(found[0].archived).toBe(true);
     }));
 
   test("marks archive-only session with archived: true", () =>
@@ -309,8 +342,8 @@ describe("archiveSessions safety", () => {
   test("skips invalid session ids and subagent names", () =>
     withTmp(async (dir) => {
       const { projectDir, archiveDir } = setup(dir);
-      writeFileSync(join(projectDir, "...jsonl"), "{}\n");
-      writeFileSync(join(projectDir, ".jsonl"), "{}\n");
+      writeFileSync(join(projectDir, "bad@1.jsonl"), "{}\n");
+      writeFileSync(join(projectDir, "bad#2.jsonl"), "{}\n");
       writeFileSync(join(projectDir, "a b.jsonl"), "{}\n");
       writeFileSync(join(projectDir, "ok-1_x.jsonl"), "{}\n");
       const r = await archiveSessions(projectDir, archiveDir);
@@ -330,6 +363,7 @@ describe("archiveSessions safety", () => {
         writeFileSync(join(projectDir, `${id}.jsonl`), "{}\n");
         mkdirSync(join(projectDir, id, "subagents"), { recursive: true });
         writeFileSync(join(projectDir, id, "subagents", "agent-a.jsonl"), "x\n");
+        writeFileSync(join(projectDir, id, "subagents", "agent-a.meta.json"), "{}\n");
       }
       symlinkSync(outside, join(archiveDir, "d1"));
       mkdirSync(join(archiveDir, "d2"));
@@ -380,6 +414,51 @@ describe("archiveSessions safety", () => {
       const got = readdirSync(join(archiveDir, "s", "subagents")).sort();
       expect(got).toEqual(["agent-a.jsonl", "agent-a.meta.json", "agent-b.meta.json"]);
       expect(r.warnings.some((w) => w.includes("agent-b.jsonl: meta.json not archived"))).toBe(true);
+    }));
+
+  test("skips subagent transcript when meta.json is absent from source", () =>
+    withTmp(async (dir) => {
+      const { projectDir, archiveDir } = setup(dir);
+      writeFileSync(join(projectDir, "sess.jsonl"), "{}\n");
+      const sub = join(projectDir, "sess", "subagents");
+      mkdirSync(sub, { recursive: true });
+      writeFileSync(join(sub, "agent-orphan.jsonl"), "orphan transcript\n");
+
+      const r = await archiveSessions(projectDir, archiveDir);
+      expect(r.copied).toBe(1);
+      expect(r.warnings.some((w) => w.includes("agent-orphan.jsonl: meta.json not archived, transcript skipped"))).toBe(true);
+      expect(existsSync(join(archiveDir, "sess", "subagents", "agent-orphan.jsonl"))).toBe(false);
+    }));
+
+  test("only archives agent-*.jsonl and agent-*.meta.json from subagents, skipping extraneous files", () =>
+    withTmp(async (dir) => {
+      const { projectDir, archiveDir } = setup(dir);
+      writeFileSync(join(projectDir, "sess.jsonl"), "{}\n");
+      const sub = join(projectDir, "sess", "subagents");
+      mkdirSync(sub, { recursive: true });
+      writeFileSync(join(sub, "agent-1.jsonl"), "t1\n");
+      writeFileSync(join(sub, "agent-1.meta.json"), "{}\n");
+      writeFileSync(join(sub, "notes.txt"), "some notes\n");
+      writeFileSync(join(sub, ".DS_Store"), "binary\n");
+      writeFileSync(join(sub, "agent-1.tmp"), "temp data\n");
+
+      const r = await archiveSessions(projectDir, archiveDir);
+      expect(r.copied).toBe(3);
+      const archivedFiles = readdirSync(join(archiveDir, "sess", "subagents")).sort();
+      expect(archivedFiles).toEqual(["agent-1.jsonl", "agent-1.meta.json"]);
+    }));
+
+  test("skips dotfiles silently and skips 0-byte top-level session files", () =>
+    withTmp(async (dir) => {
+      const { projectDir, archiveDir } = setup(dir);
+      writeFileSync(join(projectDir, "valid.jsonl"), "session data\n");
+      writeFileSync(join(projectDir, ".hidden.jsonl"), "secret\n");
+      writeFileSync(join(projectDir, "empty.jsonl"), "");
+
+      const r = await archiveSessions(projectDir, archiveDir);
+      expect(r.copied).toBe(1);
+      expect(r.warnings).toEqual([]);
+      expect(readdirSync(archiveDir)).toEqual(["valid.jsonl"]);
     }));
 });
 

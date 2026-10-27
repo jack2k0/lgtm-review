@@ -104,6 +104,24 @@ describe("sessionRoots", () => {
     expect(r[0]?.projectDir).toBe(projectDirFor(realRepo, pd));
     expect(r[0]?.projectDir).not.toBe(projectDirFor(symlinkRepo, pd));
   });
+  it("derives secondary worktrees project dir from realpath of symlinked worktree dir", async () => {
+    const realSecondary = join(tmp, "real-secondary-wt");
+    const symlinkSecondary = join(tmp, "symlink-secondary-wt");
+    mkdirSync(realSecondary, { recursive: true });
+    symlinkSync(realSecondary, symlinkSecondary);
+
+    const r = await sessionRoots(main, pd, null, { worktrees: true }, async () => ({
+      main,
+      worktrees: [
+        { path: main, branch: "main" },
+        { path: symlinkSecondary, branch: "feat" },
+      ],
+    }));
+    expect(r).toHaveLength(2);
+    expect(r[1]?.dir).toBe(symlinkSecondary);
+    expect(r[1]?.projectDir).toBe(projectDirFor(realSecondary, pd));
+    expect(r[1]?.projectDir).not.toBe(projectDirFor(symlinkSecondary, pd));
+  });
 });
 
 describe("listWorktrees (real git)", () => {

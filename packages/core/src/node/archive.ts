@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { constants, createReadStream } from "node:fs";
+import { constants, createReadStream, existsSync, readdirSync } from "node:fs";
 import { chmod, lstat, mkdir, open, readdir, rename, unlink, utimes } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, sep } from "node:path";
@@ -26,9 +26,24 @@ export function defaultArchiveRoot(env: NodeJS.ProcessEnv = process.env): string
 
 /**
  * Computes `<archiveRoot>/<basename(projectDir)>`.
+ * When `projectDir` has no live match (does not exist) and its name is >= 200 chars,
+ * looks in `archiveRoot` for a single entry starting with `<name.slice(0, 200)}-`.
  */
 export function archiveDirFor(projectDir: string, archiveRoot: string): string {
-  return join(archiveRoot, basename(projectDir));
+  const base = basename(projectDir);
+  if (!existsSync(projectDir) && base.length >= 200) {
+    const prefix = `${base.slice(0, 200)}-`;
+    let matches: string[] = [];
+    try {
+      matches = readdirSync(archiveRoot).filter((e) => e.startsWith(prefix));
+    } catch {
+      // archiveRoot missing or unreadable
+    }
+    if (matches.length === 1) {
+      return join(archiveRoot, matches[0]!);
+    }
+  }
+  return join(archiveRoot, base);
 }
 
 const SESSION_ID_RE = /^[A-Za-z0-9_-]+$/;
@@ -39,8 +54,8 @@ function isSafeName(name: string): boolean {
 
 /**
  * Copies new and updated session files from `projectDir` to `archiveDir`.
- * Mirrors `*.jsonl` directly in `projectDir` and all regular files in `<id>/subagents/`
- * for each session id found.
+ * Mirrors non-empty `*.jsonl` directly in `projectDir` and Claude Code subagent files
+ * (`agent-*.jsonl` and `agent-*.meta.json`) in `<id>/subagents/` for each session id found.
  *
  * Session ids must match `[A-Za-z0-9_-]+`; other names are skipped. Skips symlinks (files and the
  * `<id>` / `subagents` source directories) and refuses to write through symlinks in the archive
@@ -106,6 +121,9 @@ export async function archiveSessions(projectDir: string, archiveDir: string): P
       result.warnings.push(`${relDesc}: non-regular file skipped`);
       return false;
     }
+    if (srcSt.size === 0) {
+      return false;
+    }
 
     try {
       const destSt = await lstat(destPath);
@@ -147,13 +165,20 @@ export async function archiveSessions(projectDir: string, archiveDir: string): P
   }
 
   for (const entry of entries) {
-    if (!entry.name.endsWith(".jsonl")) continue;
+    if (entry.name.startsWith(".") || !entry.name.endsWith(".jsonl")) continue;
     const sessionId = entry.name.slice(0, -".jsonl".length);
     if (!SESSION_ID_RE.test(sessionId)) {
       result.warnings.push(`${entry.name}: invalid session id skipped`);
       continue;
     }
-    await copyOrSkip(join(projectDir, entry.name), join(archiveDir, entry.name), entry.name);
+    const srcPath = join(projectDir, entry.name);
+    try {
+      const st = await lstat(srcPath);
+      if (st.size === 0) continue;
+    } catch {
+      // let copyOrSkip handle unreadable / stat errors
+    }
+    await copyOrSkip(srcPath, join(archiveDir, entry.name), entry.name);
 
     // Look for subagents directory for this session; a symlinked directory would leak files from elsewhere
     const subagentsSrcDir = join(projectDir, sessionId, "subagents");
@@ -176,9 +201,19 @@ export async function archiveSessions(projectDir: string, archiveDir: string): P
       continue;
     }
 
-    // Metas first: a transcript without its meta.json is dropped on read, so it is not archived alone
-    const names = subEntries.map((e) => e.name).sort((a, b) => Number(b.endsWith(".meta.json")) - Number(a.endsWith(".meta.json")) || (a < b ? -1 : a > b ? 1 : 0));
-    const failedMetas = new Set<string>();
+    // Metas first: a transcript without its meta.json is dropped on read, so it is not archived alone.
+    // Only Claude Code subagent files (agent-*.jsonl and agent-*.meta.json) are archived; others are skipped.
+    const isSubagentFile = (name: string) =>
+      name.startsWith("agent-") && (name.endsWith(".jsonl") || name.endsWith(".meta.json"));
+    const names = subEntries
+      .filter((e) => e.isFile() && !e.name.startsWith(".") && isSubagentFile(e.name))
+      .map((e) => e.name)
+      .sort(
+        (a, b) =>
+          Number(b.endsWith(".meta.json")) - Number(a.endsWith(".meta.json")) ||
+          (a < b ? -1 : a > b ? 1 : 0),
+      );
+    const copiedMetas = new Set<string>();
     for (const name of names) {
       const desc = `${sessionId}/subagents/${name}`;
       if (!isSafeName(name)) {
@@ -186,12 +221,12 @@ export async function archiveSessions(projectDir: string, archiveDir: string): P
         continue;
       }
       const isMeta = name.endsWith(".meta.json");
-      if (!isMeta && name.endsWith(".jsonl") && failedMetas.has(`${name.slice(0, -".jsonl".length)}.meta.json`)) {
+      if (!isMeta && name.endsWith(".jsonl") && !copiedMetas.has(`${name.slice(0, -".jsonl".length)}.meta.json`)) {
         result.warnings.push(`${desc}: meta.json not archived, transcript skipped`);
         continue;
       }
       const ok = await copyOrSkip(join(subagentsSrcDir, name), join(archiveDir, sessionId, "subagents", name), desc);
-      if (!ok && isMeta) failedMetas.add(name);
+      if (ok && isMeta) copiedMetas.add(name);
     }
   }
 
