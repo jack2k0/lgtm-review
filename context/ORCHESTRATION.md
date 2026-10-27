@@ -63,6 +63,8 @@ brak
 
 - 2026-10-27: drobne niezablokowane pozycje (Agy, Gemini 3.8 Flash; 401 raz, ponowienie OK): README zgodne z CLI (0e65a79, Low, docs), statusy F-01/S-01..S-03 w roadmapie (41b0f5e), 10 nowych testów luk w core (35e92fb, Low, tylko testy, żaden nie padł = brak nowych błędów). Nie wypchnięte.
 
+- 2026-10-27 (cd.): przeglądy read-only bez decyzji właściciela. Web (Agy): 5/9 przyjętych (klawisze Play, `(shell edit)` bez linku, powrót przy błędzie Steps/Map, a11y), merge 523bd80 (Medium). Eksport (OpenCode): `--out <log sesji> --force` nadpisywał log HTML-em — poprawka OpenCode, przegląd Opus + Agy, merge High (owner: przeczytać blok bramki przed push). Czytanie logów (Agy, 8 uwag): na real logs (209 plików, agregaty) 0 wystąpień każdego formatu — 2 odrzucone, 6 odłożonych (BOM, prompt bez tekstu, `\ No newline`, Windows, content asystenta jako string). Nie wypchnięte.
+
 ## Bramki
 - Npm publish: czeka na decyzję właściciela.
 
