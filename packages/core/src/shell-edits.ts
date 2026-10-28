@@ -821,12 +821,115 @@ function containedCommandSubs(text: string): number {
 const HIDER_SKIP = new Set(["!", "if", "elif", "then", "else", "while", "until", "do", "time", "{", "("]);
 
 /**
+ * Heads `stripPrefixes` removes before the real command. `command` and `exec` are absent on purpose:
+ * they are hiders, except `command -v` / `-V`.
+ */
+const HIDER_WRAPPERS = new Set([
+  "nice",
+  "timeout",
+  "env",
+  "nohup",
+  "time",
+  "corepack",
+  "flock",
+  "ionice",
+  "setsid",
+  "stdbuf",
+  "uv",
+  "poetry",
+  "pipenv",
+  "npx",
+  "bunx",
+  "pnpm",
+  "yarn",
+]);
+
+const SUDO_VALUE_FLAGS = new Set([
+  "-u",
+  "-g",
+  "-h",
+  "-p",
+  "-U",
+  "-C",
+  "-D",
+  "-R",
+  "-T",
+  "--user",
+  "--group",
+  "--host",
+  "--prompt",
+  "--other-user",
+  "--chdir",
+  "--role",
+  "--type",
+  "--close-from",
+  "--command-timeout",
+]);
+
+function leadingToken(s: string): string {
+  const m = /^(?:\\+)?(\S+)/.exec(s);
+  return (m?.[1] ?? "").replace(/^\\+/, "");
+}
+
+/** `sudo [-u user] … command` → `command`. Flags that take a value keep that value out of the head. */
+function peelSudo(s: string): string {
+  let rest = s.replace(/^sudo\s+/, "");
+  for (let guard = 0; guard < 40; guard++) {
+    const m = /^(?:"[^"]*"|'[^']*'|\S+)/.exec(rest);
+    if (!m) return rest;
+    const w = m[0];
+    const after = rest.slice(m[0].length).trimStart();
+    if (/^[A-Za-z_]\w*=/.test(w) && !w.startsWith("-")) {
+      rest = after;
+      continue;
+    }
+    if (w.startsWith("-") && w.length > 1) {
+      rest = after;
+      const flag = w.includes("=") ? w.slice(0, w.indexOf("=")) : w;
+      if (SUDO_VALUE_FLAGS.has(flag) && !w.includes("=")) {
+        const v = /^(?:"[^"]*"|'[^']*'|\S+)/.exec(rest);
+        if (v) rest = rest.slice(v[0].length).trimStart();
+      }
+      continue;
+    }
+    return rest;
+  }
+  return rest;
+}
+
+/**
+ * Drop the wrapper prefixes the check matcher drops, so the hider check sees `eval` / `source`
+ * behind `nice`, `sudo -u`, `env NAME=v`, `time -p`, `timeout`, `flock`, and the rest of PREFIXES.
+ * Stops at `command` / `exec` (a following `stripPrefixes` would delete them).
+ */
+function stripHiderWrappers(segment: string): string {
+  let s = segment.trim();
+  for (let guard = 0; guard < 20; guard++) {
+    const before = s;
+    s = s.replace(/^[({!]+\s*/, "").replace(/^(?:!|if|elif|then|else|while|until|do)\s+/, "");
+    s = s.replace(/^[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S*)\s+/, "");
+    const head = leadingToken(s);
+    if (head === "command" || head === "exec") return s.trimStart();
+    if (head === "sudo") s = peelSudo(s);
+    else if (HIDER_WRAPPERS.has(head)) {
+      // Keep a later `command` / `exec` (`nice command -v`, `nohup exec`) from being stripped too.
+      const shielded = s.replace(/(?<=\s)((?:\\+)?(?:command|exec))(?=\s|$)/g, "\u0000$1");
+      s = stripPrefixes(shielded).replace(/\u0000/g, "").trimStart();
+    }
+    // `time -p source` → stripPrefixes leaves `-p source`.
+    s = s.replace(/^(?:-\S+\s+)+/, "").trimStart();
+    if (s === before) break;
+  }
+  return s.trimStart();
+}
+
+/**
  * True when this segment's command word is `eval`, `source`, `.`, `builtin`, `exec`, or `command`
  * not followed by `-v` / `-V`. The tracked directory is unknown from here on.
  * `pnpm exec` is not the builtin: only the command word counts. `(` / `{` stuck to the word are stripped.
  */
 function hidesDirectory(segment: string): boolean {
-  const words = parseWords(segment.trim().replace(/^[({!]+/, "")).words;
+  const words = parseWords(stripHiderWrappers(segment)).words;
   let i = 0;
   while (i < words.length) {
     const t = (words[i] as Word).text.replace(/^[({!]+/, "");
@@ -837,6 +940,10 @@ function hidesDirectory(segment: string): boolean {
     if (t === "command") {
       const next = (words[i + 1]?.text ?? "").replace(/^[({!]+/, "");
       return next !== "-v" && next !== "-V";
+    }
+    if (t.startsWith("-") && t !== "-") {
+      i++;
+      continue;
     }
     return t === "eval" || t === "source" || t === "." || t === "builtin" || t === "exec";
   }

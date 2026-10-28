@@ -764,6 +764,36 @@ describe("C16: allow-lists instead of deny-lists", () => {
     expect(compiled.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
   });
 
+  test("wrappers before eval or source hide the directory", () => {
+    const rel = "sed -i s/a/b/ src/a.ts";
+    for (const hide of [
+      'nice eval "cd /repo"',
+      "sudo source f",
+      "env A=1 source f",
+      "nohup eval x",
+      "time -p source f",
+      "timeout 5 source f",
+      "sudo -u root source f",
+      'nice -n 10 eval "cd /repo"',
+      "flock /tmp/l source f",
+      "ionice -c 3 source f",
+      "setsid source f",
+      "stdbuf -o0 source f",
+      "corepack source f",
+      "nice command sed -i s/a/b/ src/a.ts",
+    ]) {
+      const cmd = hide.startsWith("nice command") ? `cd /tmp/x; ${hide}` : `cd /tmp/x; ${hide}; ${rel}`;
+      const m = classifyShellMutation(cmd);
+      expect(m.edits.map((e) => e.file), cmd).toEqual([SHELL_EDIT_FILE]);
+      expect(m.hasCd, cmd).toBe(true);
+    }
+    for (const cmd of ["nice command -v node && sed -i s/a/b/ src/a.ts", "sudo command -V node && sed -i s/a/b/ src/a.ts"]) {
+      const m = classifyShellMutation(cmd);
+      expect(m.edits, cmd).toEqual([{ file: "src/a.ts", gitOp: false, kind: "M" }]);
+      expect(m.hasCd, cmd).toBe(false);
+    }
+  });
+
   test("C16: command -v does not hide the directory", () => {
     for (const cmd of ["command -v node && sed -i 's/a/b/' src/a.ts", "command -V node && sed -i 's/a/b/' src/a.ts"]) {
       const m = classifyShellMutation(cmd);
