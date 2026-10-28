@@ -592,6 +592,8 @@ export function createParser(opts: ParserOptions = {}): Parser {
   return {
     push(line: string): Event[] {
       lineNo++;
+      // One leading U+FEFF on line 1 only. A BOM later in the file stays, so that record is still invalid JSON.
+      if (lineNo === 1 && typeof line === "string" && line.charCodeAt(0) === 0xfeff) line = line.slice(1);
       const out: Event[] = [];
       try {
         if (typeof line !== "string" || line.trim() === "") return out;

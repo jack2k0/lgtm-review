@@ -16,4 +16,4 @@ schema: no
 - Tests (fail on the old code): a log whose first line is BOM + a user prompt record yields that prompt and no "invalid JSON" warning; a BOM in the middle of line 3 is not stripped (record stays invalid as today); any first-line reader you fixed has its own test.
 - Done: `pnpm check` green; `node scripts/gate.mjs --base main --plan context/changes/bom-strip/plan.md` exit 0/2.
 - Non-goals: other encodings (UTF-16), Windows CRLF, any status rule.
-- [ ] Phase 1 done
+- [x] Phase 1 done
