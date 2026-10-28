@@ -38,6 +38,7 @@ Adjudication of 2026-10-28 (Sonnet, real logs, aggregates only; `reviews/adjudic
 allow: ^packages/core/src/(check-patterns|shell-edits|analyze|subagents)(\.test)?\.ts$
 allow: ^packages/core/src/[a-z-]+\.test\.ts$
 allow: ^packages/core/fixtures/sessions/sa4-[a-z0-9-]+\.(jsonl|labels\.json)$
+allow: ^packages/core/fixtures/sessions/sa4-[a-z0-9-]+/subagents/agent-[a-z0-9-]+\.(jsonl|meta\.json)$
 allow: ^packages/core/fixtures/sessions/__golden__/sa4-[a-z0-9-]+\.
 allow: ^scripts/audit/
 allow: ^context/(changes|archive)/status-accuracy-4/
@@ -60,7 +61,7 @@ Files: `shell-edits.ts`, `check-patterns.ts`, their tests, new fixtures `sa4-cd-
 Files: `analyze.ts` (and `subagents.ts` only if Q2 needs it), tests, new fixtures `sa4-split-opaque`, `sa4-bg-no-notify`, `sa4-signal-kill`, `sa4-subagent-late-fail`.
 - Unit tests per rule failing on the old code, plus: Q4 negative (no earlier pass -> unchecked "check did not complete"; a foreground check with no result -> unchanged); Q5: exit 137 after a passing check -> checked; exit 144 alone -> unchecked "check did not complete"; exit 1 -> failing (unchanged); SPLIT-OPAQUE negative: an opaque segment plus `git mv` and a parsed `sed -i src/a.ts` -> `src/a.ts` still a code edit.
 - Done: tests + fixtures pass; `pnpm check` green; gate exit 0/2.
-- [ ] Phase 2 done
+- [x] Phase 2 done
 
 ## Phase 3: real-log audit (orchestrator only, no external model)
 

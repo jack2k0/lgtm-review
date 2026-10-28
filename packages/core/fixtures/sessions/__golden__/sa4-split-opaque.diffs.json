@@ -1,0 +1,58 @@
+{
+  "0:/home/user/project/context/archive/x": {
+    "path": "/home/user/project/context/archive/x",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "0:/home/user/project/context/archive/x/change.md": {
+    "path": "/home/user/project/context/archive/x/change.md",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "0:/home/user/project/context/changes/x": {
+    "path": "/home/user/project/context/changes/x",
+    "kind": "D",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "1:/home/user/project/new/a.ts": {
+    "path": "/home/user/project/new/a.ts",
+    "kind": "A",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "1:/home/user/project/old/a.ts": {
+    "path": "/home/user/project/old/a.ts",
+    "kind": "D",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "1:/home/user/project/src/a.ts": {
+    "path": "/home/user/project/src/a.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "2:/home/user/project/old/a.ts": {
+    "path": "/home/user/project/old/a.ts",
+    "kind": "D",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "2:/home/user/project/src/a.ts": {
+    "path": "/home/user/project/src/a.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  }
+}

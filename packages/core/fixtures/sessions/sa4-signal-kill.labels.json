@@ -1,0 +1,34 @@
+{
+  "fixture": "sa4-signal-kill",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "pnpm test passed after the edit. A later foreground pnpm lint exits 137 (SIGKILL). That exit is a signal stop, not a failure, so the covering pass stays checked and the reason is the pass."
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": ["unchecked-edit:src/add.js"],
+      "note": "The only check exits 144. A signal exit neither passes nor fails. Decisive outcome: unchecked, check did not complete. The edit has no completed check."
+    },
+    {
+      "index": 2,
+      "expectedStatus": "failing",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [],
+      "note": "pnpm test exits 1 after the edit. Exit 1 is still a failure. The failure covers the edit, so no unchecked-edit hint."
+    },
+    {
+      "index": 3,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": ["unchecked-edit:src/add.js"],
+      "note": "Background pnpm test reports status failed with exit code 143. A signal exit uses signalStop, so the reason is check did not complete. It is not failing and it is not the notification-status reason check stopped."
+    }
+  ]
+}

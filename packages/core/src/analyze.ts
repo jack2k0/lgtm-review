@@ -51,7 +51,13 @@ export const DETAIL_ACTIONS_MAX = 100_000;
 
 const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 const STOP_STATUSES = new Set(["killed", "stopped", "cancelled", "canceled", "timeout", "timed_out", "aborted"]);
+/** Exit codes of a check killed by a signal (SIGINT/SIGKILL/SIGTERM and 144). Neither passed nor failed (Q5, C3). */
+const SIGNAL_EXITS = new Set([130, 137, 143, 144]);
 const TITLE_MAX = 60;
+
+function isSignalExit(code: number): boolean {
+  return SIGNAL_EXITS.has(code);
+}
 const FAIL_OUTPUT_MAX = 200;
 
 interface FileTouch {
@@ -106,6 +112,8 @@ interface CheckRec {
   background: boolean;
   /** A notification said the background check was stopped or killed: it neither passed nor failed. */
   stopped: boolean;
+  /** Exit 130/137/143/144, foreground or from a notification: neither passed nor failed (Q5). Not `stopped`. */
+  signalStop: boolean;
   label: string;
   unreliable: boolean;
   /** A command after the check may have reverted the edits (`; git checkout file`). */
@@ -244,6 +252,29 @@ function plainDiffPaths(sm: ShellMutation, diff: readonly { path: string }[], cw
   return out;
 }
 
+/** Basename has no dot (`archive`, `GNUmakefile`). `.` / `..` and names like `a.ts` are not. */
+function extensionlessPath(path: string): boolean {
+  const base = path.replace(/\/+$/, "").split("/").pop() ?? "";
+  return base !== "" && base !== "." && base !== ".." && !base.includes(".");
+}
+
+/**
+ * No-diff path only (C5): an extensionless `git mv` destination is a directory when another parsed edit
+ * target starts with `<dest>/`. The source being a directory, or a diff-path prefix, does not count.
+ */
+function gitMvDirectoryPaths(items: readonly { t: FileTouch; gitMade: boolean }[]): Set<string> {
+  const dirs = new Set<string>();
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!;
+    if (!item.gitMade || item.t.kind !== "A") continue;
+    const target = item.t.path.replace(/\/+$/, "");
+    if (!extensionlessPath(target)) continue;
+    const prefix = `${target}/`;
+    if (items.some((o, j) => j !== i && o.t.path.replace(/\/+$/, "").startsWith(prefix))) dirs.add(item.t.path);
+  }
+  return dirs;
+}
+
 /** Sequence number of an edit made in the same command as a check, ordered by segment. */
 function orderedSeq(seq: number, order: "before-check" | "after-check" | "unknown"): number {
   return order === "before-check" ? seq - 0.5 : order === "after-check" ? seq + 0.5 : seq;
@@ -293,10 +324,14 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
     null,
   );
 
-  const incompleteAfter = real.some(
-    (c) => !c.completed && !c.stopped && c.useSeq > lastEdit && (lastCompleted === null || c.useSeq > lastCompleted.resultSeq),
+  // A signal exit (Q5) and a notification stop are resolved, so they are not an open check. A quiet background
+  // check (Q4) is open, but it does not hide a covering pass.
+  const incomplete = real.filter(
+    (c) => !c.completed && !c.stopped && !c.signalStop && c.useSeq > lastEdit && (lastCompleted === null || c.useSeq > lastCompleted.resultSeq),
   );
-  if (incompleteAfter) return { status: "unchecked", reason: "check did not complete", outOfScope: new Map() };
+  const passCovers = lastCompleted !== null && lastCompleted.coveredSeq > lastEdit && lastCompleted.exit === 0 && !lastCompleted.masked;
+  const bgQuiet = incomplete.length > 0 && incomplete.every((c) => c.background) && passCovers;
+  if (incomplete.length > 0 && !bgQuiet) return { status: "unchecked", reason: "check did not complete", outOfScope: new Map() };
 
   if (lastCompleted !== null && lastCompleted.coveredSeq > lastEdit) {
     if (lastCompleted.masked) {
@@ -335,9 +370,10 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
         for (const gap of gaps) outOfScope.set(gap, label);
       }
       const docsTail = docsAfter > 0 ? `; ${plural(docsAfter, "documentation edit")} after it` : "";
+      const bgTail = bgQuiet ? "; a later background check did not report" : "";
       return {
         status: "checked",
-        reason: `${lastCompleted.label} passed after last ${nonCodeAfter > 0 ? "code " : ""}edit${note}${scopeNote}${via(lastCompleted.thread)}${docsTail}`,
+        reason: `${lastCompleted.label} passed after last ${nonCodeAfter > 0 ? "code " : ""}edit${note}${scopeNote}${via(lastCompleted.thread)}${docsTail}${bgTail}`,
         outOfScope,
       };
     }
@@ -349,6 +385,8 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
     };
   }
 
+  // After every covering completion: a signal that outlives the last edit did not complete, and it is not a failure.
+  if (real.some((c) => c.signalStop && c.useSeq > lastEdit)) return { status: "unchecked", reason: "check did not complete", outOfScope: new Map() };
   if (real.some((c) => c.stopped && c.useSeq > lastEdit)) return { status: "unchecked", reason: "check stopped", outOfScope: new Map() };
   if (lastCompleted === null) return { status: "unchecked", reason: "no checks ran", outOfScope: new Map() };
   const afterEdits = edits.filter((e) => e.seq > lastCompleted.coveredSeq);
@@ -432,7 +470,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
     if (entry === undefined) return;
     const c = entry.check;
     // Only an unresolved background check can be resolved, and only once: the first terminal notification wins.
-    if (!c.background || c.completed || c.stopped) return;
+    if (!c.background || c.completed || c.stopped || c.signalStop) return;
     const status = ev.status.toLowerCase();
     // A notification with no status and no exit code is a progress event (e.g. a monitor): not terminal, ignored.
     if (status === "" && ev.exitCode === null) return;
@@ -454,6 +492,18 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
       // An exit code in the summary decides; "failed" never passes, even when the summary says exit code 0.
       exit = ev.exitCode ?? (status === "completed" ? 0 : null);
       if (status === "failed" && exit === 0) exit = null;
+    }
+    // A signal exit is its own flag (C3). A stop status above wins even when the summary also names one of these codes.
+    if (exit !== null && isSignalExit(exit)) {
+      c.signalStop = true;
+      c.exit = exit;
+      if (act?.check) {
+        act.check.background = true;
+        act.check.passed = null;
+        act.check.exitCode = null;
+        act.check.excerpt = "";
+      }
+      return;
     }
     c.completed = true;
     c.exit = exit;
@@ -532,6 +582,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               exit: 0,
               background: false,
               stopped: false,
+              signalStop: false,
               label: cls.label,
               unreliable: cls.unreliable,
               probe: cls.mutationProbe,
@@ -586,7 +637,13 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
         if (use.check) {
           if (ev.isError) {
             if (ev.exitCode === undefined) use.check.ignored = true;
-            else {
+            else if (isSignalExit(ev.exitCode)) {
+              // Killed by a signal: not a failure, and it must not open the Fix phase (C3).
+              use.check.signalStop = true;
+              use.check.resultSeq = seq;
+              use.check.exit = ev.exitCode;
+              use.check.output = ev.text;
+            } else {
               use.check.completed = true;
               use.check.exit = ev.exitCode;
               use.check.resultSeq = seq;
@@ -617,14 +674,16 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           act.phase = phase;
           act.resTs = ts;
           if (use.check) {
-            const exitCode = ev.isError ? (ev.exitCode ?? null) : ev.background ? null : 0;
+            // A signal has no verdict. `exitCode` stays null so the step title is "no result", not "failed (exit N)".
+            const signal = use.check.signalStop;
+            const exitCode = signal ? null : ev.isError ? (ev.exitCode ?? null) : ev.background ? null : 0;
             const masked = use.check.masked;
             act.check = {
               command: use.input.command ?? "",
               label: use.check.label,
               exitCode,
               passed: exitCode === null ? null : exitCode === 0 && !masked,
-              excerpt: ev.isError ? (exitCode === null ? oneLine(ev.text, 200) : failureExcerpt(ev.text)) : masked ? oneLine(use.check.maskedLine, 200) : "",
+              excerpt: signal ? "" : ev.isError ? (exitCode === null ? oneLine(ev.text, 200) : failureExcerpt(ev.text)) : masked ? oneLine(use.check.maskedLine, 200) : "",
               notRun: ev.isError && ev.exitCode === undefined,
             };
           }
@@ -688,7 +747,14 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               };
               return { t, gitMade: e.gitOp };
             });
-            const split = sm.hasHistoryGitOp && !sm.gitOnly && !sm.opaque;
+            // A directory dest is already git-made; forcing it keeps the split from ever counting that path as code.
+            const dirDests = gitMvDirectoryPaths(all);
+            for (const item of all) {
+              if (dirDests.has(item.t.path)) item.gitMade = true;
+            }
+            // History plus a plain edit still splits when the command is not opaque (round 3). An opaque command
+            // splits only its parsed git mv / git rm targets (rule 7, C5). `git rm` is git-made but not history (C10).
+            const split = !sm.gitOnly && ((sm.hasHistoryGitOp && !sm.opaque) || all.some((x) => x.gitMade));
             for (const gitOp of split ? [true, false] : [sm.gitOnly]) {
               const files = all.filter((x) => (split ? x.gitMade === gitOp : true)).map((x) => x.t);
               if (files.length > 0) groups.push({ files, gitOp });

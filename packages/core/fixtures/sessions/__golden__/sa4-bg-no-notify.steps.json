@@ -1,0 +1,223 @@
+[
+  {
+    "index": 0,
+    "text": "Edit add, pass the tests, and leave lint running.",
+    "status": "checked",
+    "reason": "pnpm test passed after last edit; a later background check did not report",
+    "headline": "Mostly checking (67%), 2 checks",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 6000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "check",
+        "title": "Run pnpm lint -> no result",
+        "startedAt": "2026-01-01T00:00:06.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm lint",
+            "ok": true,
+            "ts": "2026-01-01T00:00:06.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm lint",
+          "exitCode": null,
+          "passed": null,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Edit add and only start the tests in the background.",
+    "status": "unchecked",
+    "reason": "check did not complete",
+    "headline": "Mostly writing (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:08.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/add.js",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:09.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:09.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> no result",
+        "startedAt": "2026-01-01T00:00:11.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:11.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": null,
+          "passed": null,
+          "excerpt": ""
+        }
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Edit add, pass the tests, then start lint with no result.",
+    "status": "unchecked",
+    "reason": "check did not complete",
+    "headline": "Mostly writing (50%), 2 checks",
+    "startedAt": "2026-01-01T00:00:13.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1)",
+        "startedAt": "2026-01-01T00:00:14.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:14.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:16.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:16.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "check",
+        "title": "Run pnpm lint -> no result",
+        "startedAt": "2026-01-01T00:00:18.000Z",
+        "durationMs": 0,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm lint",
+            "ok": false,
+            "ts": "2026-01-01T00:00:18.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm lint",
+          "exitCode": null,
+          "passed": null,
+          "excerpt": ""
+        }
+      }
+    ]
+  }
+]

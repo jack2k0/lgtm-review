@@ -1,0 +1,27 @@
+{
+  "fixture": "sa4-split-opaque",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "Opaque node scripts/build.mjs plus git mv of the extensionless directory context/archive/x (a child target starts with that path) plus sed of change.md. No diff, so the git mv targets stay git-made and the markdown edit is documentation. No code edits."
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": ["unchecked-edit:src/a.ts"],
+      "note": "Same opaque build, but git mv old/a.ts new/a.ts is a file move and sed writes src/a.ts. src/a.ts stays a code edit. No check follows, so unchecked. The git mv paths are git-made and raise no unchecked-edit hint."
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": ["unchecked-edit:src/a.ts"],
+      "note": "git rm old/a.ts is git-made even though git rm is not a history op. sed of src/a.ts is the code edit. No check follows, so unchecked, and only src/a.ts is hinted."
+    }
+  ]
+}

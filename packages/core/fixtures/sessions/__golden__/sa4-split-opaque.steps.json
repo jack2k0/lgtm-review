@@ -1,0 +1,120 @@
+[
+  {
+    "index": 0,
+    "text": "Archive the change note with the build script.",
+    "status": "no-changes",
+    "reason": "no code edits (documentation only) (shell edits may be incomplete)",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Edit 3 files (+0 -0)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "node scripts/build.mjs && git mv context/changes/x context/archive/x && sed -i 's/a/b/' context/archive/x/change.md",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/context/changes/x",
+          "/home/user/project/context/archive/x",
+          "/home/user/project/context/archive/x/change.md"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Move the TypeScript file and edit src.",
+    "status": "unchecked",
+    "reason": "no checks ran (shell edits may be incomplete)",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:04.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/a.ts",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Edit 3 files (+0 -0)",
+        "startedAt": "2026-01-01T00:00:05.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "node scripts/build.mjs && git mv old/a.ts new/a.ts && sed -i 's/a/b/' src/a.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:05.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/old/a.ts",
+          "/home/user/project/new/a.ts",
+          "/home/user/project/src/a.ts"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Remove the old file and edit src.",
+    "status": "unchecked",
+    "reason": "no checks ran (shell edits may be incomplete)",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:07.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/a.ts",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Delete old/a.ts (-0), edit src/a.ts (+0 -0)",
+        "startedAt": "2026-01-01T00:00:08.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "git rm old/a.ts && sed -i 's/a/b/' src/a.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/old/a.ts",
+          "/home/user/project/src/a.ts"
+        ]
+      }
+    ]
+  }
+]
