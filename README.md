@@ -41,4 +41,16 @@ It checks freshness, scope (a fenced `gate` block in the plan: `allow`, `goldens
 
 The server listens on 127.0.0.1 only, is read-only and requires the per-run token in the printed URL. See packages/cli/README.md for options, the Steps/Diff views and their limits.
 
+## Local LLM titles (optional)
+
+Opt in with both `--llm-url` and `--llm-model` (no default model). The web UI then shows a one-sentence title above each of the session's own prompts, labelled "generated". Nothing is rendered and no model connection is made without the flags.
+
+```
+npx lgtm-review --llm-url http://127.0.0.1:11434 --llm-model qwen3:4b   # Ollama
+npx lgtm-review --llm-url http://127.0.0.1:8080 --llm-model qwen        # llama.cpp server
+npx lgtm-review --llm-url http://127.0.0.1:1234/v1 --llm-model qwen      # LM Studio
+```
+
+The URL is `http` only, to a loopback host (`127.0.0.0/8`, `[::1]`, or `localhost`, which is rewritten to `127.0.0.1` and not resolved through DNS). Any other host is rejected. What is sent for each own prompt is a condensed, redacted view: the prompt text, up to 25 step titles and up to 20 repository-relative file paths. Tool output, diffs and quotes are not sent. Titles are cached under `~/.lgtm-review/cache/titles` (override with `--llm-cache-dir`) and are never written into `--summary`, `--export`, `--list` or `--json`. `--no-titles` does not affect them. Inherited prompts do not get a title. Details are in packages/cli/README.md.
+
 Licensed under Apache-2.0. Copyright lgtm-review contributors.

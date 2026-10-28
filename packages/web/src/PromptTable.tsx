@@ -1,10 +1,102 @@
-import { useEffect, useState } from "react";
-import type { PromptAnalysis, SessionAnalysis } from "@lgtm/core";
+import { useContext, useEffect, useRef, useState } from "react";
+import type { LlmTitlesResponse, PromptAnalysis, SessionAnalysis } from "@lgtm/core";
+import { fetchTitles } from "./api";
 import { HintList, ReviewCell, RuleMarkers } from "./Hints";
+import { LiveContext } from "./LiveView";
 import { StatusTag } from "./StatusDot";
 import { TimeBar, TimeLegend } from "./TimeBar";
+import { GENERATED_LABEL, GENERATED_NOTE, TITLES_POLL_MS, shouldPollTitles, titleForPrompt } from "./titles";
 import { attentionPrompts, escapeToList, needText, rowKey, type Show } from "./triage";
 import { PROMPT_PAGE, SHELL_EDIT_FILE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, navigateToList, plural, routeHref, retainKeys, rulesByPath, shortPath, toggleKey, visiblePrompts, splitInherited } from "./viewmodel";
+
+/**
+ * Loads generated titles for one session.
+ * One GET immediately, then every {@link TITLES_POLL_MS} while `pending > 0` and `error` is null.
+ * Pauses while live updates are paused or the document is hidden, and resumes at once.
+ * Aborts the in-flight GET when the session payload changes or the view unmounts.
+ */
+function usePromptTitles(token: string | null, session: SessionAnalysis): LlmTitlesResponse | null {
+  const live = useContext(LiveContext);
+  const [box, setBox] = useState<{ id: string; res: LlmTitlesResponse } | null>(null);
+  const pausedRef = useRef(live.paused);
+  pausedRef.current = live.paused;
+  const nudgeRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (!token) {
+      nudgeRef.current = () => {};
+      return;
+    }
+    const sessionId = session.sessionId;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let ac: AbortController | null = null;
+    let latest: LlmTitlesResponse | null = null;
+    const clearTimer = () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+    };
+    const allowed = () => !stopped && !pausedRef.current && !document.hidden;
+
+    const schedule = () => {
+      clearTimer();
+      if (!allowed() || !shouldPollTitles(latest)) return;
+      timer = setTimeout(() => {
+        timer = null;
+        void run();
+      }, TITLES_POLL_MS);
+    };
+
+    const run = async () => {
+      if (!allowed() || ac) return;
+      clearTimer();
+      const ctrl = new AbortController();
+      ac = ctrl;
+      try {
+        const res = await fetchTitles(token, sessionId, null, ctrl.signal);
+        if (stopped || ctrl.signal.aborted) return;
+        ac = null;
+        if (res.kind !== "ok") return;
+        latest = res.data;
+        setBox({ id: sessionId, res: res.data });
+        schedule();
+      } catch {
+        if (stopped || ctrl.signal.aborted) return;
+        ac = null;
+      }
+    };
+
+    const nudge = () => {
+      if (stopped) return;
+      if (!allowed()) {
+        clearTimer();
+        return;
+      }
+      if (ac) return;
+      clearTimer();
+      if (latest === null || shouldPollTitles(latest)) void run();
+    };
+    nudgeRef.current = nudge;
+    const onVisibility = () => nudge();
+    document.addEventListener("visibilitychange", onVisibility);
+    if (allowed()) void run();
+    return () => {
+      stopped = true;
+      clearTimer();
+      ac?.abort();
+      ac = null;
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (nudgeRef.current === nudge) nudgeRef.current = () => {};
+    };
+  }, [token, session]);
+
+  useEffect(() => {
+    nudgeRef.current();
+  }, [live.paused]);
+
+  if (!token || box === null || box.id !== session.sessionId) return null;
+  return box.res;
+}
 
 /** Changed files of a prompt; each path links to its diff (the link carries the exact path from the list). */
 export function FileList({ sessionId, p }: { sessionId: string; p: PromptAnalysis }) {
@@ -30,10 +122,12 @@ export function FileList({ sessionId, p }: { sessionId: string; p: PromptAnalysi
   );
 }
 
-export function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: PromptAnalysis; open: boolean; onToggle: () => void }) {
+export function Row({ sessionId, p, open, onToggle, generated = null }: { sessionId: string; p: PromptAnalysis; open: boolean; onToggle: () => void; generated?: string | null }) {
   const totals = fileTotals(p);
   const markers = incompleteMarkers(p);
   const detailId = `detail-${p.index}`;
+  // Inherited prompts keep the earlier session's text; a generated title is never shown for them.
+  const title = p.inheritedFrom === undefined && generated ? generated : null;
   return (
     <>
       <tr className={open ? "open" : undefined}>
@@ -41,7 +135,15 @@ export function Row({ sessionId, p, open, onToggle }: { sessionId: string; p: Pr
         <td className="title">
           <button type="button" className="rowbtn" data-index={p.index} aria-expanded={open} aria-controls={open ? detailId : undefined} onClick={onToggle}>
             <span className="chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
-            <span className={open ? "text" : "text clamp"}>{p.text.trim() || "(empty prompt)"}</span>
+            <span className="title-stack">
+              {title === null ? null : (
+                <span className="gen-title">
+                  {title}{" "}
+                  <span className="gen-label" title={GENERATED_NOTE}>{GENERATED_LABEL}</span>
+                </span>
+              )}
+              <span className={open ? "text" : "text clamp"}>{p.text.trim() || "(empty prompt)"}</span>
+            </span>
           </button>
         </td>
         <td className="reason"><span className={open ? "" : "clamp"}>{p.reason}</span></td>
@@ -92,7 +194,7 @@ function PromptHead() {
 }
 
 /** Collapsed-by-default group of prompts inherited from an earlier session; its rows use the same Row as own prompts. */
-export function InheritedGroup({ sessionId, rows, from, others, openIdx, onToggle }: { sessionId: string; rows: readonly PromptAnalysis[]; from: string; others: number; openIdx: ReadonlySet<number>; onToggle: (i: number) => void }) {
+export function InheritedGroup({ sessionId, rows, from, others, openIdx, onToggle, titles }: { sessionId: string; rows: readonly PromptAnalysis[]; from: string; others: number; openIdx: ReadonlySet<number>; onToggle: (i: number) => void; titles?: Record<string, string> }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="inherited-group">
@@ -105,7 +207,7 @@ export function InheritedGroup({ sessionId, rows, from, others, openIdx, onToggl
             <PromptHead />
             <tbody>
               {rows.map((p) => (
-                <Row key={p.index} sessionId={sessionId} p={p} open={openIdx.has(p.index)} onToggle={() => onToggle(p.index)} />
+                <Row key={p.index} sessionId={sessionId} p={p} open={openIdx.has(p.index)} onToggle={() => onToggle(p.index)} generated={titleForPrompt(titles, p)} />
               ))}
             </tbody>
           </table>
@@ -115,8 +217,10 @@ export function InheritedGroup({ sessionId, rows, from, others, openIdx, onToggl
   );
 }
 
-export function PromptTable({ session, show = "all" }: { session: SessionAnalysis; show?: Show }) {
+export function PromptTable({ session, show = "all", token = null }: { session: SessionAnalysis; show?: Show; token?: string | null }) {
   const [limit, setLimit] = useState(PROMPT_PAGE);
+  const titlesRes = usePromptTitles(token, session);
+  const titleMap = titlesRes?.enabled ? titlesRes.titles : undefined;
   // Keyed by prompt index (append-only in a session file), so rows stay expanded across live refreshes.
   const [openState, setOpenIdx] = useState<ReadonlySet<number>>(new Set());
   const openIdx = retainKeys(openState, session.prompts.map((p) => p.index));
@@ -142,6 +246,8 @@ export function PromptTable({ session, show = "all" }: { session: SessionAnalysi
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
   }, []);
+
+  const titlesError = titlesRes?.enabled && titlesRes.error ? <p className="muted titles-error" role="status">{titlesRes.error}</p> : null;
 
   const onRowsKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -194,7 +300,10 @@ export function PromptTable({ session, show = "all" }: { session: SessionAnalysi
         </details>
       ) : null}
       {session.prompts.length === 0 ? (
-        <p className="empty">This session has no prompts.</p>
+        <>
+          <p className="empty">This session has no prompts.</p>
+          {titlesError}
+        </>
       ) : (
         <>
           {show === "attention" ? <p className="muted">Showing {rows.length} of {nonInheritedCount} prompts.</p> : null}
@@ -209,7 +318,7 @@ export function PromptTable({ session, show = "all" }: { session: SessionAnalysi
                     <PromptHead />
                     <tbody>
                       {shown.map((p) => (
-                        <Row key={p.index} sessionId={id} p={p} open={openIdx.has(p.index)} onToggle={() => toggle(p.index)} />
+                        <Row key={p.index} sessionId={id} p={p} open={openIdx.has(p.index)} onToggle={() => toggle(p.index)} generated={titleForPrompt(titleMap, p)} />
                       ))}
                     </tbody>
                   </table>
@@ -223,8 +332,9 @@ export function PromptTable({ session, show = "all" }: { session: SessionAnalysi
                 ) : null}
               </>
             )}
-            {inheritedCount > 0 ? <InheritedGroup sessionId={id} rows={inherited} from={from} others={others} openIdx={openIdx} onToggle={toggle} /> : null}
+            {inheritedCount > 0 ? <InheritedGroup sessionId={id} rows={inherited} from={from} others={others} openIdx={openIdx} onToggle={toggle} titles={titleMap} /> : null}
           </div>
+          {titlesError}
           {rows.length > 0 ? <p className="muted keys">Keys: Tab to a prompt, ↑/↓ move, Enter expands, s Steps, m Map, Esc back to sessions.</p> : null}
         </>
       )}
