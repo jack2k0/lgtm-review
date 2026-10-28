@@ -73,8 +73,9 @@ Files: `packages/cli/src/llm.ts`, `packages/cli/src/llm.test.ts`, `cli.ts`, `api
   - `--summary`, `--export` and `--list --json` output on a fixture is byte-identical with and without a titler present (titler spy never called).
   - CLI arg errors: only one of the two flags; with `--summary`; non-loopback URL.
 - Done: `pnpm check` green; gate exit 0/2.
-- [ ] Phase 2 done
+- [x] Phase 2 done
 - [x] Phase 2a done
+- [x] Phase 2b done
 
 ## Phase 3: web + docs
 

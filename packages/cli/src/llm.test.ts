@@ -1,10 +1,27 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { createServer, type IncomingHttpHeaders, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, test } from "vitest";
-import { defaultTitleCacheDir, parseLlmUrl, resolveTitleCacheDir } from "./llm.js";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { TITLE_PROMPT_VERSION, titleRequestBody } from "@lgtm/core";
+import {
+  TITLE_BODY_CAP,
+  TITLE_ERR_RESPONSE,
+  TITLE_ERR_UNREACHABLE,
+  TITLE_FAILURE_LIMIT,
+  TITLE_REQUEST_CAP,
+  TITLE_TIMEOUT_MS,
+  createTitler,
+  defaultTitleCacheDir,
+  parseLlmUrl,
+  resolveTitleCacheDir,
+  titleCacheKey,
+  type TitleSource,
+  type Titler,
+} from "./llm.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = join(here, "../dist/cli.js");
@@ -353,5 +370,638 @@ describe("CLI llm flags", () => {
     expect(r.status).toBe(0);
     expect(r.stderr).not.toContain("LLM titles:");
     expect(existsSync(join(home, ".lgtm-review"))).toBe(false);
+  });
+});
+
+interface Hit {
+  method: string;
+  url: string;
+  host: string;
+  headers: IncomingHttpHeaders;
+  body: string;
+}
+
+interface Fake {
+  hits: Hit[];
+  port: number;
+  close(): Promise<void>;
+}
+
+function chatJson(content: string): string {
+  return JSON.stringify({ id: "t", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }] });
+}
+
+function mustUrl(s: string): URL {
+  const u = parseLlmUrl(s);
+  if (u instanceof Error) throw u;
+  return u;
+}
+
+/** Loopback model stand-in. `onHit` sees the full body; it must respond, hang, or close. */
+async function startFake(host: string, onHit: (hit: Hit, res: ServerResponse) => void): Promise<Fake> {
+  const hits: Hit[] = [];
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("error", () => {});
+    res.on("error", () => {});
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => {
+      const hit: Hit = {
+        method: req.method ?? "",
+        url: req.url ?? "",
+        host: String(req.headers.host ?? ""),
+        headers: req.headers,
+        body: Buffer.concat(chunks).toString("utf8"),
+      };
+      hits.push(hit);
+      try {
+        onHit(hit, res);
+      } catch {
+        res.destroy();
+      }
+    });
+  });
+  server.on("clientError", (_err, socket) => socket.destroy());
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, host, () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const addr = server.address();
+  if (addr === null || typeof addr === "string") throw new Error("fake server has no port");
+  return {
+    hits,
+    port: addr.port,
+    close: () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
+  };
+}
+
+function reply(res: ServerResponse, status: number, body: string | Buffer, extra: Record<string, string> = {}): void {
+  const buf = typeof body === "string" ? Buffer.from(body) : body;
+  res.writeHead(status, {
+    "content-type": "application/json",
+    "content-length": buf.length,
+    connection: "close",
+    ...extra,
+  });
+  res.end(buf);
+}
+
+function ok(res: ServerResponse, content = "Shipped the parser"): void {
+  reply(res, 200, chatJson(content));
+}
+
+describe("createTitler", () => {
+  const temps: string[] = [];
+  const closers: Array<() => Promise<void>> = [];
+  afterEach(async () => {
+    for (const c of closers.splice(0)) await c();
+    for (const t of temps.splice(0)) rmSync(t, { recursive: true, force: true });
+  });
+
+  function scratch(): string {
+    const d = mkdtempSync(join(tmpdir(), "lgtm-titler-"));
+    temps.push(d);
+    return d;
+  }
+
+  async function fake(onHit: (hit: Hit, res: ServerResponse) => void = (_hit, res) => ok(res), host = "127.0.0.1"): Promise<Fake> {
+    const f = await startFake(host, onHit);
+    closers.push(() => f.close());
+    return f;
+  }
+
+  function titler(endpoint: URL, cacheDir: string, extra: { timeoutMs?: number; maxRequests?: number } = {}): Titler {
+    return createTitler({ endpoint, model: "qwen3:4b", cacheDir, timeoutMs: extra.timeoutMs ?? 2000, ...extra });
+  }
+
+  function load(input: string, redact: TitleSource["redact"] = {}): (index: number) => Promise<TitleSource> {
+    return async () => ({ input, redact });
+  }
+
+  function loadN(n: number, prefix = "p", redact: TitleSource["redact"] = {}): (index: number) => Promise<TitleSource> {
+    return async (index) => ({ input: `${prefix}-${index}`, redact });
+  }
+
+  test("titleCacheKey is the version, model and input", () => {
+    expect(titleCacheKey("m", "in")).toBe(createHash("sha256").update(`${TITLE_PROMPT_VERSION}\0m\0in`).digest("hex"));
+    expect(TITLE_REQUEST_CAP).toBe(500);
+    expect(TITLE_TIMEOUT_MS).toBe(60_000);
+    expect(TITLE_BODY_CAP).toBe(64 * 1024);
+    expect(TITLE_FAILURE_LIMIT).toBe(3);
+  });
+
+  test("posts titleRequestBody, sanitises the title, and reuses a 0600 cache file", async () => {
+    const dir = join(scratch(), "cache");
+    const seen = await fake((_hit, res) => ok(res, "<think>hidden chain</think>\nTitle: **Shipped the parser**\n"));
+    const endpoint = mustUrl(`http://127.0.0.1:${seen.port}/v1`);
+    const input = "Fix the add function";
+    const first = titler(endpoint, dir);
+    expect(existsSync(dir)).toBe(false);
+    first.enqueue("s", "1", [0], load(input));
+    await first.settled();
+
+    expect(seen.hits).toHaveLength(1);
+    const hit = seen.hits[0]!;
+    expect(hit.method).toBe("POST");
+    expect(hit.url).toBe("/v1/chat/completions");
+    expect(hit.headers["content-type"]).toBe("application/json");
+    expect(hit.host.startsWith("127.0.0.1:")).toBe(true);
+    expect(JSON.parse(hit.body)).toEqual(titleRequestBody("qwen3:4b", input));
+    expect(first.view("s")).toEqual({ titles: { "0": "Shipped the parser" }, pending: 0, error: null });
+
+    const entries = readdirSync(dir, { withFileTypes: true });
+    expect(entries.every((e) => e.isFile() && e.name.endsWith(".json"))).toBe(true);
+    expect(entries).toHaveLength(1);
+    const file = join(dir, entries[0]!.name);
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(statSync(dir).mode & 0o777).toBe(0o700);
+    const stored = JSON.parse(readFileSync(file, "utf8")) as { v: number; title: string };
+    expect(stored).toEqual({ v: 1, title: "Shipped the parser" });
+    expect(readFileSync(file, "utf8")).not.toContain("hidden");
+
+    const second = titler(endpoint, dir);
+    second.enqueue("s", "1", [0], load(input));
+    await second.settled();
+    expect(seen.hits).toHaveLength(1);
+    expect(second.view("s").titles["0"]).toBe("Shipped the parser");
+  });
+
+  test("canonical loopback forms are requested on the normalised host", async () => {
+    const seen = await fake();
+    const forms = ["2130706433", "0x7f000001", "0177.0.0.1", "127.1", "localhost"];
+    for (const form of forms) {
+      const before = seen.hits.length;
+      const endpoint = mustUrl(`http://${form}:${seen.port}/v1`);
+      expect(endpoint.hostname).toBe("127.0.0.1");
+      const t = titler(endpoint, join(scratch(), form));
+      t.enqueue("s", form, [0], load(`in-${form}`));
+      await t.settled();
+      expect(seen.hits.length - before).toBe(1);
+      const host = seen.hits.at(-1)!.host;
+      expect(host.startsWith("127.0.0.1:")).toBe(true);
+      expect(host.toLowerCase()).not.toContain("localhost");
+      expect(host).not.toContain(form === "localhost" ? "localhost" : form);
+    }
+
+    const direct = titler(new URL(`http://localhost:${seen.port}/v1/chat/completions`), join(scratch(), "direct-localhost"));
+    direct.enqueue("s", "1", [0], load("direct"));
+    await direct.settled();
+    const host = seen.hits.at(-1)!.host;
+    expect(host.startsWith("127.0.0.1:")).toBe(true);
+    expect(host.toLowerCase()).not.toContain("localhost");
+  });
+
+  test("compressed IPv6 loopback is requested as [::1]", async () => {
+    let v6: Fake;
+    try {
+      v6 = await fake((_hit, res) => ok(res), "::1");
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      expect(["EAFNOSUPPORT", "EADDRNOTAVAIL"]).toContain(code);
+      return;
+    }
+    for (const form of ["[0::1]", "[0:0:0:0:0:0:0:1]"]) {
+      const before = v6.hits.length;
+      const endpoint = mustUrl(`http://${form}:${v6.port}/v1`);
+      expect(endpoint.hostname === "[::1]" || endpoint.hostname === "::1").toBe(true);
+      const t = titler(endpoint, join(scratch(), form.replaceAll(":", "").replaceAll("[", "").replaceAll("]", "")));
+      t.enqueue("s", form, [0], load(`v6-${form}`));
+      await t.settled();
+      expect(v6.hits.length - before).toBe(1);
+      expect(v6.hits.at(-1)!.host).toBe(`[::1]:${v6.port}`);
+    }
+  });
+
+  test("HTTP_PROXY is ignored and the model server still receives the request", async () => {
+    const model = await fake();
+    const proxy = await fake((_hit, res) => reply(res, 200, "PROXY"));
+    const keys = ["HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy", "NODE_USE_ENV_PROXY"];
+    const saved = new Map(keys.map((k) => [k, process.env[k]]));
+    try {
+      for (const k of keys) delete process.env[k];
+      const proxyUrl = `http://127.0.0.1:${proxy.port}`;
+      process.env.HTTP_PROXY = proxyUrl;
+      process.env.http_proxy = proxyUrl;
+      process.env.HTTPS_PROXY = proxyUrl;
+      process.env.https_proxy = proxyUrl;
+      process.env.NODE_USE_ENV_PROXY = "1";
+      const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"));
+      t.enqueue("s", "1", [0], load("proxied"));
+      await t.settled();
+      expect(model.hits).toHaveLength(1);
+      expect(model.hits[0]!.url).toBe("/v1/chat/completions");
+      expect(proxy.hits).toHaveLength(0);
+      expect(t.view("s").titles["0"]).toBe("Shipped the parser");
+    } finally {
+      for (const [k, v] of saved) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
+  test("a redirect is an error and the Location is not requested", async () => {
+    const other = await fake();
+    const model = await fake((_hit, res) => reply(res, 302, "SECRET_REDIRECT", { Location: `http://127.0.0.1:${other.port}/stolen` }));
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"));
+    t.enqueue("s", "1", [0, 1, 2, 3], loadN(4));
+    await t.settled();
+    expect(model.hits).toHaveLength(3);
+    expect(other.hits).toHaveLength(0);
+    const view = t.view("s");
+    expect(view.error).toBe(TITLE_ERR_RESPONSE);
+    expect(view.pending).toBe(0);
+    expect(JSON.stringify(view)).not.toContain("SECRET_REDIRECT");
+    expect(view.titles).toEqual({});
+  });
+
+  test("a hung server times out, drains the queue, and does not send the next prompt", async () => {
+    const model = await fake(() => {});
+    const behind = await fake();
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"), { timeoutMs: 200 });
+    t.enqueue("a", "1", [0, 1, 2, 3], loadN(4, "a"));
+    t.enqueue("b", "1", [0], load("session-b-only", {}));
+    await t.settled();
+    expect(model.hits).toHaveLength(3);
+    expect(model.hits.every((h) => !h.body.includes("session-b-only"))).toBe(true);
+    expect(behind.hits).toHaveLength(0);
+    expect(t.view("a").error).toBe(TITLE_ERR_UNREACHABLE);
+    expect(t.view("a").pending).toBe(0);
+    expect(t.view("b")).toEqual({ titles: {}, pending: 0, error: TITLE_ERR_UNREACHABLE });
+    expect(JSON.stringify(t.view("a"))).not.toContain("SECRET");
+  });
+
+  test("a body over 64 KiB is an error and its text is not kept", async () => {
+    const secret = "SECRET_OVERSIZE";
+    const blob = Buffer.alloc(TITLE_BODY_CAP + 1, 0x61);
+    blob.write(secret);
+    const dir = join(scratch(), "cache");
+    const model = await fake((_hit, res) => reply(res, 200, blob));
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), dir);
+    t.enqueue("s", "1", [0, 1, 2], loadN(3));
+    await t.settled();
+    expect(model.hits).toHaveLength(3);
+    const view = t.view("s");
+    expect(view.error).toBe(TITLE_ERR_RESPONSE);
+    expect(view.pending).toBe(0);
+    expect(view.titles).toEqual({});
+    expect(JSON.stringify(view)).not.toContain(secret);
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  test("a 200 that is not OpenAI-shaped is a failure and is not copied into the error", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const body = JSON.stringify({ ok: true, secret: "SECRET_SHAPE_BODY", choices: "nope" });
+      const model = await fake((_hit, res) => reply(res, 200, body));
+      const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"));
+      t.enqueue("s", "1", [0, 1, 2, 3], loadN(4));
+      await t.settled();
+      expect(model.hits).toHaveLength(3);
+      const view = t.view("s");
+      expect(view.error).toBe(TITLE_ERR_RESPONSE);
+      expect(view.pending).toBe(0);
+      expect(JSON.stringify(view)).not.toContain("SECRET_SHAPE_BODY");
+      const dumped = [...log.mock.calls, ...err.mock.calls].map((c) => c.map((x) => String(x)).join(" ")).join("\n");
+      expect(dumped).not.toContain("SECRET_SHAPE_BODY");
+
+      const nested = JSON.stringify({ choices: [{ message: { content: { secret: "SECRET_SHAPE_NESTED" } } }] });
+      const model2 = await fake((_hit, res) => reply(res, 200, nested));
+      const t2 = titler(mustUrl(`http://127.0.0.1:${model2.port}/v1`), join(scratch(), "cache2"));
+      t2.enqueue("s", "1", [0, 1, 2], loadN(3, "n"));
+      await t2.settled();
+      expect(t2.view("s").error).toBe(TITLE_ERR_RESPONSE);
+      expect(JSON.stringify(t2.view("s"))).not.toContain("SECRET_SHAPE_NESTED");
+    } finally {
+      log.mockRestore();
+      err.mockRestore();
+    }
+  });
+
+  test("three HTTP failures stop the queue and omit the body", async () => {
+    const model = await fake((_hit, res) => reply(res, 500, "SECRET_FAIL_BODY"));
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"));
+    t.enqueue("s", "1", [0, 1, 2, 3], async (index) => ({ input: `same-${index}`, redact: {} }));
+    await t.settled();
+    expect(model.hits).toHaveLength(3);
+    expect(t.view("s").error).toBe(TITLE_ERR_RESPONSE);
+    expect(t.view("s").pending).toBe(0);
+    expect(JSON.stringify(t.view("s"))).not.toContain("SECRET_FAIL_BODY");
+    expect(existsSync(join(scratch(), "cache"))).toBe(false);
+  });
+
+  test("the same failing input is requested again until the breaker trips", async () => {
+    const model = await fake((_hit, res) => reply(res, 500, "nope"));
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"));
+    t.enqueue("s", "1", [0, 1, 2], load("same-input"));
+    await t.settled();
+    expect(model.hits).toHaveLength(3);
+    expect(t.view("s").error).toBe(TITLE_ERR_RESPONSE);
+  });
+
+  test("an empty sanitised title is a miss, resets the failure counter, and is not cached", async () => {
+    let n = 0;
+    const plan = [
+      () => ({ status: 500, body: "SECRET_FAIL_BODY" }),
+      () => ({ status: 500, body: "SECRET_FAIL_BODY" }),
+      () => ({ status: 200, body: chatJson("<think>x</think>") }),
+      () => ({ status: 500, body: "SECRET_FAIL_BODY" }),
+      () => ({ status: 500, body: "SECRET_FAIL_BODY" }),
+      () => ({ status: 500, body: "SECRET_FAIL_BODY" }),
+    ];
+    const model = await fake((_hit, res) => {
+      const step = plan[n++];
+      if (!step) {
+        reply(res, 200, chatJson("should-not-run"));
+        return;
+      }
+      const r = step();
+      reply(res, r.status, r.body);
+    });
+    const dir = join(scratch(), "cache");
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), dir);
+    t.enqueue("s", "1", [0, 1, 2, 3, 4, 5, 6], loadN(7));
+    await t.settled();
+    expect(model.hits).toHaveLength(6);
+    expect(t.view("s").error).toBe(TITLE_ERR_RESPONSE);
+    expect(t.view("s").pending).toBe(0);
+    expect(t.view("s").titles).toEqual({});
+    expect(JSON.stringify(t.view("s"))).not.toContain("SECRET_FAIL_BODY");
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  test("a real title resets the failure counter and is cached", async () => {
+    let n = 0;
+    const model = await fake((_hit, res) => {
+      n += 1;
+      if (n === 3) ok(res, "Shipped the parser");
+      else reply(res, 500, "SECRET_FAIL_BODY");
+    });
+    const dir = join(scratch(), "cache");
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), dir);
+    t.enqueue("s", "1", [0, 1, 2, 3, 4, 5, 6], loadN(7, "reset"));
+    await t.settled();
+    expect(model.hits).toHaveLength(6);
+    expect(t.view("s").titles["2"]).toBe("Shipped the parser");
+    expect(t.view("s").error).toBe(TITLE_ERR_RESPONSE);
+    expect(existsSync(dir)).toBe(true);
+    const raw = readFileSync(join(dir, readdirSync(dir)[0]!), "utf8");
+    expect(raw).toContain("Shipped the parser");
+    expect(raw).not.toContain("SECRET_FAIL_BODY");
+  });
+
+  test("the request cap drains the queue without sending another request", async () => {
+    const model = await fake();
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"), { maxRequests: 2 });
+    t.enqueue("s", "1", [0, 1, 2], loadN(3, "cap"));
+    await t.settled();
+    expect(model.hits).toHaveLength(2);
+    const view = t.view("s");
+    expect(view.titles["0"]).toBe("Shipped the parser");
+    expect(view.titles["1"]).toBe("Shipped the parser");
+    expect(view.titles["2"]).toBeUndefined();
+    expect(view.pending).toBe(0);
+    expect(view.error).toBe(TITLE_ERR_RESPONSE);
+  });
+
+  test("one request serves two prompts with the same input, and different inputs stay sequential", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    let open!: () => void;
+    const opened = new Promise<void>((r) => {
+      open = r;
+    });
+    let live = 0;
+    let max = 0;
+    const model = await fake((_hit, res) => {
+      live += 1;
+      max = Math.max(max, live);
+      if (model.hits.length === 1) open();
+      void held.then(() => {
+        live -= 1;
+        ok(res);
+      });
+    });
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"));
+    t.enqueue("s", "1", [0, 1], load("same"));
+    await opened;
+    expect(model.hits).toHaveLength(1);
+    expect(t.view("s").pending).toBe(2);
+    release();
+    await t.settled();
+    expect(model.hits).toHaveLength(1);
+    expect(t.view("s").titles).toEqual({ "0": "Shipped the parser", "1": "Shipped the parser" });
+
+    let release2!: () => void;
+    const held2 = new Promise<void>((r) => {
+      release2 = r;
+    });
+    let open2!: () => void;
+    const opened2 = new Promise<void>((r) => {
+      open2 = r;
+    });
+    live = 0;
+    max = 0;
+    const model2 = await fake((_hit, res) => {
+      live += 1;
+      max = Math.max(max, live);
+      if (model2.hits.length === 1) open2();
+      void held2.then(() => {
+        live -= 1;
+        ok(res);
+      });
+    });
+    const t2 = titler(mustUrl(`http://127.0.0.1:${model2.port}/v1`), join(scratch(), "cache2"));
+    t2.enqueue("s", "1", [0, 1], loadN(2, "diff"));
+    await opened2;
+    expect(model2.hits).toHaveLength(1);
+    expect(max).toBe(1);
+    expect(t2.view("s").pending).toBe(2);
+    release2();
+    await t2.settled();
+    expect(model2.hits).toHaveLength(2);
+    expect(max).toBe(1);
+    expect(t2.view("s").pending).toBe(0);
+  });
+
+  test("enqueueing the same stamp twice does not send a second request", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    let open!: () => void;
+    const opened = new Promise<void>((r) => {
+      open = r;
+    });
+    const model = await fake((_hit, res) => {
+      open();
+      void held.then(() => ok(res));
+    });
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"));
+    t.enqueue("s", "1", [0], load("once"));
+    await opened;
+    t.enqueue("s", "1", [0], load("once"));
+    release();
+    await t.settled();
+    expect(model.hits).toHaveLength(1);
+    expect(t.view("s").titles["0"]).toBe("Shipped the parser");
+  });
+
+  test("a null or throwing loader makes no request and does not create the cache", async () => {
+    const model = await fake();
+    const dir = join(scratch(), "cache");
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), dir);
+    t.enqueue("s", "1", [0, 1], async () => null);
+    await t.settled();
+    expect(model.hits).toHaveLength(0);
+    expect(existsSync(dir)).toBe(false);
+    expect(t.view("s")).toEqual({ titles: {}, pending: 0, error: null });
+
+    const dir2 = join(scratch(), "cache2");
+    const t2 = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), dir2);
+    t2.enqueue("s", "1", [0], async () => {
+      throw new Error("boom");
+    });
+    await t2.settled();
+    expect(model.hits).toHaveLength(0);
+    expect(existsSync(dir2)).toBe(false);
+    expect(t2.view("s").error).toBeNull();
+  });
+
+  test("the sanitised title is redacted again before it is cached or returned", async () => {
+    const dirty = "alice used sk-ant-api03-abcdefghij123 in /home/user/project/src/a.ts";
+    const model = await fake((_hit, res) => ok(res, dirty));
+    const dir = join(scratch(), "cache");
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), dir);
+    t.enqueue("s", "1", [0], load("in", { repoDir: "/home/user/project", usernames: ["alice"] }));
+    await t.settled();
+    const title = t.view("s").titles["0"] ?? "";
+    expect(title).toContain("[redacted:anthropic-key]");
+    expect(title).toContain("<repo>");
+    expect(title).toContain("<user>");
+    expect(title).not.toContain("sk-ant-api03-abcdefghij123");
+    expect(title).not.toContain("/home/user/project");
+    expect(title).not.toContain("alice");
+    const raw = readFileSync(join(dir, readdirSync(dir)[0]!), "utf8");
+    expect(raw).not.toContain("sk-ant-api03-abcdefghij123");
+    expect(raw).not.toContain("/home/user/project");
+    expect(raw).not.toContain("alice");
+    expect(raw).toContain("[redacted:anthropic-key]");
+  });
+
+  test("a non-loopback endpoint is not contacted", async () => {
+    const model = await fake();
+    const t = titler(new URL(`http://10.0.0.1:${model.port}/v1/chat/completions`), join(scratch(), "cache"), { timeoutMs: 200 });
+    const started = Date.now();
+    t.enqueue("s", "1", [0, 1, 2], loadN(3, "remote"));
+    await t.settled();
+    expect(Date.now() - started).toBeLessThan(400);
+    expect(model.hits).toHaveLength(0);
+    expect(t.view("s").error).toBe(TITLE_ERR_UNREACHABLE);
+    expect(t.view("s").pending).toBe(0);
+  });
+
+  test("a cache hit between failures does not reset the counter", async () => {
+    const dir = join(scratch(), "cache");
+    mkdirSync(dir);
+    const modelName = "qwen3:4b";
+    const kept = "Kept from disk";
+    writeFileSync(join(dir, `${titleCacheKey(modelName, "c")}.json`), JSON.stringify({ v: 1, title: kept }));
+    const model = await fake((_hit, res) => reply(res, 500, "SECRET_FAIL_BODY"));
+    const t = createTitler({ endpoint: mustUrl(`http://127.0.0.1:${model.port}/v1`), model: modelName, cacheDir: dir, timeoutMs: 2000 });
+    const inputs = ["a", "b", "c", "d", "e"];
+    t.enqueue("s", "1", [0, 1, 2, 3, 4], async (index) => ({ input: inputs[index]!, redact: {} }));
+    await t.settled();
+    expect(model.hits.map((h) => JSON.parse(h.body).messages[1].content)).toEqual(["a", "b", "d"]);
+    expect(t.view("s").titles["2"]).toBe(kept);
+    expect(t.view("s").error).toBe(TITLE_ERR_RESPONSE);
+    expect(t.view("s").pending).toBe(0);
+    expect(JSON.stringify(t.view("s"))).not.toContain("SECRET_FAIL_BODY");
+  });
+
+  test("a changed stamp reads the disk cache and does not request again", async () => {
+    const dir = join(scratch(), "cache");
+    const model = await fake();
+    const endpoint = mustUrl(`http://127.0.0.1:${model.port}/v1`);
+    const first = titler(endpoint, dir);
+    first.enqueue("s", "stamp-a", [0], load("stable-input"));
+    await first.settled();
+    expect(model.hits).toHaveLength(1);
+
+    const second = titler(endpoint, dir);
+    second.enqueue("s", "stamp-b", [0], load("stable-input"));
+    const mid = second.view("s");
+    expect(mid.pending).toBe(1);
+    expect(mid.titles).toEqual({});
+    await second.settled();
+    expect(model.hits).toHaveLength(1);
+    expect(second.view("s").titles["0"]).toBe("Shipped the parser");
+  });
+
+  test.each([
+    ["truncated json", "{"],
+    ["wrong version", JSON.stringify({ v: 2, title: "Hello" })],
+    ["extra key", JSON.stringify({ v: 1, title: "Hello", extra: 1 })],
+    ["unstable title", JSON.stringify({ v: 1, title: "Title: Hello" })],
+    ["oversize file", "x".repeat(1025)],
+  ])("corrupt cache (%s) is ignored and fetched again", async (_name, content) => {
+    const dir = join(scratch(), "cache");
+    mkdirSync(dir, { mode: 0o700 });
+    const input = "prompt text";
+    writeFileSync(join(dir, `${titleCacheKey("qwen3:4b", input)}.json`), content);
+    const model = await fake();
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), dir);
+    t.enqueue("s", "1", [0], load(input));
+    await t.settled();
+    expect(model.hits).toHaveLength(1);
+    expect(t.view("s").titles["0"]).toBe("Shipped the parser");
+    const raw = readFileSync(join(dir, `${titleCacheKey("qwen3:4b", input)}.json`), "utf8");
+    expect(JSON.parse(raw)).toEqual({ v: 1, title: "Shipped the parser" });
+    expect(statSync(join(dir, `${titleCacheKey("qwen3:4b", input)}.json`)).mode & 0o777).toBe(0o600);
+  });
+
+  test("a symlink cache file is not followed or replaced", async () => {
+    const root = scratch();
+    const dir = join(root, "cache");
+    mkdirSync(dir, { mode: 0o700 });
+    const outside = join(root, "outside.txt");
+    writeFileSync(outside, "KEEP");
+    const input = "prompt text";
+    const dest = join(dir, `${titleCacheKey("qwen3:4b", input)}.json`);
+    symlinkSync(outside, dest);
+    const model = await fake();
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), dir);
+    t.enqueue("s", "1", [0], load(input));
+    await t.settled();
+    expect(model.hits).toHaveLength(1);
+    expect(t.view("s").titles["0"]).toBe("Shipped the parser");
+    expect(lstatSync(dest).isSymbolicLink()).toBe(true);
+    expect(readFileSync(outside, "utf8")).toBe("KEEP");
+  });
+
+  test("a symlink cache root is not followed", async () => {
+    const root = scratch();
+    const real = join(root, "real");
+    mkdirSync(real);
+    const link = join(root, "link");
+    symlinkSync(real, link);
+    const model = await fake();
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), link);
+    t.enqueue("s", "1", [0], load("via-link"));
+    await t.settled();
+    expect(model.hits).toHaveLength(1);
+    expect(t.view("s").titles["0"]).toBe("Shipped the parser");
+    expect(readdirSync(real)).toEqual([]);
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
   });
 });

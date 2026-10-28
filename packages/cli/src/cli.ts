@@ -19,7 +19,7 @@ import type { Analysis, RepoScripts, SessionAnalysis } from "@lgtm/core";
 import { runExport } from "./export.js";
 import { formatText, sortSessions } from "./format.js";
 import { formatSummary } from "./summary.js";
-import { defaultTitleCacheDir, parseLlmUrl, resolveTitleCacheDir } from "./llm.js";
+import { createTitler, defaultTitleCacheDir, parseLlmUrl, resolveTitleCacheDir } from "./llm.js";
 import { createLauncher, openBrowser, type Launcher } from "./open.js";
 import { startServer } from "./server.js";
 
@@ -97,7 +97,15 @@ async function serve(
   const webRoot = join(dirname(fileURLToPath(import.meta.url)), "web");
   let running;
   try {
-    running = await startServer({ dir, projectsDir, archiveDir: roots[0]!.archiveDir ?? undefined, roots, webRoot, port });
+    running = await startServer({
+      dir,
+      projectsDir,
+      archiveDir: roots[0]!.archiveDir ?? undefined,
+      roots,
+      webRoot,
+      port,
+      ...(llm !== undefined ? { llm: createTitler({ endpoint: llm.endpoint, model: llm.model, cacheDir: llm.cacheDir }) } : {}),
+    });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EADDRINUSE") console.error(`lgtm-review: port ${port} is already in use`);

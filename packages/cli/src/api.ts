@@ -2,9 +2,10 @@ import { realpathSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { analyzeFile, analyzeFileDetail, discoverRootSessions, gitCrosscheck, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile, type SessionRoot } from "@lgtm/core/node";
-import { buildBeats, inheritedSource, markInherited, needsAttention, ownershipRanks } from "@lgtm/core";
+import { buildBeats, condenseForTitle, inheritedSource, markInherited, needsAttention, ownershipRanks } from "@lgtm/core";
 import type { Analyzer, GitCrosscheckResponse, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
 import { planImportMap, toRepoRelative } from "./map.js";
+import { osUsernames } from "./export.js";
 import { sortSessions } from "./format.js";
 import { etagFor, ifNoneMatch, sendJson, sendNotModified, type ApiHandler } from "./http.js";
 import type { ServerOptions } from "./server.js";
@@ -424,9 +425,47 @@ export function createApi(opts: ServerOptions): ApiHandler {
     return true;
   }
 
+  /**
+   * `/titles` has no ETag and is never 304. Unknown ids are 404, including when titles are off.
+   * Without a titler the body is `{enabled:false}` and no prompt is analysed.
+   * With one, own prompts are enqueued; this handler does not build prompt details and does not wait.
+   */
+  async function titlesRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, files: SessionFile[], projectStampValue: string): Promise<boolean> {
+    const version = file ? await versionOf(file) : null;
+    if (!file || version === null) return false;
+    if (opts.llm === undefined) {
+      sendJson(req, res, 200, { enabled: false, titles: {}, pending: 0, error: null });
+      return true;
+    }
+    const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
+    if (!analysis) return false;
+    const own: number[] = [];
+    for (let i = 0; i < analysis.prompts.length; i++) {
+      if (analysis.prompts[i]!.inheritedFrom === undefined) own.push(i);
+    }
+    const rootDir = file.root ?? opts.dir;
+    let repoDir = rootDir;
+    try {
+      repoDir = realpathSync(rootDir);
+    } catch {
+      repoDir = rootDir;
+    }
+    const redactOpts = { repoDir, usernames: [...osUsernames()] };
+    opts.llm.enqueue(file.id, `${version}\0${projectStampValue}`, own, async (index) => {
+      const d = await detailFor(file);
+      const prompt = d?.analysis.prompts[index];
+      if (!d || !prompt || prompt.inheritedFrom !== undefined) return null;
+      return { input: condenseForTitle(prompt, d.details[index] ?? null, redactOpts), redact: redactOpts };
+    });
+    const view = opts.llm.view(file.id);
+    sendJson(req, res, 200, { enabled: true, titles: view.titles, pending: view.pending, error: view.error });
+    return true;
+  }
+
   return async (req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> => {
     const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
-    const match = /^\/api\/sessions(?:\/([^/]+)(?:\/prompts\/([^/]+)(\/diff|\/play)?|(\/map)|(\/git))?)?$/.exec(path);
+    // Groups: 1 id, 2 prompt index, 3 /diff|/play, 4 /map, 5 /git, 6 /titles. Do not renumber 1–5.
+    const match = /^\/api\/sessions(?:\/([^/]+)(?:\/prompts\/([^/]+)(\/diff|\/play)?|(\/map)|(\/git)|(\/titles))?)?$/.exec(path);
     if (!match) return false;
     try {
       const files = await discover();
@@ -448,6 +487,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
       const file = files.find((f) => f.id === id);
       if (match[4] !== undefined) return await mapRoute(req, res, file, files, stamp);
       if (match[5] !== undefined) return await gitRoute(req, res, file, files);
+      if (match[6] !== undefined) return await titlesRoute(req, res, file, files, stamp);
       if (match[3] === "/play") return await playRoute(req, res, file, files, stamp, match[2]);
       if (match[2] !== undefined) return await promptRoute(req, res, file, file ? stamp : null, match[2], match[3] === "/diff");
       if (!file || (await versionOf(file)) === null) return false;

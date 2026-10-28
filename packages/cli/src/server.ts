@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import { pipeline } from "node:stream";
 import { createApi } from "./api.js";
 import { sendJson } from "./http.js";
+import type { Titler } from "./llm.js";
 import { baseHeaders, contentTypeFor, hostAllowed, originAllowed, resolveStatic, TOKEN_HEADER, tokenValid } from "./security.js";
 
 export interface ServerOptions {
@@ -24,6 +25,8 @@ export interface ServerOptions {
   token?: string;
   /** Test hook: overrides the import-map caps (see `MapCaps`). */
   mapCaps?: Partial<import("./map.js").MapCaps>;
+  /** Opt-in local titles. Absent: `/titles` is `{enabled:false}` and does no title work. */
+  llm?: Titler;
 }
 
 export interface RunningServer {
