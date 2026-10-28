@@ -313,8 +313,9 @@ describe("classifyShellMutation: cd and variable chains (status-accuracy-4)", ()
     ["cd ~ && sed -i x a.ts", [SHELL_EDIT_FILE]],
     ["S=$OTHER/f; cd $S && sed -i x a.ts", [SHELL_EDIT_FILE]],
     ["(cd /tmp/s && sed -i x a.ts); sed -i x b.ts", ["/tmp/s/a.ts", "b.ts"]],
-    // C17: a subshell `cd` not followed by `&&` / `|| exit` poisons the directory outside the subshell too.
-    ["(cd /tmp/s); sed -i x b.ts", [SHELL_EDIT_FILE]],
+    ["(cd /tmp/s; sed -i x a.ts); sed -i x b.ts", [SHELL_EDIT_FILE, "b.ts"]],
+    // A `( … )` subshell does not keep the directory change. The outer file stays on the session cwd.
+    ["(cd /tmp/s); sed -i x b.ts", ["b.ts"]],
     ["pushd /tmp/s && sed -i x a.ts", ["/tmp/s/a.ts"]],
     ["cd /tmp/s && cd wt && sed -i x a.ts", ["/tmp/s/wt/a.ts"]],
     ["cd /tmp/s && cd ../t && sed -i x a.ts", ["/tmp/t/a.ts"]],
@@ -883,6 +884,9 @@ describe("C17: python -c withdrawn, cd only on && / || exit, exact gate, temp cl
     expect(merged.opaque).toBe(false);
     expect(files("S=/tmp/x; echo x > $S/a.ts")).toEqual([]);
     expect(files("S=/tmp/claude-1000/x/scratchpad; echo x > $S/a.ts")).toEqual([]);
+    // A use before the assignment stays scratch. The assignment poisons only what follows it.
+    expect(files("echo x > $S/a.txt; S=$PWD/src")).toEqual([]);
+    expect(files("echo x > $S/a.txt; S=$PWD/src; echo x > $S/b.ts")).toEqual([SHELL_EDIT_FILE]);
   });
 
   test("C17: cd is tracked only for && and || exit/return", () => {
@@ -907,6 +911,15 @@ describe("C17: python -c withdrawn, cd only on && / || exit, exact gate, temp cl
     expect(files("echo $(cd /tmp/x); sed -i s/a/b/ src/a.ts")).toEqual([SHELL_EDIT_FILE]);
     expect(files("cd /tmp/x && sed -i s/a/b/ src/a.ts && echo done")).toEqual(["/tmp/x/src/a.ts"]);
     expect(files("(cd /tmp/s && sed -i x a.ts); sed -i x b.ts")).toEqual(["/tmp/s/a.ts", "b.ts"]);
+    expect(files("(cd /tmp/s); sed -i x b.ts")).toEqual(["b.ts"]);
+    expect(files("(cd /tmp/s; sed -i x a.ts); sed -i x b.ts")).toEqual([SHELL_EDIT_FILE, "b.ts"]);
+    expect(files("(cd /tmp/s | cat); sed -i x b.ts")).toEqual(["b.ts"]);
+    expect(files("(cd /tmp/s || true); sed -i x b.ts")).toEqual(["b.ts"]);
+    expect(files("(if cd /tmp/s; then sed -i x a.ts; fi); sed -i x b.ts")).toEqual([SHELL_EDIT_FILE, "b.ts"]);
+    expect(files("(popd); sed -i x b.ts")).toEqual(["b.ts"]);
+    expect(files("(pushd /tmp/s); sed -i x b.ts")).toEqual(["b.ts"]);
+    expect(files("cd /repo && (cd /tmp/s); sed -i x b.ts")).toEqual(["/repo/b.ts"]);
+    expect(files("cd /tmp/x; (cd /repo && sed -i x a.ts); sed -i x b.ts")).toEqual(["/repo/a.ts", SHELL_EDIT_FILE]);
   });
 
   test("C17: scratch* is a directory name, and a scratch-like file name is code", () => {

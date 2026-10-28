@@ -170,7 +170,8 @@ function tempPrefixName(prefix: string): string | null {
 /**
  * A temp-variable path stays scratch while the remainder is under the variable.
  * `..` that normalises above the variable (`$S/../../src/a.ts`, `$S//../a.ts`) is `climb`: unresolved, a code edit.
- * A temp name this command assigns away from a temp root, or uses as a `for` / `read` variable, is `climb` too (C17).
+ * A temp name assigned to a non-temp root, or used as a `for` / `read` variable, is `climb` from that
+ * assignment on (a use earlier in the command stays scratch).
  * Ending exactly on the variable (`$S/foo/..`) is still scratch.
  */
 function tempPrefixKind(p: string, poisoned?: ReadonlySet<string>): "scratch" | "climb" | null {
@@ -827,14 +828,29 @@ function unquotedParens(text: string): { opens: number; closes: number } {
   return { opens, closes };
 }
 
+/** A grouping `( … )`, not `$(…)`, `<(…)`, `>(…)`, `name()`, or `name=(…)`. */
+function isGroupingSubshellOpen(text: string, i: number): boolean {
+  const prev = i > 0 ? (text[i - 1] as string) : "";
+  if (prev === "$" || prev === "<" || prev === ">" || prev === "=") return false;
+  let j = i - 1;
+  while (j >= 0 && /\s/.test(text[j] as string)) j--;
+  if (j >= 0 && /[A-Za-z0-9_]/.test(text[j] as string)) {
+    let k = i + 1;
+    while (k < text.length && /\s/.test(text[k] as string)) k++;
+    if (k < text.length && text[k] === ")") return false;
+  }
+  return true;
+}
+
 /**
- * `$(...)` pairs fully inside this segment. `splitSegments` counts those parentheses as a subshell,
- * but they do not wrap the segment's own command (`cd $(pwd)` still runs in the current shell).
- * A trailing `)` is already removed from `seg.text`, so `closes` puts it back before the scan.
+ * Grouping subshell parentheses in this segment. `stack` remembers opens from earlier segments,
+ * so a `)` in a later segment still closes the subshell it belongs to. `$(…)`, function `name()`,
+ * and array `name=(…)` do not: a `cd` there is not isolated by this stack.
  */
-function containedCommandSubs(text: string): number {
-  let count = 0;
-  let quote: string | null = null;
+function consumeGroupingParens(text: string, stack: boolean[]): { opens: number; closes: number } {
+  let opens = 0;
+  let closes = 0;
+  let quote: "'" | '"' | null = null;
   for (let i = 0; i < text.length; i++) {
     const c = text[i] as string;
     if (quote !== null) {
@@ -846,19 +862,19 @@ function containedCommandSubs(text: string): number {
       i++;
       continue;
     }
-    if (c === '"' || c === "'") {
+    if (c === "'" || c === '"') {
       quote = c;
       continue;
     }
-    if (c === "$" && text[i + 1] === "(") {
-      const end = closeParen(text, i + 1);
-      if (end >= 0) {
-        count += 1 + containedCommandSubs(text.slice(i + 2, end));
-        i = end;
-      }
+    if (c === "(") {
+      const grouping = isGroupingSubshellOpen(text, i);
+      stack.push(grouping);
+      if (grouping) opens++;
+    } else if (c === ")") {
+      if (stack.pop()) closes++;
     }
   }
-  return count;
+  return { opens, closes };
 }
 
 /** Words stripped before the command word when looking for a directory hider (C16). */
@@ -1236,48 +1252,42 @@ function countBraces(segment: string): { open: number; close: number } {
 }
 
 /**
- * Temp names (`S`, `TMP`, `TMPDIR`, `TEMP`, `SCRATCH*`) this command assigns to something other than a
- * temp root, or binds with `for` / `read`. Their `$NAME/…` paths are unresolved for the whole command (C17).
+ * Temp names (`S`, `TMP`, `TMPDIR`, `TEMP`, `SCRATCH*`) this segment assigns to something other than a
+ * temp root, or binds with `for` / `read`. Callers add them before this segment's own writes, so an
+ * earlier use keeps the by-name scratch rule. A prefix `NAME=value cmd` does not: the shell expands
+ * that command before the assignment, and the assignment does not survive it. `vars` is the map from
+ * earlier segments (same-segment assignments are not visible to each other).
  */
-function poisonedTempNames(segs: { text: string }[]): Set<string> {
-  const poisoned = new Set<string>();
-  const vars = new Map<string, string>();
-  for (const seg of segs) {
-    let s = seg.text.trim();
-    const exported = s.startsWith("export ");
-    const found: [string, string | null][] = [];
-    for (let guard = 0; guard < 10; guard++) {
-      const m = ASSIGN_RE.exec(s);
-      if (!m) break;
-      const name = m[1] as string;
-      const value = assignmentValue(m[2] as string, vars);
-      found.push([name, value]);
+function poisonTempNamesInSegment(text: string, vars: ReadonlyMap<string, string>, poisoned: Set<string>): void {
+  let s = text.trim();
+  const exported = s.startsWith("export ");
+  const found: [string, string | null][] = [];
+  for (let guard = 0; guard < 10; guard++) {
+    const m = ASSIGN_RE.exec(s);
+    if (!m) break;
+    found.push([m[1] as string, assignmentValue(m[2] as string, vars)]);
+    s = s.slice(m[0].length);
+  }
+  if (s.trim() === "" || exported) {
+    for (const [name, value] of found) {
       if (TEMP_NAME_RE.test(name) && !isTempRootValue(value)) poisoned.add(name);
-      s = s.slice(m[0].length);
     }
-    if (s.trim() === "" || exported) {
-      for (const [name, v] of found) {
-        if (v === null) vars.delete(name);
-        else vars.set(name, v);
-      }
-    }
-    const { words } = parseWords(seg.text);
-    for (let i = 0; i < words.length; i++) {
-      const t = (words[i] as Word).text;
-      if (t === "for") {
-        const name = words[i + 1]?.text ?? "";
-        if (TEMP_NAME_RE.test(name)) poisoned.add(name);
-      } else if (t === "read") {
-        let j = i + 1;
-        while (j < words.length && /^-[A-Za-z]+$/.test((words[j] as Word).text)) j++;
-        while (j < words.length && TEMP_NAME_RE.test((words[j] as Word).text)) {
-          poisoned.add((words[j] as Word).text);
-          j++;
-        }
+  }
+  const { words } = parseWords(text);
+  for (let i = 0; i < words.length; i++) {
+    const t = (words[i] as Word).text;
+    if (t === "for") {
+      const name = words[i + 1]?.text ?? "";
+      if (TEMP_NAME_RE.test(name)) poisoned.add(name);
+    } else if (t === "read") {
+      let j = i + 1;
+      while (j < words.length && /^-[A-Za-z]+$/.test((words[j] as Word).text)) j++;
+      while (j < words.length && TEMP_NAME_RE.test((words[j] as Word).text)) {
+        poisoned.add((words[j] as Word).text);
+        j++;
       }
     }
   }
-  return poisoned;
 }
 
 /** `NODE_OPTIONS` / `PYTHONPATH` assigned in this segment (they stay in the environment for later segments). */
@@ -1592,27 +1602,28 @@ export function classifyShellMutation(
     let truncated = false;
     let dir: Dir = { k: "session" };
     let sawCd = false;
-    // An untrusted `cd` / `pushd` / `popd` sticks: leaving a subshell does not bring the old directory back.
+    // Untrusted `cd` / `pushd` / `popd` outside a subshell leaves the directory unknown.
+    // A grouping `( … )` saves `dir` and `sticky` and puts them back at the closing `)`.
     let sticky = false;
     let compound = 0;
     let funcDepth = 0;
     let funcBraces = 0;
     // `NODE_OPTIONS` / `PYTHONPATH` from an earlier segment of this command.
     let loaderEnv = false;
-    const poisoned = poisonedTempNames(segs);
-    const dirStack: Dir[] = [];
+    const poisoned = new Set<string>();
+    const dirStack: { dir: Dir; sticky: boolean }[] = [];
+    const groupingOpen: boolean[] = [];
     segs.forEach((seg, i) => {
+      poisonTempNamesInSegment(seg.text, vars, poisoned);
       collectAssignments(seg.text, vars);
       // Vars first, then `$E` when E is only NAME=value words, then prefix stripping (C8).
       const expanded = expandEnvSlots(seg.text, vars);
-      // `$(...)` closed inside this segment is not a subshell around the command.
-      // `splitSegments` drops a trailing `)`, which is what closes `cd $(pwd)`.
+      // `splitSegments` drops a trailing `)`. Put it back so the subshell close is visible.
+      // `$(…)` / `name()` / `name=(` are not grouping subshells (`cd $(pwd)` stays in this shell).
       const seenParens = unquotedParens(seg.text);
-      const restored = seg.text + ")".repeat(Math.max(0, seg.closes - seenParens.closes));
-      const buried = containedCommandSubs(restored);
-      const groupOpens = Math.max(0, seg.opens - buried);
-      const groupCloses = Math.max(0, seg.closes - buried);
-      for (let n = 0; n < groupOpens; n++) dirStack.push(dir);
+      const restoredText = seg.text + ")".repeat(Math.max(0, seg.closes - seenParens.closes));
+      const groups = consumeGroupingParens(restoredText, groupingOpen);
+      for (let n = 0; n < groups.opens; n++) dirStack.push({ dir, sticky });
       // The heredoc fed to this segment's stdin: its own, or the one that opened the pipeline it belongs to.
       const own = HEREDOC_START_RE.test(seg.text) ? heredocs++ : null;
       if (!prevPipe) pipeHeredoc = null;
@@ -1697,9 +1708,12 @@ export function classifyShellMutation(
           );
         }
       }
-      for (let n = 0; n < groupCloses; n++) {
-        const restored = dirStack.pop() ?? { k: "session" };
-        dir = sticky ? { k: "unknown" } : restored;
+      for (let n = 0; n < groups.closes; n++) {
+        const frame = dirStack.pop();
+        if (frame) {
+          dir = frame.dir;
+          sticky = frame.sticky;
+        }
       }
       if (COMPOUND_INC.has(opener)) compound++;
       else if (COMPOUND_DEC.has(opener)) compound = Math.max(0, compound - 1);
