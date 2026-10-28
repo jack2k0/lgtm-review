@@ -201,7 +201,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-19 | worktree-sessions | see the sessions of every git worktree of the repository in one list                                                          | M    | S-17                       | S-18 (schema-first rule), S-20 | FR-018, NFR read-only git    | done |
 | S-20 | status-accuracy-2 | rely on >= 97% status match on real logs (in-command order, background notifications, scratch files, Python comments)         | M    | S-18                       | S-19, S-21                   | FR-002, FR-004, FR-013, SC v3  | done |
 | S-21 | git-crosscheck    | compare what a session's prompts edited with what git shows for that directory                                                | M    | S-19                       | S-20                         | FR-019, NFR read-only git      | done |
-| S-08 | llm-titles        | opt in to one-sentence prompt titles from a local model server (loopback only)                                                | L    | S-17 + owner decisions     | —                            | FR-020, NFR loopback LLM       | implemented (pending review) |
+| S-08 | llm-titles        | opt in to one-sentence prompt titles from a local model server (loopback only)                                                | L    | S-17 + owner decisions     | —                            | FR-020, NFR loopback LLM       | done (2026-10-28, 6e9118e) |
 
 Waves: **1** S-16 ‖ S-17 → **2** S-18 ‖ S-19 → **3** S-20 ‖ S-21 → **gated** S-08.
 
@@ -327,7 +327,7 @@ Files each slice is expected to touch (for the parallel check):
 - **Unknowns:**
   - Title quality and latency of small local models on condensed turns; the cache (`~/.lgtm-review/cache`) is a new write path. — Owner: team. Block: no.
 - **Risk:** highest of the batch relative to its value: non-reproducible text in a deterministic tool and a new data path; kept last and gated. Reuses the reserved ID S-08 because the PRD, the proposal and the owner's decisions point to it.
-- **Status:** implemented (pending review)
+- **Status:** done (2026-10-28; merge 6e9118e, impl Grok, reviews Sonnet + OpenCode)
 
 ### Backlog handoff (v0.3)
 
