@@ -58,7 +58,7 @@ Files: `packages/core/src/schema.ts`, `packages/core/src/index.ts`, `packages/co
 - `llm-input.ts` (no `node:` import): `TITLE_PROMPT_VERSION` (string const), `TITLE_SYSTEM_PROMPT`, `condenseForTitle(prompt: PromptAnalysis, detail: PromptDetail | null, root?: string): string`, `sanitizeTitle(raw: string): string | null`, `titleRequestBody(model: string, input: string): object`.
 - Tests: secrets in prompt text/step titles/file paths are redacted (reuse patterns from `redact.test.ts`, e.g. an `sk-ant-` key and a bearer token); caps (25 steps, 20 files, 2000 chars); deterministic output for the same input; `sanitizeTitle` cases (think block, quotes, `Title:` prefix, markdown, multi-line, control chars, >120 chars cut at a word, empty -> null).
 - Done: `pnpm check` green; gate exit 0/2.
-- [ ] Phase 1 done
+- [x] Phase 1 done
 
 ## Phase 2: CLI (flags, client, cache, route)
 

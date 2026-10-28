@@ -386,3 +386,19 @@ export const GitCrosscheckResponse = z.object({
   notes: z.array(z.string()),
 });
 export type GitCrosscheckResponse = z.infer<typeof GitCrosscheckResponse>;
+
+/**
+ * Body of `GET /api/sessions/:id/titles`.
+ * Titles are opt-in local generations. They are not part of summary, export, list, status, reason or hint text.
+ */
+export const LlmTitlesResponse = z.object({
+  /** False when the server was started without both `--llm-url` and `--llm-model`. */
+  enabled: z.boolean(),
+  /** Prompt index (decimal string) -> one-sentence title. */
+  titles: z.record(z.string(), z.string()),
+  /** Own prompts of this session still queued or in flight for a title. */
+  pending: z.number().int().nonnegative(),
+  /** Generic failure such as "model server not reachable", or null. Never a response body. */
+  error: z.string().nullable(),
+});
+export type LlmTitlesResponse = z.infer<typeof LlmTitlesResponse>;
