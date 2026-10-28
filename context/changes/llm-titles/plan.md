@@ -83,3 +83,16 @@ Files: `packages/web/src/api.ts`, `PromptTable.tsx`, `styles.css`, `titles.ts` (
 - README: "Local LLM titles (optional)" section: flags, loopback-only rule, what is sent (condensed + redacted: prompt text, step titles, file paths), where the cache lives, that summary/export never contain titles, example for Ollama / llama.cpp / LM Studio.
 - Done: `pnpm check` green; gate exit 0/2; roadmap S-08 status updated.
 - [ ] Phase 3 done
+
+## Amendments after plan review (binding; they override the sections above where they differ)
+
+From OpenCode (GLM-5.3-Flash), all accepted:
+- A1 (URL): path ending in `/v1` (as the last segment) appends only `/chat/completions`; `http://localhost:1234/v1` -> `http://127.0.0.1:1234/v1/chat/completions` (test).
+- A2 (route cost): the `/titles` route does NOT build `PromptDetail`s. It returns cached titles it already knows for the session plus enqueues `(sessionId, promptIndex)` for own prompts not yet known (in-flight set de-duplicates); the queue worker builds the input via the existing cached `detailFor` path, computes the key, checks the disk cache, and only then calls the server. The titler keeps an in-memory map `sessionId -> index -> title` filled from disk hits and responses. ETag over `<project stamp>\0<titles produced count>\0<pending>\0<error>` checked with `notModifiedEarly` before building the body.
+- A3 (drain): on 3 consecutive failures or the 500-request cap the queue is drained (`pending` 0) and `error` set to the generic message; the web stops polling when `pending` is 0 OR `error` is non-null.
+- A4 (redact options): `condenseForTitle` passes the same redact options `playRoute`/export use (repo dir realpath, OS user name) and makes file paths repo-relative; an absolute path never appears in the input (test).
+- A5 (cache dir): `--llm-cache-dir` is rejected when it is inside `--dir`, inside the projects dir or inside the archive dir (reuse the `unsafeArchiveDir` idea); the temp file is opened with mode 0600 before the rename; both shard levels are created with `mkdir(..., { mode: 0o700 })`.
+- A6 (loopback edges): every IPv6 form other than `[::1]` is rejected (`[::ffff:127.0.0.1]`, `[::1%251]`, `[0:0:0:0:0:0:0:1]` may be accepted only if normalised to `::1` by WHATWG URL — test what `new URL` gives and decide by the normalised host); the request always goes to the normalised literal host (`localhost` is never resolved; test that the fake server receives the request when started on 127.0.0.1 and the flag says `localhost`).
+- A7 (phase split): Phase 2 becomes 2a (flags, incompatibilities, startup line, `parseLlmUrl`, cache-dir checks, endpoint construction, CLI arg tests) and 2b (`createTitler`, cache, queue, `/titles` route, `api.titles.test.ts`, the no-flags spy test and the summary/export byte-identity test). Extra 2b test: a 200 response with valid JSON that is not OpenAI-shaped counts as a failure and its text never appears in `error`.
+- A8: unknown session id on `/titles` -> 404 like other id routes (test). README: `--no-titles` has no effect on LLM titles; they never reach summary/export.
+- A9: drop `stats()`.
