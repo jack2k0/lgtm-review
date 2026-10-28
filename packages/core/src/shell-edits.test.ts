@@ -396,9 +396,10 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     "yarn --immutable i",
     "corepack pnpm install --frozen-lockfile",
     "node scripts/gate.mjs --base main",
-    "python3 -u scripts/gate.py",
-    "python3 -uBI scripts/validate_all.py",
     "cd scripts && node gate.mjs",
+    // C16: `replace` and a literal read `open` are in the allow-set.
+    "python3 -c \"print('ab'.replace('a', 'b'))\"",
+    "python3 -c \"print(open('a.ts', 'r').read())\"",
     "python3 -c \"print(1)\"",
     "python3 -c \"open('/tmp/x','w').write('x')\"",
     "python3 -c \"print('exec(')\"",
@@ -436,9 +437,10 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     "python3 -c \"import os as o; o.system('sed -i s/x/y/ src/a.ts')\"",
     "python3 -c \"import os as o; o.rename('a.ts', 'b.ts')\"",
     "python3 -c \"getattr(x, 'system')('true')\"",
-    "python3 -c \"print('ab'.replace('a', 'b'))\"",
     "python3 -c \"json.dump(d, f)\"",
-    "python3 -c \"print(open('a.ts', 'r').read())\"",
+    // C16: any interpreter option before the script operand is not GATEREAD.
+    "python3 -u scripts/gate.py",
+    "python3 -uBI scripts/validate_all.py",
     "python3 -c \"import platform; print(platform.system())\"",
     "python3 -c 'from pathlib import Path as P; (P(\"a\")/\"b\").write_text(\"x\")'",
   ])("kept opaque: %s", (seg) => {
@@ -450,7 +452,9 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     expect(h1.opaque).toBe(false);
     expect(h1.edits.map((e) => e.file)).toContain("src/a.ts");
     expect(files("python3 -c \"open('src/a.ts','w').write('x')\"")).toEqual(["src/a.ts"]);
-    expect(files("python3 -c \"open(p,'w')\"")).toEqual([SHELL_EDIT_FILE]);
+    // C16: an unbound path is not an allowed `open`, so the source is opaque and records no edit.
+    expect(files("python3 -c \"open(p,'w')\"")).toEqual([]);
+    expect(classifyShellMutation("python3 -c \"open(p,'w')\"").opaque).toBe(true);
     expect(files("python3 -c \"print(1)\"")).toEqual([]);
     expect(files("F=src/a.ts && python3 -c \"open('$F','w').write('x')\"")).toEqual(["src/a.ts"]);
     const indented = "python3 -c \"\n    p = 'src/a.ts'\n    open(p, 'w').write('x')\n\"";
@@ -458,10 +462,11 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
   });
 
   test("python -c extra write APIs are edits, and an escape wins over a parsed write", () => {
-    expect(files("python3 -c \"from pathlib import Path; Path('a.ts').unlink()\"")).toEqual([SHELL_EDIT_FILE]);
-    expect(classifyShellMutation(mixed("python3 -c \"from pathlib import Path; Path('a.ts').unlink()\"")).opaque).toBe(false);
+    // C16: pathlib, unlink and exec are outside the allow-list: opaque, and the write is not trusted.
+    expect(files("python3 -c \"from pathlib import Path; Path('a.ts').unlink()\"")).toEqual([]);
+    expect(classifyShellMutation(mixed("python3 -c \"from pathlib import Path; Path('a.ts').unlink()\"")).opaque).toBe(true);
     const both = classifyShellMutation("python3 -c \"open('src/a.ts','w').write('x'); exec('1')\"");
-    expect(both.opaque).toBe(false);
+    expect(both.opaque).toBe(true);
     expect(both.edits).toEqual([]);
     const mixedEscape = classifyShellMutation(mixed("python3 -c \"open('src/a.ts','w').write('x'); exec('1')\""));
     expect(mixedEscape.opaque).toBe(true);
@@ -473,39 +478,41 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     const dumps = ok("python3 -c \"import json; print(json.dumps({}))\"");
     expect(dumps.opaque).toBe(false);
     expect(dumps.edits.map((e) => e.file)).toEqual(["plan.md"]);
+    // C16: an alias, and any module other than json / re / math, is opaque.
     const aliased = ok("python3 -c \"import json as j; print(j.dumps({}))\"");
-    expect(aliased.opaque).toBe(false);
+    expect(aliased.opaque).toBe(true);
     const hashed = ok("python3 -c \"import hashlib; print(hashlib.sha256(b'x').hexdigest())\"");
-    expect(hashed.opaque).toBe(false);
+    expect(hashed.opaque).toBe(true);
     const machine = ok("python3 -c \"import platform; print(platform.machine())\"");
-    expect(machine.opaque).toBe(false);
+    expect(machine.opaque).toBe(true);
     expect(files("python3 -c \"print(1)\"")).toEqual([]);
     expect(files("python3 -c \"import json; print(json.dumps({}))\"")).toEqual([]);
     expect(files("python3 -c \"open('/tmp/x','w').write('x')\"")).toEqual([]);
     const chained = classifyShellMutation("python3 -c \"open('src/a.ts','w').write('x')\"");
     expect(chained.opaque).toBe(false);
     expect(chained.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+    // C16: write_text, dump and an unbound name are outside the allow-list, so nothing is recorded.
     const pathOnly = classifyShellMutation("python3 -c \"Path('notes.md').write_text('x')\"");
-    expect(pathOnly.opaque).toBe(false);
-    expect(pathOnly.edits.map((e) => e.file)).toEqual(["notes.md"]);
+    expect(pathOnly.opaque).toBe(true);
+    expect(pathOnly.edits.map((e) => e.file)).toEqual([]);
 
     const dumped = classifyShellMutation("python3 -c \"json.dump(d, open('x.json','w'))\"");
-    expect(dumped.opaque).toBe(false);
-    expect(dumped.edits.map((e) => e.file)).toEqual(["x.json"]);
+    expect(dumped.opaque).toBe(true);
+    expect(dumped.edits.map((e) => e.file)).toEqual([]);
     const dumpedMixed = ok("python3 -c \"json.dump(d, open('x.json','w'))\"");
-    expect(dumpedMixed.opaque).toBe(false);
-    expect(dumpedMixed.edits.map((e) => e.file)).toContain("x.json");
+    expect(dumpedMixed.opaque).toBe(true);
+    expect(dumpedMixed.edits.map((e) => e.file)).not.toContain("x.json");
 
-    // A resolved write stays, but a disallowed import makes the command opaque.
+    // A from-import is outside the allow-list: opaque, and the write is not trusted.
     const pathWrite = ok("python3 -c \"from pathlib import Path; Path('a.ts').write_text('x')\"");
     expect(pathWrite.opaque).toBe(true);
-    expect(pathWrite.edits.map((e) => e.file)).toContain("a.ts");
+    expect(pathWrite.edits.map((e) => e.file)).not.toContain("a.ts");
 
-    // Alias hides the path: unresolved write, still a code edit, and opaque.
+    // An alias is a from-import: opaque, and no edit is trusted.
     const alias = "python3 -c 'from pathlib import Path as P; (P(\"a\")/\"b\").write_text(\"x\")'";
     const aliasOnly = classifyShellMutation(alias);
     expect(aliasOnly.opaque).toBe(true);
-    expect(aliasOnly.edits.map((e) => e.file)).toEqual([SHELL_EDIT_FILE]);
+    expect(aliasOnly.edits.map((e) => e.file)).toEqual([]);
     expect(ok(alias).opaque).toBe(true);
     expect(ok(alias).edits.map((e) => e.file)).not.toContain("a/b");
 
@@ -558,10 +565,10 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     expect(files(readMode)).toEqual(["docs/a.md"]);
     const dynamic = classifyShellMutation(`python3 -c ${JSON.stringify("open(p, m)")}`);
     expect(dynamic.opaque).toBe(true);
-    expect(dynamic.edits.map((e) => e.file)).toEqual([SHELL_EDIT_FILE]);
+    expect(dynamic.edits.map((e) => e.file)).toEqual([]);
     const pathReplace = classifyShellMutation(`python3 -c ${JSON.stringify("from pathlib import Path; Path(p).replace(q)")}`);
     expect(pathReplace.opaque).toBe(true);
-    expect(pathReplace.edits.map((e) => e.file)).toEqual([SHELL_EDIT_FILE]);
+    expect(pathReplace.edits.map((e) => e.file)).toEqual([]);
   });
 });
 
@@ -610,13 +617,14 @@ describe("review round 1: directory hiders, python -c escapes, gate options, her
   test("python -c documented safe calls stay non-opaque", () => {
     const ok = (seg: string) => classifyShellMutation(mixed(seg));
     expect(ok(`python3 -c "import json; print(json.dumps({}))"`).opaque).toBe(false);
-    expect(ok(`python3 -c "import json as j; print(j.dumps({}))"`).opaque).toBe(false);
-    expect(ok(`python3 -c "import hashlib; print(hashlib.sha256(b'x').hexdigest())"`).opaque).toBe(false);
-    expect(ok(`python3 -c "import platform; print(platform.machine())"`).opaque).toBe(false);
-    expect(ok(`python3 -c "import sys; print(1)"`).opaque).toBe(false);
-    expect(ok(`python3 -c "from json import dumps; print(dumps({}))"`).opaque).toBe(false);
-    expect(files(`python3 -c "open(p,'w')"`)).toEqual([SHELL_EDIT_FILE]);
-    expect(classifyShellMutation(mixed(`python3 -c "open(p,'w')"`)).opaque).toBe(false);
+    // C16: aliases, other modules, from-import, sys and an unbound open are opaque.
+    expect(ok(`python3 -c "import json as j; print(j.dumps({}))"`).opaque).toBe(true);
+    expect(ok(`python3 -c "import hashlib; print(hashlib.sha256(b'x').hexdigest())"`).opaque).toBe(true);
+    expect(ok(`python3 -c "import platform; print(platform.machine())"`).opaque).toBe(true);
+    expect(ok(`python3 -c "import sys; print(1)"`).opaque).toBe(true);
+    expect(ok(`python3 -c "from json import dumps; print(dumps({}))"`).opaque).toBe(true);
+    expect(files(`python3 -c "open(p,'w')"`)).toEqual([]);
+    expect(classifyShellMutation(mixed(`python3 -c "open(p,'w')"`)).opaque).toBe(true);
   });
 
   test("node options that take or load code before a gate script are not GATEREAD", () => {
@@ -643,8 +651,9 @@ describe("review round 1: directory hiders, python -c escapes, gate options, her
       expect(classifyShellMutation(mixed(seg)).opaque, seg).toBe(true);
     }
     expect(classifyShellMutation(mixed("node scripts/gate.mjs --base main")).opaque).toBe(false);
-    expect(classifyShellMutation(mixed("python3 -u scripts/gate.py")).opaque).toBe(false);
-    expect(classifyShellMutation(mixed("python3 -uBI scripts/validate_all.py")).opaque).toBe(false);
+    // C16: no interpreter option may precede the script operand.
+    expect(classifyShellMutation(mixed("python3 -u scripts/gate.py")).opaque).toBe(true);
+    expect(classifyShellMutation(mixed("python3 -uBI scripts/validate_all.py")).opaque).toBe(true);
     expect(classifyShellMutation(mixed(`python3 -c "print(1)"`)).opaque).toBe(false);
   });
 
@@ -677,5 +686,97 @@ describe("review round 1: directory hiders, python -c escapes, gate options, her
     expect(files("sed -i 's/a/b/' /tmp/../home/user/project/src/a.ts")).toEqual(["/home/user/project/src/a.ts"]);
     expect(files("sed -i 's/a/b/' /tmp/./../home/user/project/src/a.ts")).toEqual(["/home/user/project/src/a.ts"]);
     expect(files(`V=/tmp/s; sed -i 's/a/b/' "$V/../../../home/user/project/src/a.ts"`)).toEqual(["/home/user/project/src/a.ts"]);
+  });
+});
+
+describe("C16: allow-lists instead of deny-lists", () => {
+  const mixed = (seg: string) => `git merge b && sed -i s/x/y/ plan.md && ${seg}`;
+
+  test("C16: vars(sys) is opaque", () => {
+    const seg = `python3 -c "import sys; vars(sys)['modules']['os'].link('a','b')"`;
+    const alone = classifyShellMutation(seg);
+    expect(alone.opaque).toBe(true);
+    expect(alone.edits).toEqual([]);
+    const withEdit = classifyShellMutation(mixed(seg));
+    expect(withEdit.opaque).toBe(true);
+    expect(withEdit.edits.map((e) => e.file)).toEqual(["plan.md"]);
+  });
+
+  test("C16: a node option before the gate script is not GATEREAD", () => {
+    for (const seg of [
+      `node --conditions scripts/gate.mjs -e "require('fs').writeFileSync('src/a.ts','x')"`,
+      `node -C /tmp scripts/gate.mjs -e "require('fs').writeFileSync('src/a.ts','x')"`,
+      `node --conditions=custom scripts/gate.mjs -e "1"`,
+      `node --conditions=x -e "1" scripts/gate.mjs`,
+    ]) {
+      const m = classifyShellMutation(seg);
+      expect(m.opaque, seg).toBe(true);
+      expect(m.edits, seg).toEqual([]);
+      expect(classifyShellMutation(mixed(seg)).opaque, seg).toBe(true);
+    }
+    // Words after the script are arguments. They are not scanned for node options.
+    expect(classifyShellMutation(mixed(`node scripts/gate.mjs -e "1"`)).opaque).toBe(false);
+    expect(classifyShellMutation(mixed("node scripts/gate.mjs --base main")).opaque).toBe(false);
+  });
+
+  test("C16: a temp-variable path that climbs with .. is a code edit", () => {
+    expect(files("sed -i 's/a/b/' $S/../../x/src/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("sed -i 's/a/b/' $S/../../../../home/jack/git/lgtm-review-status-accuracy-4/src/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("sed -i 's/a/b/' $TMPDIR/../../../home/jack/git/lgtm-review-status-accuracy-4/src/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("sed -i 's/a/b/' $S/foo/../../x/src/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("sed -i 's/a/b/' $S/wt/a.ts")).toEqual([]);
+    expect(files("sed -i 's/a/b/' $S/foo/../bar.ts")).toEqual([]);
+    expect(files("echo hi > $S/../../x/src/a.ts")).toEqual([SHELL_EDIT_FILE]);
+  });
+
+  test("C16: a hider after if or until makes the directory unknown", () => {
+    for (const cmd of [
+      "if source ./x.sh; then sed -i 's/a/b/' src/a.ts; fi",
+      "elif source ./x.sh; then sed -i 's/a/b/' src/a.ts; fi",
+      "while source ./x.sh; do sed -i 's/a/b/' src/a.ts; break; done",
+      `until eval "cd /tmp/x"; do sed -i 's/a/b/' src/a.ts; break; done`,
+      "time source ./x.sh; sed -i 's/a/b/' src/a.ts",
+      "\\source ./x.sh && sed -i 's/a/b/' src/a.ts",
+      "FOO=1 eval 'cd /tmp/x'; sed -i 's/a/b/' src/a.ts",
+    ]) {
+      const m = classifyShellMutation(cmd);
+      expect(m.edits.map((e) => e.file), cmd).toEqual([SHELL_EDIT_FILE]);
+      expect(m.hasCd, cmd).toBe(true);
+    }
+  });
+
+  test("C16: read-only python -c outside the allow-list stays opaque, math.pi does not", () => {
+    for (const seg of [
+      `python3 -c "import json,sys; print(json.dumps(sys.argv))"`,
+      `python3 -c "import sys,json; print(json.load(sys.stdin))"`,
+      `python3 -c "import datetime; print(datetime.datetime.now().isoformat())"`,
+      `python3 -c "from json import dumps; print(dumps.__globals__)"`,
+    ]) {
+      const m = classifyShellMutation(`${seg} && sed -i 's/a/b/' src/a.ts`);
+      expect(m.opaque, seg).toBe(true);
+      expect(m.edits.map((e) => e.file), seg).toEqual(["src/a.ts"]);
+    }
+    const pi = classifyShellMutation(`python3 -c "import math; print(math.pi)" && sed -i 's/a/b/' src/a.ts`);
+    expect(pi.opaque).toBe(false);
+    expect(pi.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+    const compiled = classifyShellMutation(`python3 -c "import re; print(re.compile('a').findall('a'))" && sed -i 's/a/b/' src/a.ts`);
+    expect(compiled.opaque).toBe(false);
+    expect(compiled.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
+
+  test("C16: command -v does not hide the directory", () => {
+    for (const cmd of ["command -v node && sed -i 's/a/b/' src/a.ts", "command -V node && sed -i 's/a/b/' src/a.ts"]) {
+      const m = classifyShellMutation(cmd);
+      expect(m.edits, cmd).toEqual([{ file: "src/a.ts", gitOp: false, kind: "M" }]);
+      expect(m.hasCd, cmd).toBe(false);
+      expect(m.opaque, cmd).toBe(false);
+    }
+    expect(files("command sed -i 's/a/b/' src/a.ts")).toEqual([SHELL_EDIT_FILE]);
+  });
+
+  test("C16: a relative edit path is stored canonicalised", () => {
+    expect(classifyShellMutation("sed -i 's/a/b/' scratch/../src/a.ts").edits).toEqual([{ file: "src/a.ts", gitOp: false, kind: "M" }]);
+    expect(files("sed -i 's/a/b/' src/../scratch/a.ts")).toEqual([]);
+    expect(classifyShellMutation("git rm -r src/").edits).toEqual([{ file: "src/", gitOp: true, kind: "D" }]);
   });
 });

@@ -143,11 +143,12 @@ function parseWords(s: string): { words: Word[]; redirects: Redirect[] } {
   return { words, redirects };
 }
 
-const TMP_VAR = /^\$\{?(?:TMPDIR|TMP|TEMP|S|SCRATCH\w*)\}?(?:\/|$)/;
+/** `$S`, `$TMPDIR`, `$SCRATCH…` and the same names braced. The rest of the path, if any, follows a slash. */
+const TEMP_PREFIX_RE = /^(\$\{?(?:TMPDIR|TMP|TEMP|S|SCRATCH\w*)\}?)(?:\/(.*))?$/;
+
 const IGNORED_PATH_RES: RegExp[] = [
   /^\/dev\//,
   /^\/(?:private\/)?(?:var\/)?tmp(?:\/|$)/,
-  TMP_VAR,
   /(?:^|\/)\.cache(?:\/|$)/,
   /(?:^|\/)scratch[^/]*(?:\/|$)/,
   /(?:^|\/)[^/]*\.(?:log|out|err)$/,
@@ -155,8 +156,23 @@ const IGNORED_PATH_RES: RegExp[] = [
 ];
 
 /**
+ * A temp-variable path stays scratch while the remainder is under the variable.
+ * `..` that normalises above the variable (`$S/../../src/a.ts`) is `climb`: unresolved, and a code edit (C16).
+ * Ending exactly on the variable (`$S/foo/..`) is still scratch.
+ */
+function tempPrefixKind(p: string): "scratch" | "climb" | null {
+  const m = TEMP_PREFIX_RE.exec(p);
+  if (!m) return null;
+  const rest = m[2];
+  if (rest === undefined || rest === "") return "scratch";
+  const norm = normalizePath(rest);
+  if (norm === ".." || norm.startsWith("../")) return "climb";
+  return "scratch";
+}
+
+/**
  * Path the scratch test sees. A literal `.` / `..` is collapsed first, so `/tmp/../repo/a.ts` is not under `/tmp`.
- * A `$` / glob / `~` target stays as written: `$S/../x` must still match `TMP_VAR`, and normalising it would pop `$S`.
+ * A `$` / glob / `~` target is not collapsed here: a temp prefix is classified by `tempPrefixKind` before this runs.
  */
 function pathForIgnore(p: string): string {
   if (/[$`*?~]/.test(p)) return p;
@@ -164,10 +180,21 @@ function pathForIgnore(p: string): string {
   return p;
 }
 
-/** Scratch, cache and log-capture targets are not edits of the work tree. */
+/** Scratch, cache and log-capture targets are not edits of the work tree. A temp path that climbs out is. */
 function isIgnoredPath(p: string): boolean {
+  const temp = tempPrefixKind(p);
+  if (temp === "climb") return false;
+  if (temp === "scratch") return true;
   const n = pathForIgnore(p);
   return IGNORED_PATH_RES.some((re) => re.test(n));
+}
+
+/** Collapse `.` / `..` in a stored relative edit (`scratch/../src/a.ts` -> `src/a.ts`). Other paths stay as written. */
+function canonicalizeEditPath(file: string): string {
+  if (file === SHELL_EDIT_FILE || file.startsWith("~") || /[$`*?]/.test(file)) return file;
+  if (!file.split("/").some((seg) => seg === "." || seg === "..")) return file;
+  const n = normalizePath(file);
+  return n === "" ? file : n;
 }
 
 /** Unknown variable / substitution targets of a redirect: nothing reliable to say, so no edit. */
@@ -181,9 +208,10 @@ function isOption(w: Word): boolean {
 
 /** Files of a segment from its operands; `SHELL_EDIT_FILE` when any operand is dynamic or none is left. */
 function operandFiles(ops: Word[]): string[] {
-  const live = ops.filter((w) => !TMP_VAR.test(w.text) && !isIgnoredPath(w.text));
+  const live = ops.filter((w) => !isIgnoredPath(w.text));
   if (live.length === 0 && ops.length > 0) return [];
-  if (live.length === 0 || live.some((w) => w.dynamic)) return [SHELL_EDIT_FILE];
+  // A temp prefix that climbed out, or any dynamic operand, is an unresolved code edit.
+  if (live.length === 0 || live.some((w) => w.dynamic || tempPrefixKind(w.text) === "climb")) return [SHELL_EDIT_FILE];
   return live.map((w) => w.text);
 }
 
@@ -419,7 +447,6 @@ function inspectPythonWrites(raw: string, argv: (string | null)[]): PyWriteInfo 
   let unknown = false;
   let resolved = false;
   const owned = new Set<number>();
-  const resolvedOpens: number[] = [];
   const binds: { at: number; name: string; expr: string; nested: boolean }[] = [];
   for (const m of body.matchAll(PY_BIND_RE)) {
     const name = m[1] as string;
@@ -474,10 +501,6 @@ function inspectPythonWrites(raw: string, argv: (string | null)[]): PyWriteInfo 
       resolved = true;
       if (!isIgnoredPath(v)) out.push(v);
       for (const t of w.tokens) owned.add(t);
-      if (w.openAt !== null) resolvedOpens.push(w.openAt);
-      if (w.span !== null) {
-        for (const id of forbiddenIdents(w.span.text)) owned.add(w.span.abs + id.index);
-      }
     }
     if (out.length >= FILES_MAX) {
       unknown = true; // cut: more writes may follow
@@ -485,17 +508,6 @@ function inspectPythonWrites(raw: string, argv: (string | null)[]): PyWriteInfo 
     }
   }
   if (unknown) out.push(SHELL_EDIT_FILE);
-  // `json.dump(..., open(...))`: `dump` belongs to the open when that open resolved.
-  if (resolvedOpens.length > 0) {
-    for (const m of body.matchAll(/\bdump\s*\(/g)) {
-      const paren = (m.index ?? 0) + m[0].length - 1;
-      const args = balancedArgs(body, paren);
-      if (args === null) continue;
-      const begin = paren + 1;
-      const end = begin + args.length;
-      if (resolvedOpens.some((openAt) => openAt >= begin && openAt < end)) owned.add(m.index ?? 0);
-    }
-  }
   return { files: out, owned, unresolved: unknown, resolved };
 }
 
@@ -652,7 +664,7 @@ const SAFE_HEADS = new Set(
   (
     "cd pushd popd echo printf ls cat true false : test [ [[ sleep export set unset pwd " +
     // read-only text and system tools
-    "tail head grep egrep fgrep rg cut wc tr sort uniq diff cmp jq column nl basename dirname realpath readlink stat file du df date which type whoami hostname -v " +
+    "tail head grep egrep fgrep rg cut wc tr sort uniq diff cmp jq column nl basename dirname realpath readlink stat file du df date which type whoami hostname -v -V " +
     // shell keywords and grouping
     "for do done if then else elif fi while until case esac break continue exit return { } ( ) " +
     // creates directories only; terminal control
@@ -805,31 +817,28 @@ function containedCommandSubs(text: string): number {
   return count;
 }
 
-/** Shell words that can change the directory without a `cd` this scanner can see (C15). */
-const DIR_HIDERS = new Set(["eval", "source", ".", "builtin", "command", "exec"]);
+/** Words stripped before the command word when looking for a directory hider (C16). */
+const HIDER_SKIP = new Set(["!", "if", "elif", "then", "else", "while", "until", "do", "time", "{", "("]);
 
 /**
- * True when this segment's command is `eval`, `source`, `.`, `builtin`, `command` or `exec`.
- * The tracked directory is unknown from here on. `pnpm exec` / `npm exec` are package-manager wrappers, not `exec`.
+ * True when this segment's command word is `eval`, `source`, `.`, `builtin`, `exec`, or `command`
+ * not followed by `-v` / `-V`. The tracked directory is unknown from here on.
+ * `pnpm exec` is not the builtin: only the command word counts. `(` / `{` stuck to the word are stripped.
  */
 function hidesDirectory(segment: string): boolean {
-  // `(eval` is one token to `parseWords`; strip grouping punctuation the way `stripPrefixes` does.
-  const words = parseWords(segment.trim().replace(/^[({!]+\s*/, "")).words;
+  const words = parseWords(segment.trim().replace(/^[({!]+/, "")).words;
   let i = 0;
   while (i < words.length) {
-    const t = (words[i] as Word).text;
-    if (t === "(" || t === "{" || t === "!" || t === "do" || t === "then" || t === "else" || /^[A-Za-z_]\w*=/.test(t)) {
+    const t = (words[i] as Word).text.replace(/^[({!]+/, "");
+    if (t === "" || HIDER_SKIP.has(t) || /^[A-Za-z_]\w*=/.test(t)) {
       i++;
       continue;
     }
-    if (t === "time" || t === "nohup" || t === "nice" || t === "sudo" || t === "env" || t === "corepack") {
-      i++;
-      while (i < words.length && (words[i] as Word).text.startsWith("-") && (words[i] as Word).text !== "-") i++;
-      continue;
+    if (t === "command") {
+      const next = (words[i + 1]?.text ?? "").replace(/^[({!]+/, "");
+      return next !== "-v" && next !== "-V";
     }
-    if ((t === "pnpm" || t === "npm") && words[i + 1]?.text === "exec") return false;
-    if (t === "yarn" && words[i + 1]?.text === "dlx") return false;
-    return DIR_HIDERS.has(t);
+    return t === "eval" || t === "source" || t === "." || t === "builtin" || t === "exec";
   }
   return false;
 }
@@ -853,10 +862,11 @@ function nextDir(words: Word[], dir: Dir): Dir {
 function placeFile(file: string, dir: Dir, sawCd: boolean): { file: string; baseDir?: string } {
   if (file === SHELL_EDIT_FILE || file.startsWith("~")) return { file };
   if (file.startsWith("/")) return { file: normalizePath(file) };
+  const rel = canonicalizeEditPath(file);
   if (dir.k === "unknown") return { file: SHELL_EDIT_FILE };
   if (dir.k === "abs") return { file: normalizePath(`${dir.path}/${file}`) };
-  if (dir.k === "rel") return { file, baseDir: dir.path };
-  return sawCd ? { file, baseDir: "" } : { file };
+  if (dir.k === "rel") return { file: rel, baseDir: dir.path };
+  return sawCd ? { file: rel, baseDir: "" } : { file: rel };
 }
 
 /**
@@ -882,35 +892,16 @@ function isFrozenInstall(words: Word[]): boolean {
   return (positional[0] === "install" || positional[0] === "i") && frozen;
 }
 
-/** Node options that take code (`-e`/`--eval`, `-p`/`--print`) or load code (`-r`/`--require`, `--import`, `--loader`). */
-const NODE_LOAD_RE = /^--(?:eval|print|require|import|loader|experimental-loader)(?:=|$)/;
-
-function nodeLoadsCode(t: string): boolean {
-  return NODE_LOAD_RE.test(t) || /^-[epr]/.test(t);
-}
-
 const GATE_BASE_RE = /^(?:gate|check|verify|validate)[\w.-]*\.(?:mjs|cjs|js|py|ts)$/;
 
 /**
- * First positional operand. Null when that slot is not a script file (C15): node `-e`/`--eval`, `-p`/`--print`,
- * `-r`/`--require`, `--import`, `--loader`/`--experimental-loader` (spaced, `=`, or attached `-e`/`-p`/`-r`),
- * or python `-c` / `-m`. Harmless flags (`--no-warnings`, python `-u`/`-B`/`-I`) are still skipped.
+ * The word right after `node` / `python` / `python3` (C16). Any interpreter option means this is not a gate script.
+ * Later words are script arguments and are not examined.
  */
-function scriptOperand(words: Word[], kind: "node" | "py"): Word | null {
-  for (let i = 1; i < words.length; i++) {
-    const w = words[i] as Word;
-    const t = w.text;
-    if (kind === "node") {
-      if (nodeLoadsCode(t)) return null;
-      if (t.startsWith("-") && t !== "-") continue;
-      return w;
-    }
-    if (t === "-c" || t === "-m") return null;
-    if (/^-[uBIEsSO]+$/.test(t)) continue;
-    if (t.startsWith("-") && t !== "-") continue;
-    return w;
-  }
-  return null;
+function scriptOperand(words: Word[]): Word | null {
+  const w = words[1];
+  if (w === undefined || w.text.startsWith("-")) return null;
+  return w;
 }
 
 /**
@@ -923,7 +914,7 @@ function isGateScript(words: Word[], dir: Dir, repoRoots: readonly string[]): bo
   const head = words[0]?.text ?? "";
   const kind = head === "node" ? "node" : /^python[\d.]*$/.test(head) ? "py" : null;
   if (kind === null || dir.k === "unknown") return false;
-  const op = scriptOperand(words, kind);
+  const op = scriptOperand(words);
   if (op === null || op.dynamic || op.text.startsWith("/") || op.text.startsWith("~")) return false;
   if (dir.k === "abs") {
     if (!repoRoots.some((root) => gateDirTrusted(dir.path, root))) return false;
@@ -1016,109 +1007,6 @@ function pyCode(src: string): string {
   return out;
 }
 
-/** `os.environ[k] = v` / `.update(` is not a read. A subscript or `.get(` with no assignment is a read. */
-function environWrite(rest: string): boolean {
-  const s = rest.trimStart();
-  if (s.startsWith("=") && !s.startsWith("==")) return true;
-  if (/^\.\s*(?:update|setdefault|pop|clear|__setitem__)\s*\(/.test(s)) return true;
-  if (!s.startsWith("[")) return false;
-  let depth = 0;
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === "[") depth++;
-    else if (s[i] === "]" && --depth === 0) {
-      const tail = s.slice(i + 1).trimStart();
-      return tail.startsWith("=") && !tail.startsWith("==");
-    }
-  }
-  return false;
-}
-
-/**
- * Escape surface of a `python -c` body (C1). True when the segment must stay opaque:
- * exec/eval/compile/__import__, os.system/popen/exec-star/spawn-star, subprocess, pty, shutil,
- * or `import os` / `from os` together with any `os` use other than `os.path`, `os.getcwd`, or an `os.environ` read.
- */
-function hasEscape(src: string): boolean {
-  const s = pyCode(src);
-  if (/\b(?:exec|eval|compile|__import__)\s*\(/.test(s)) return true;
-  if (/\bos\s*\.\s*(?:system|popen|exec\w*|spawn\w*)\s*\(/.test(s)) return true;
-  if (/\bsubprocess\b/.test(s) || /\bpty\b/.test(s)) return true;
-  if (/\bimport\s+shutil\b/.test(s) || /\bfrom\s+shutil\b/.test(s)) return true;
-  const importsOs = /\bimport\s+os\b(?!\s*\.)/.test(s) || /\bfrom\s+os\s+import\b/.test(s);
-  if (!importsOs) return false;
-  for (const m of s.matchAll(/\bfrom\s+os\s+import\s+([^\n#]+)/g)) {
-    const names = (m[1] as string).split(",").map((part) => part.trim().split(/\s+as\s+/)[0] ?? "");
-    if (names.some((name) => name !== "" && name !== "path" && name !== "getcwd" && name !== "environ")) return true;
-  }
-  for (const m of s.matchAll(/\bos\s*\.\s*(\w+)/g)) {
-    const name = m[1] as string;
-    if (name === "path" || name === "getcwd") continue;
-    if (name === "environ" && !environWrite(s.slice((m.index ?? 0) + m[0].length))) continue;
-    return true;
-  }
-  return false;
-}
-
-/** Write APIs `pythonWrites` does not parse. A bare `str.replace` is not one; `Path(...).replace` is. */
-function hasExtraWrite(src: string): boolean {
-  const s = pyCode(src);
-  if (/\bshutil\s*\./.test(s)) return true;
-  if (/\bos\s*\.\s*(?:rename|replace|remove|unlink)\s*\(/.test(s)) return true;
-  if (/\.\s*(?:unlink|touch|mkdir)\s*\(/.test(s)) return true;
-  return /Path\s*\([^)]*\)\s*\.\s*(?:replace|rename)\s*\(/.test(s);
-}
-
-/** Modules a `python -c` source may import and still be non-writing (C12). Anything else is opaque. */
-const PY_ALLOW_IMPORTS = new Set([
-  "json", "sys", "re", "math", "datetime", "time", "collections", "itertools", "functools", "textwrap", "pprint",
-  "statistics", "random", "string", "decimal", "fractions", "operator", "typing", "enum", "dataclasses", "uuid",
-  "hashlib", "base64", "platform",
-]);
-
-/**
- * Names that keep a `python -c` source from being non-writing (C12). Word match, so `write_text` is not `write`
- * and `dumps` is not `dump`. Matched on code with strings and comments blanked.
- */
-const PY_FORBIDDEN_RE =
-  /\b(?:__import__|__builtins__|makedirs|getattr|globals|compile|replace|rename|unlink|remove|rmdir|symlink|truncate|system|popen|spawn|write|mkdir|open|Path|exec|eval|copy|move|touch|dump|chmod)\b/g;
-
-function forbiddenIdents(src: string): { index: number }[] {
-  const s = pyCode(src);
-  PY_FORBIDDEN_RE.lastIndex = 0;
-  return [...s.matchAll(PY_FORBIDDEN_RE)].map((m) => ({ index: m.index ?? 0 }));
-}
-
-/** Top-level module is on the allow-list. A relative import, or a name we cannot read, is not. */
-function moduleAllowed(name: string): boolean {
-  if (name === "" || name.startsWith(".")) return false;
-  const root = name.split(".")[0] ?? "";
-  return PY_ALLOW_IMPORTS.has(root);
-}
-
-/**
- * Every `import` / `from ... import` names an allow-listed module (C12). An alias does not hide the module
- * (`import os as o` is still `os`). An unreadable clause is rejected. Strings and comments are ignored.
- */
-function pyImportsAllowed(src: string): boolean {
-  const s = pyCode(src);
-  let ok = true;
-  const withoutFrom = s.replace(/\bfrom\s+(\S+)\s+import\b/g, (all, mod: string) => {
-    if (!moduleAllowed(mod)) ok = false;
-    return " ".repeat(all.length);
-  });
-  if (!ok) return false;
-  // Stop at `;` so `import json; print(...)` is not one clause. A later `import` is its own match.
-  for (const m of withoutFrom.matchAll(/\bimport\s+([^#;\n]*)/g)) {
-    const raw = m[1] ?? "";
-    if (raw.includes("\\") || raw.trim() === "") return false;
-    for (const part of raw.split(",")) {
-      const mod = (part.trim().split(/\s+as\s+/)[0] ?? "").trim().split(/\s+/)[0] ?? "";
-      if (!moduleAllowed(mod)) return false;
-    }
-  }
-  return true;
-}
-
 /** Known `$VAR` / `${VAR}` inside a double-quoted `-c` source. Null when any reference is unknown or still dynamic. */
 function substPySource(w: Word, vars: ReadonlyMap<string, string>): string | null {
   if (!w.dynamic) return w.text;
@@ -1150,179 +1038,129 @@ function modeLiteral(mode: string): string | null {
   return lit ? (lit[2] as string) : null;
 }
 
-/** `open(path)` or `open(path, "r"|"rb")` (C14). Other literal modes are not reads for this exemption. */
-function isReadOpenArgs(args: string): boolean {
-  const mode = openModeArg(args);
-  if (mode === undefined) return true;
-  const lit = modeLiteral(mode);
-  return lit === "r" || lit === "rb";
-}
-
-/** `open(p, m)` / `open(p, mode)`: the mode is not a string literal, so the call may write (C14). */
-function hasNonLiteralOpenMode(src: string): boolean {
-  const blank = pyCode(src);
-  const stripped = stripPyComments(src);
-  for (const m of blank.matchAll(/\bopen\s*\(/g)) {
-    const at = m.index ?? 0;
-    const paren = at + m[0].length - 1;
-    const args = balancedArgs(stripped, paren);
-    if (args === null) continue;
-    const mode = openModeArg(args);
-    if (mode !== undefined && modeLiteral(mode) === null) return true;
-  }
-  return false;
-}
-
-/** `Path(…).replace(`, which is not `str.replace` (C14). */
-function pathReplaceCall(src: string): boolean {
-  return /Path\s*\([^)]*\)\s*\.\s*replace\s*\(/.test(pyCode(src));
-}
-
-/**
- * Indexes C14 ignores on a resolved write: read `open` and `.replace(`. Only when every import is
- * allow-listed and the source has no `Path`, `pathlib`, or `os` import. A source with no resolved write
- * still uses the full forbidden list, so a bare read or `str.replace` stays opaque.
- */
-function c14Exempt(src: string): Set<number> {
-  if (!pyImportsAllowed(src)) return new Set();
-  const blank = pyCode(src);
-  if (/\bPath\b/.test(blank) || /\bpathlib\b/.test(blank)) return new Set();
-  if (/\bimport\s+os\b/.test(blank) || /\bfrom\s+os\b/.test(blank)) return new Set();
-  const exempt = new Set<number>();
-  for (const m of blank.matchAll(/\.\s*replace\s*\(/g)) {
-    exempt.add((m.index ?? 0) + m[0].lastIndexOf("replace"));
-  }
-  const stripped = stripPyComments(src);
-  for (const m of blank.matchAll(/\bopen\s*\(/g)) {
-    const at = m.index ?? 0;
-    const paren = at + m[0].length - 1;
-    const args = balancedArgs(stripped, paren);
-    if (args !== null && isReadOpenArgs(args)) exempt.add(at);
-  }
-  return exempt;
-}
-
-/**
- * Documented calls on an allow-listed module (`json.dumps(`, `hashlib.sha256(`). Anything else — a subscript,
- * a private attribute, a name that is not a plain call — is an escape (C15). `platform.system` stays off the list.
- * Modules with an empty set have no safe attribute access (`import sys; print(1)` is still fine).
- */
-const PY_SAFE_CALLS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
-  Object.entries({
-    json: ["dump", "dumps", "load", "loads"],
-    sys: [],
-    re: ["compile", "search", "match", "fullmatch", "findall", "finditer", "split", "sub", "subn", "escape", "purge"],
-    math: ["sqrt", "floor", "ceil", "log", "log2", "log10", "exp", "pow", "fabs", "sin", "cos", "tan", "isnan", "isfinite", "isinf"],
-    datetime: ["datetime", "date", "time", "timedelta", "timezone"],
-    time: ["time", "time_ns", "monotonic", "monotonic_ns", "perf_counter", "perf_counter_ns", "process_time", "sleep", "ctime", "gmtime", "localtime", "strftime", "strptime", "mktime"],
-    collections: ["namedtuple", "deque", "Counter", "OrderedDict", "defaultdict", "ChainMap"],
-    itertools: ["chain", "islice", "count", "cycle", "repeat", "product", "permutations", "combinations", "groupby", "accumulate", "zip_longest", "starmap", "tee", "filterfalse", "dropwhile", "takewhile", "compress"],
-    functools: ["reduce", "partial", "cache", "lru_cache", "wraps", "cmp_to_key", "total_ordering", "cached_property"],
-    textwrap: ["dedent", "indent", "fill", "wrap", "shorten"],
-    pprint: ["pprint", "pformat", "pp"],
-    statistics: ["mean", "median", "mode", "stdev", "pstdev", "variance", "pvariance", "quantiles", "fmean"],
-    random: ["random", "uniform", "randint", "randrange", "choice", "choices", "sample", "shuffle", "seed", "getrandbits", "randbytes", "gauss", "normalvariate"],
-    string: ["capwords"],
-    decimal: ["Decimal", "getcontext"],
-    fractions: ["Fraction"],
-    operator: ["add", "sub", "mul", "truediv", "floordiv", "mod", "pow", "eq", "ne", "lt", "le", "gt", "ge", "not_", "truth", "abs", "and_", "or_", "xor", "contains", "countOf", "concat"],
-    typing: [],
-    enum: ["Enum", "IntEnum", "StrEnum", "Flag", "auto"],
-    dataclasses: ["dataclass", "field", "asdict", "astuple", "fields"],
-    uuid: ["uuid1", "uuid3", "uuid4", "uuid5", "UUID"],
-    hashlib: ["md5", "sha1", "sha224", "sha256", "sha384", "sha512", "sha3_224", "sha3_256", "sha3_384", "sha3_512", "blake2b", "blake2s", "shake_128", "shake_256", "pbkdf2_hmac", "scrypt", "new"],
-    base64: ["b64encode", "b64decode", "b32encode", "b32decode", "b16encode", "b16decode", "urlsafe_b64encode", "urlsafe_b64decode", "standard_b64encode", "standard_b64decode"],
-    platform: ["machine", "python_version", "python_implementation", "platform", "node", "release", "version", "processor", "architecture", "uname"],
-  }).map(([mod, names]) => [mod, new Set(names)]),
+/** Names a `python -c` source may use, besides keywords and names it assigns (C16). */
+const PY_ALLOWED_IDENTS = new Set(
+  (
+    "print open len str int float bool list dict set tuple sorted min max sum range enumerate zip any all isinstance " +
+    "read write replace split rsplit join strip lstrip rstrip splitlines startswith endswith lower upper format encode decode " +
+    "get items keys values append extend count find json dumps loads re sub search match findall compile group math pi sqrt floor ceil"
+  ).split(" "),
 );
 
-/** Frame and code-object attributes used to walk out of a `python -c` sandbox (C15). */
-const PY_FRAME_RE =
-  /\b(?:gi_frame|gi_code|gi_yieldfrom|f_globals|f_builtins|f_code|f_back|f_locals|cr_frame|cr_code|ag_frame|ag_code|tb_frame|co_consts)\b/;
+const PY_KEYWORDS = new Set(
+  (
+    "False None True and as assert async await break class continue def del elif else except finally for from global if import in is " +
+    "lambda nonlocal not or pass raise return try while with yield match case"
+  ).split(" "),
+);
 
-/** Import lines blanked, so a binding is judged by its uses and not by the `import` itself. */
-function blankPyImports(s: string): string {
-  return s
-    .replace(/\bfrom\s+\S+\s+import\s+[^#;\n]*/g, (all) => " ".repeat(all.length))
-    .replace(/\bimport\s+[^#;\n]*/g, (all) => " ".repeat(all.length));
-}
+/** The only import statements that stay non-opaque: `import json`, `import re`, `import math`. */
+const PY_IMPORT_OK = new Set(["json", "re", "math"]);
 
-/** `import mod` / `import mod as alias` of an allow-listed module. The bound name maps to the top-level module. */
-function moduleBindings(s: string): Map<string, string> {
-  const out = new Map<string, string>();
-  const withoutFrom = s.replace(/\bfrom\s+\S+\s+import\b/g, (all) => " ".repeat(all.length));
-  for (const m of withoutFrom.matchAll(/\bimport\s+([^#;\n]*)/g)) {
-    const raw = m[1] ?? "";
-    if (raw.includes("\\") || raw.trim() === "") continue;
-    for (const part of raw.split(",")) {
-      const bits = part.trim().split(/\s+as\s+/);
-      const mod = (bits[0] ?? "").trim().split(/\s+/)[0] ?? "";
-      if (!/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(mod)) continue;
-      const root = mod.split(".")[0] ?? "";
-      if (!PY_ALLOW_IMPORTS.has(root)) continue;
-      const alias = (bits[1] ?? "").trim().split(/\s+/)[0] ?? "";
-      const name = alias !== "" ? alias : root;
-      if (/^[A-Za-z_]\w*$/.test(name)) out.set(name, root);
-    }
-  }
-  return out;
+/** Simple `name =` and `for name in` bindings, on code with strings blanked. */
+function assignedNames(blank: string): Set<string> {
+  const names = new Set<string>();
+  for (const m of blank.matchAll(/(?:^|[^A-Za-z0-9_.])([A-Za-z_]\w*)\s*=(?!=)/g)) names.add(m[1] as string);
+  for (const m of blank.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\b/g)) names.add(m[1] as string);
+  return names;
 }
 
 /**
- * `from mod import attr` of an allow-listed module. A name that is not a documented safe function is an escape.
- * A safe name is an escape when it is subscripted or used as an attribute (`dumps.__globals__` is also a dunder).
+ * Literal string bindings in effect before `at`. An indented binding poisons the name (it may not run).
+ * Only a string literal, or a name already bound to one, counts. Concatenation does not.
  */
-function fromImportEscape(s: string): boolean {
-  const code = blankPyImports(s);
-  for (const m of s.matchAll(/\bfrom\s+(\S+)\s+import\s+([^#;\n]*)/g)) {
-    const root = ((m[1] as string).split(".")[0] ?? "");
-    if (!PY_ALLOW_IMPORTS.has(root)) continue;
-    const clause = (m[2] as string).replace(/[()]/g, " ");
-    if (clause.includes("*")) return true;
-    for (const part of clause.split(",")) {
-      const bits = part.trim().split(/\s+as\s+/);
-      const attr = (bits[0] ?? "").trim().split(/\s+/)[0] ?? "";
-      if (!/^[A-Za-z_]\w*$/.test(attr)) return true;
-      const aliasRaw = (bits[1] ?? "").trim().split(/\s+/)[0] ?? "";
-      const alias = aliasRaw !== "" ? aliasRaw : attr;
-      if (!/^[A-Za-z_]\w*$/.test(alias)) return true;
-      if (PY_SAFE_CALLS.get(root)?.has(attr) !== true) return true;
-      if (new RegExp(`\\b${alias}\\s*[.\\[]`).test(code)) return true;
+function literalBindsAt(src: string, at: number): Map<string, string | null> {
+  const bound = new Map<string, string | null>();
+  for (const m of src.matchAll(PY_BIND_RE)) {
+    const name = m[1] as string;
+    const bindAt = (m.index ?? 0) + m[0].indexOf(name);
+    if (bindAt >= at) break;
+    const lineStart = src.lastIndexOf("\n", bindAt - 1) + 1;
+    const nested = (/^[ \t]*/.exec(src.slice(lineStart))?.[0] ?? "") !== "";
+    if (nested) {
+      bound.set(name, null);
+      continue;
     }
+    const expr = (m[2] as string).trim();
+    const lit = /^(['"])([^'"\n]*)\1$/.exec(expr);
+    if (lit) bound.set(name, lit[2] as string);
+    else if (/^[A-Za-z_]\w*$/.test(expr) && bound.has(expr)) bound.set(name, bound.get(expr) ?? null);
+    else bound.set(name, null);
   }
-  return false;
+  return bound;
+}
+
+/** A path argument that is a string literal or a name bound to one. */
+function literalPath(expr: string, bound: ReadonlyMap<string, string | null>): string | null {
+  const e = expr.trim();
+  const lit = /^(['"])([^'"\n]*)\1$/.exec(e);
+  if (lit) return lit[2] as string;
+  if (/^[A-Za-z_]\w*$/.test(e)) {
+    if (!bound.has(e)) return null;
+    return bound.get(e) ?? null;
+  }
+  return null;
+}
+
+/** Absent, or one of r/w/a/x plus optional t, b and +. */
+function pyModeAllowed(mode: string | undefined): boolean {
+  if (mode === undefined) return true;
+  const lit = modeLiteral(mode.trim());
+  if (lit === null) return false;
+  if (!/^[rwaxtb+]+$/.test(lit)) return false;
+  return [...lit].filter((c) => "rwax".includes(c)).length === 1;
 }
 
 /**
- * Extra `python -c` escapes (C15), on code with strings and comments blanked: any dunder, a frame-walk name,
- * or a subscript / non-call attribute on an imported allow-listed module. A plain `json.dumps(` stays allowed.
+ * Every `open(` has a literal or locally-assigned literal path and a literal mode
+ * (absent, "r", "rb", "w", "a", "x", with optional "t" / "b" / "+").
  */
-function pyExtraEscape(src: string): boolean {
-  const s = pyCode(src);
-  if (/\b__[A-Za-z0-9_]+__\b/.test(s)) return true;
-  if (PY_FRAME_RE.test(s)) return true;
-  if (fromImportEscape(s)) return true;
-  const code = blankPyImports(s);
-  for (const [name, root] of moduleBindings(s)) {
-    if (new RegExp(`\\b${name}\\s*\\[`).test(code)) return true;
-    const re = new RegExp(`\\b${name}\\s*\\.\\s*([A-Za-z_]\\w*)`, "g");
-    for (const m of code.matchAll(re)) {
-      const attr = m[1] as string;
-      const after = code.slice((m.index ?? 0) + m[0].length);
-      if (PY_SAFE_CALLS.get(root)?.has(attr) !== true || !/^\s*\(/.test(after)) return true;
-    }
+function pyOpensAllowed(stripped: string, blank: string): boolean {
+  for (const m of blank.matchAll(/\bopen\s*\(/g)) {
+    const at = m.index ?? 0;
+    const paren = at + m[0].length - 1;
+    const args = balancedArgs(stripped, paren);
+    if (args === null) return false;
+    const parts = splitTop(args, ",").map((x) => x.trim());
+    const path = parts[0] ?? "";
+    if (path === "" || /^\w+\s*=(?!=)/.test(path)) return false;
+    const bound = literalBindsAt(stripped, at);
+    if (literalPath(path, bound) === null) return false;
+    if (!pyModeAllowed(openModeArg(args))) return false;
   }
-  return false;
+  return true;
+}
+
+/**
+ * True when every identifier is a keyword, an allowed name, or a simple assignment / `for` target;
+ * imports are only `import json` / `import re` / `import math`; attribute names are in the allowed set.
+ * Strings and comments are ignored. Anything else is opaque (C16).
+ */
+function pyAllow(src: string): boolean {
+  const blank = pyCode(src);
+  const stripped = stripPyComments(src);
+  if (/\bfrom\s+\S+\s+import\b/.test(blank)) return false;
+  for (const m of blank.matchAll(/\bimport\s+([^#;\n]*)/g)) {
+    if (!PY_IMPORT_OK.has((m[1] ?? "").trim())) return false;
+  }
+  for (const m of blank.matchAll(/\.(\s*)([A-Za-z_]\w*)/g)) {
+    if (!PY_ALLOWED_IDENTS.has(m[2] as string)) return false;
+  }
+  const assigned = assignedNames(blank);
+  for (const m of blank.matchAll(/\b[A-Za-z_]\w*\b/g)) {
+    const name = m[0];
+    if (PY_KEYWORDS.has(name) || PY_ALLOWED_IDENTS.has(name) || assigned.has(name)) continue;
+    return false;
+  }
+  return pyOpensAllowed(stripped, blank);
 }
 
 /**
  * `python -c <src>` (optional `-u`/`-B`/`-I`/`-E`/`-s`/`-S`/`-O` before `-c`). Null when this is not `-c`:
  * a script, `-m`, `-` or a dash-less heredoc (`python3 <<EOF`) so the heredoc writer scan still runs.
- * `-c` with no source, or another positional after the source (`python3 -c "print(1)" scripts/gate.py`), is opaque.
- * An escape (C1, C15) drops a parsed write. Otherwise C12: non-writing only when every import is allow-listed and
- * no forbidden name occurs; a resolved write stays, and is non-opaque only when those same conditions hold and
- * every forbidden name belongs to that write. C14: on that resolved write, a read `open` and `str.replace` do not
- * count, and a non-literal `open` mode stays opaque.
+ * `-c` with no source, or another positional after the source, is opaque.
+ * The source is non-opaque only when `pyAllow` accepts it. A resolved write in that source is the edit.
+ * Anything else is opaque and contributes no edit, the same as an unrecognised `python -c` on main.
  */
 function classifyPyC(words: Word[], vars: ReadonlyMap<string, string>): PyC | null {
   const head = words[0]?.text ?? "";
@@ -1353,42 +1191,11 @@ function classifyPyC(words: Word[], vars: ReadonlyMap<string, string>): PyC | nu
   const text = substPySource(src, vars);
   if (text === null) return { kind: "opaque" };
   const code = dedent(text);
-  if (hasEscape(code) || pyExtraEscape(code)) return { kind: "opaque" };
+  if (!pyAllow(code)) return { kind: "opaque" };
   const info = inspectPythonWrites(code, []);
-  const extra = hasExtraWrite(code);
-  const importsOk = pyImportsAllowed(code);
-  const forbidden = forbiddenIdents(code);
-  // A non-literal mode can hide a write. Keep the shell edit and refuse a per-file split (C14).
-  if (hasNonLiteralOpenMode(code)) {
-    const files = info.files.length > 0 ? [...info.files] : [SHELL_EDIT_FILE];
-    if (!files.includes(SHELL_EDIT_FILE)) files.push(SHELL_EDIT_FILE);
-    return { kind: "write", files, opaque: true };
-  }
-  // `Path(…).replace` is not `str.replace`. It stays a shell edit and opaque (C14).
-  if (pathReplaceCall(code)) {
-    const files = info.files.length > 0 ? [...info.files] : [SHELL_EDIT_FILE];
-    if (!files.includes(SHELL_EDIT_FILE)) files.push(SHELL_EDIT_FILE);
-    return { kind: "write", files, opaque: true };
-  }
-  const exempt = c14Exempt(code);
-  const allow = importsOk && forbidden.every((id) => info.owned.has(id.index) || exempt.has(id.index));
-  // A path we resolved, and no write we failed to resolve and no extra API.
-  if (info.resolved && !info.unresolved && !extra) {
-    if (info.files.length === 0) return allow ? { kind: "safe" } : { kind: "opaque" };
-    return allow ? { kind: "write", files: info.files } : { kind: "write", files: info.files, opaque: true };
-  }
-  // No write API at all: the allow-list is the only way to stay non-writing.
-  if (!info.resolved && !info.unresolved && !extra) {
-    if (importsOk && forbidden.length === 0) return { kind: "safe" };
-    return { kind: "opaque" };
-  }
-  const files = info.files.length > 0 ? [...info.files] : [SHELL_EDIT_FILE];
-  if ((extra || info.unresolved) && !files.includes(SHELL_EDIT_FILE)) files.push(SHELL_EDIT_FILE);
-  // Alias / disallowed import on an open or write_text we could not resolve: keep the shell edit, refuse a split.
-  // A bare extra API (`Path.unlink`) stays a shell edit and is not opaque (existing expectation).
-  if (info.unresolved && !importsOk) return { kind: "write", files, opaque: true };
-  if (info.resolved && !allow) return { kind: "write", files, opaque: true };
-  return { kind: "write", files };
+  if (info.unresolved) return { kind: "opaque" };
+  if (info.files.length > 0) return { kind: "write", files: info.files };
+  return { kind: "safe" };
 }
 
 /** Segments known not to write files (beyond what `segmentMutation` already reported). */
@@ -1523,6 +1330,11 @@ function segmentMutation(
   if (!isCheck) {
     for (const r of redirects) {
       if ((r.fd !== "" && r.fd !== "1") || r.target === null) continue;
+      if (tempPrefixKind(r.target.text) === "climb") {
+        mutating = true;
+        files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
+        continue;
+      }
       if (isUnknownTarget(r.target) || isIgnoredPath(r.target.text)) continue;
       mutating = true;
       files.push({ file: r.target.text, kind: "M" as const });
@@ -1684,9 +1496,9 @@ export function classifyShellMutation(
         e.baseDir = "";
       }
     }
-    // No parsed edit drops `opaque`, so an escaped `python -c` alone stays non-opaque (existing expectation).
-    // After `cd`, keep it: `cd /tmp/other && node scripts/gate.mjs` is opaque (C13) even with no edit.
-    if (!anyMutating) return opaque && hasCd ? { ...NONE, hasCd: true, opaque: true } : NONE;
+    // No parsed edit used to drop `opaque`. Keep it: a rejected `python -c` (`vars(sys)`, …) stays opaque
+    // with no edit, and `cd /tmp/other && node scripts/gate.mjs` stays opaque (C13).
+    if (!anyMutating) return opaque ? { ...NONE, hasCd, opaque: true } : NONE;
     let order: ShellMutation["order"] = "unknown";
     if (checkIdx.length > 0 && plainIdx.length > 0) {
       const lastCheck = checkIdx[checkIdx.length - 1] as number;
