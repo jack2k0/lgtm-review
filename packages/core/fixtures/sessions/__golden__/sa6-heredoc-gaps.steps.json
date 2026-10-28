@@ -1,0 +1,113 @@
+[
+  {
+    "index": 0,
+    "text": "Rename a value in src/a.ts.",
+    "status": "unchecked",
+    "reason": "no checks ran (shell edits may be incomplete)",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/a.ts",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Edit src/a.ts (+0 -0)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "cat <<EOF renamed: $(sed -i 's/a/b/' src/a.ts) EOF",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/a.ts"
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "text": "Print a literal template.",
+    "status": "no-changes",
+    "reason": "no edits",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:04.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Run 1 command",
+        "startedAt": "2026-01-01T00:00:05.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "cat <<'EOF' $(sed -i 's/a/b/' src/a.ts) EOF",
+            "ok": true,
+            "ts": "2026-01-01T00:00:05.000Z"
+          }
+        ],
+        "files": []
+      }
+    ]
+  },
+  {
+    "index": 2,
+    "text": "Patch src/b.ts from a script.",
+    "status": "unchecked",
+    "reason": "no checks ran (shell edits may be incomplete)",
+    "headline": "Mostly reading (100%), 0 checks",
+    "startedAt": "2026-01-01T00:00:07.000Z",
+    "activeMs": 2000,
+    "truncated": false,
+    "hints": [
+      {
+        "rule": "unchecked-edit",
+        "severity": "warn",
+        "path": "/home/user/project/src/b.ts",
+        "reason": "edited and no check completed in this prompt"
+      }
+    ],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Edit src/b.ts (+0 -0)",
+        "startedAt": "2026-01-01T00:00:08.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "python3 - <<'EOF' import posix open('src/b.ts','w').write('x') EOF",
+            "ok": true,
+            "ts": "2026-01-01T00:00:08.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/b.ts"
+        ]
+      }
+    ]
+  }
+]

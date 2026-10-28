@@ -326,14 +326,27 @@ const GIT_APPLY_READONLY = new Set(["--check", "--stat", "--numstat", "--summary
 
 const PY_WRITE_RE = /\.write_(?:text|bytes)\s*\(/g;
 const PY_OPEN_CALL_RE = /\bopen\s*\(/g;
-// R2: an execution or OS surface in heredoc-fed python. Deny-list in the safe direction (opacity on).
+// R2 (kept) + H4: heredoc-fed python is opaque unless every import is on the allow-list and the source has no
+// dunder identifier and none of the dynamic-execution names. Only adds opacity.
 const PY_SURFACE_MODULE_RE = /\b(?:import|from)\b[^\n;]*\b(?:os|subprocess|shutil|pty|importlib|ctypes|multiprocessing|pathlib)\b/;
 const PY_SURFACE_CALL_RE = /\b(?:exec|eval|compile|__import__|getattr|globals|system|popen|spawn\w*)\b/;
 const PY_PATH_IMPORT_RE = /\bfrom\s+pathlib\s+import\s+Path(?:\s+as\s+\w+)?[ \t]*(?=$|[;\n])/gm;
+const PY_ALLOWED_MODULES = new Set([
+  "json", "re", "math", "sys", "pathlib", "textwrap", "datetime", "collections", "itertools", "functools", "string", "typing",
+]);
+const PY_IMPORT_RE = /\bfrom\s+(\S+)\s+import\b|(?<!\bfrom\s+\S+\s+)\bimport\s+([^\n;]+)/g;
+const PY_DYNAMIC_RE = /\b(?:exec|eval|compile|getattr|setattr|globals|vars|builtins)\b|\b__\w+__\b/;
 
 function pythonHasSurface(raw: string): boolean {
-  const body = stripPyComments(raw).replace(PY_PATH_IMPORT_RE, "");
-  return PY_SURFACE_MODULE_RE.test(body) || PY_SURFACE_CALL_RE.test(body);
+  const stripped = stripPyComments(raw);
+  const body = stripped.replace(PY_PATH_IMPORT_RE, "");
+  if (PY_SURFACE_MODULE_RE.test(body) || PY_SURFACE_CALL_RE.test(body)) return true;
+  if (PY_DYNAMIC_RE.test(stripped)) return true;
+  for (const m of stripped.matchAll(PY_IMPORT_RE)) {
+    const mods = m[1] !== undefined ? [m[1]] : (m[2] ?? "").split(",").map((x) => x.trim().split(/\s+/)[0] ?? "");
+    for (const mod of mods) if (!PY_ALLOWED_MODULES.has(mod.split(".")[0] ?? "")) return true;
+  }
+  return false;
 }
 
 const PY_BIND_RE = /(?:^|[;\n])[ \t]*(\w+)[ \t]*=(?!=)[ \t]*([^;\n]+)/g;
@@ -614,22 +627,31 @@ function substituteKeepingClimb(w: Word, vars: ReadonlyMap<string, string>, pois
 
 /** Bodies of the heredocs of a command, in order of their start. */
 function heredocBodies(cmd: string): string[] {
-  const out: string[] = [];
+  return heredocParts(cmd).map((h) => h.body);
+}
+
+/** Heredocs with their bodies and whether the delimiter was quoted (a quoted body is literal). */
+function heredocParts(cmd: string): { body: string; quoted: boolean }[] {
+  const out: { body: string; quoted: boolean }[] = [];
   let delim: string | null = null;
+  let quoted = false;
   let body: string[] = [];
   for (const line of cmd.split("\n")) {
     if (delim !== null) {
       if (line.trim() === delim) {
-        out.push(body.join("\n"));
+        out.push({ body: body.join("\n"), quoted });
         delim = null;
         body = [];
       } else body.push(line);
       continue;
     }
     const m = HEREDOC_START_RE.exec(line);
-    if (m) delim = m[1] ?? m[2] ?? m[3] ?? null;
+    if (m) {
+      delim = m[1] ?? m[2] ?? m[3] ?? null;
+      quoted = m[3] === undefined;
+    }
   }
-  if (delim !== null) out.push(body.join("\n"));
+  if (delim !== null) out.push({ body: body.join("\n"), quoted });
   return out;
 }
 
@@ -1248,7 +1270,7 @@ function readCommandNest(s: string, i: number): { body: string; next: number } {
  * R1: the text inside every `$(…)`, backtick and `<(…)` / `>(…)` of a command (single quotes skipped,
  * double quotes not). `unsure` when one cannot be followed to its end. `$((…))` is arithmetic: not a body.
  */
-function substitutionBodies(cmd: string): { bodies: string[]; unsure: boolean } {
+function substitutionBodies(cmd: string, heredocBody = false): { bodies: string[]; unsure: boolean } {
   const bodies: string[] = [];
   let unsure = false;
   let quote: "'" | '"' | null = null;
@@ -1262,11 +1284,11 @@ function substitutionBodies(cmd: string): { bodies: string[]; unsure: boolean } 
       i++;
       continue;
     }
-    if (c === "'" && quote === null) {
+    if (!heredocBody && c === "'" && quote === null) {
       quote = "'";
       continue;
     }
-    if (c === '"') {
+    if (!heredocBody && c === '"') {
       quote = quote === '"' ? null : '"';
       continue;
     }
@@ -1289,7 +1311,7 @@ function substitutionBodies(cmd: string): { bodies: string[]; unsure: boolean } 
       continue;
     }
     const dollar = c === "$" && cmd[i + 1] === "(";
-    const proc = quote === null && (c === "<" || c === ">") && cmd[i + 1] === "(";
+    const proc = !heredocBody && quote === null && (c === "<" || c === ">") && cmd[i + 1] === "(";
     if (!dollar && !proc) continue;
     if (dollar && cmd[i + 2] === "(") {
       i += 2; // arithmetic or a nested group: keep scanning inside it
@@ -1982,9 +2004,20 @@ export function classifyShellMutation(
     });
     // R1: command substitutions are commands of their own. A `cd` inside never leaks out.
     const nests = substitutionBodies(stripHeredocs(command));
+    // H1: an unquoted heredoc body is expanded by bash; quotes in it are literal.
+    if (command.includes("<<")) {
+      for (const h of heredocParts(command)) {
+        if (h.quoted) continue;
+        const inner = substitutionBodies(h.body, true);
+        if (inner.unsure) nests.unsure = true;
+        nests.bodies.push(...inner.bodies);
+      }
+    }
     if (nests.unsure) opaque = true;
     for (const body of nests.bodies) {
       if (body.trim() === "") continue;
+      // H3: `case` patterns close with a bare `)`: the body may be cut short. Opaque; found edits are kept.
+      if (/\bcase\b/.test(body)) opaque = true;
       const inner = classifyShellMutation(body, repo, repoRoot);
       if (inner.opaque) opaque = true;
       if (inner.edits.length === 0) continue;

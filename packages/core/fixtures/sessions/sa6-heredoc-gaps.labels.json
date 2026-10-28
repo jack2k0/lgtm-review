@@ -1,0 +1,31 @@
+{
+  "fixture": "sa6-heredoc-gaps",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "unchecked-edit:src/a.ts"
+      ],
+      "note": "H1: the sed -i inside $( ) in an unquoted heredoc body is expanded by bash, a real write to src/a.ts. No check follows, so unchecked."
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "H1 negative: a quoted delimiter keeps the body literal; nothing runs."
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "unchecked-edit:src/b.ts"
+      ],
+      "note": "H4: the heredoc python imports posix (not allow-listed), so it is opaque; the resolved write to src/b.ts is still recorded. No check follows, so unchecked."
+    }
+  ]
+}

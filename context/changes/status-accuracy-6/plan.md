@@ -24,6 +24,11 @@ schema: no
 - Tests failing on main: `cat <<EOF` newline `$(sed -i s/a/b/ src/a.ts)` newline `EOF` -> `src/a.ts`; same with backticks; `cat <<'EOF'` with the same body -> no edit (literal); `cat > a.md <<'EOF'` newline `don't` newline `EOF` newline `echo $(sed -i x src/a.ts)` -> `src/a.ts`; `echo $(case x in x) sed -i x src/a.ts;; esac)` -> opaque; heredoc python `import posix; posix.execv(...)` -> opaque; `import json as j` -> non-opaque; `__import__('os')` -> opaque; `open('docs/a.md','w')` with `import json` -> non-opaque doc edit.
 - Never change an existing expectation; if one conflicts, stop and report. One fixture `sa6-heredoc-gaps` (labels from the rules).
 - Done: `pnpm check` green; gate exit 0/2.
-- [ ] Phase 1 done
+- [x] Phase 1 done
 
 ## Phase 2 (orchestrator): real-log audit PRE/POST, counts only.
+
+## Correction after review
+- H2 needed no change: main already scans substitutions on the command with heredoc bodies stripped; ledger row 5 of status-accuracy-5 (Opus) was a false finding. The H2 and H4-dunder tests are kept as regression guards (they pass on main by design).
+- Phase 2 audit: 0 status changes on the 158 real-log rows, 0 regressions (PRE = POST: B 84.8%).
+- [x] Phase 2 done

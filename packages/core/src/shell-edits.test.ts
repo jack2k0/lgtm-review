@@ -1091,3 +1091,50 @@ describe("status-accuracy-5 R4: cd resolves code only inside its && chain", () =
   });
 
 });
+
+describe("status-accuracy-6 H1-H4", () => {
+  const sub = "sed -i s/a/b/ src/a.ts";
+  test.each<[string, string, string[]]>([
+    ["H1 unquoted heredoc $()", `cat <<EOF\n$(${sub})\nEOF`, ["src/a.ts"]],
+    ["H1 unquoted heredoc backticks", `cat <<EOF\n\`${sub}\`\nEOF`, ["src/a.ts"]],
+    ["H1 dash heredoc", `cat <<-EOF\n\t$(${sub})\n\tEOF`, ["src/a.ts"]],
+    ["H1 single-quoted delimiter is literal", `cat <<'EOF'\n$(${sub})\nEOF`, []],
+    ["H1 double-quoted delimiter is literal", `cat <<"EOF"\n$(${sub})\nEOF`, []],
+    ["H1 quotes in an unquoted body are literal", `cat <<EOF\ndon't $(${sub})\nEOF`, ["src/a.ts"]],
+    ["H2 apostrophe in a heredoc body", `cat > a.md <<'EOF'\ndon't\nEOF\necho $(${sub})`, ["a.md", "src/a.ts"]],
+  ])("%s", (_n, cmd, expected) => {
+    expect(files(cmd), cmd).toEqual(expected);
+  });
+
+  test("H3 case in a substitution is opaque", () => {
+    const m = classifyShellMutation("echo $(case x in x) sed -i x src/a.ts;; esac)");
+    expect(m.opaque).toBe(true);
+  });
+
+  const py = (body: string): string => `python3 - <<'EOF'\n${body}\nEOF`;
+  const w = "open('docs/a.md','w').write('x')";
+  test.each([
+    ["posix", `import posix\nposix.execv('/bin/sh', [])\n${w}`],
+    ["unknown module", `import foo\n${w}`],
+    ["from unknown", `from foo import bar\n${w}`],
+    ["dunder", `__import__('os')\n${w}`],
+    ["setattr", `setattr(m, 'f', 1)\n${w}`],
+    ["builtins", `import builtins\n${w}`],
+    ["vars", `vars(m)\n${w}`],
+    ["second import unknown", `import json, foo\n${w}`],
+  ])("H4 opaque: %s", (_n, body) => {
+    const m = classifyShellMutation(py(body));
+    expect(m.opaque).toBe(true);
+    expect(m.edits.map((e) => e.file)).toContain("docs/a.md");
+  });
+
+  test.each([
+    ["alias", `import json as j\n${w}`],
+    ["all allowed", `import json, re\nfrom collections import OrderedDict\nfrom typing import List as L\n${w}`],
+    ["from pathlib", `from pathlib import Path\n${w}`],
+  ])("H4 allow-listed: %s", (_n, body) => {
+    const m = classifyShellMutation(py(body));
+    expect(m.opaque).toBe(false);
+    expect(m.edits.map((e) => e.file)).toEqual(["docs/a.md"]);
+  });
+});
