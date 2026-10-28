@@ -74,10 +74,59 @@ export function parseGateBlock(text) {
 }
 
 /**
+ * Cells of one markdown table row. A `|` inside a backtick code span, or escaped as `\|`, is not a separator.
+ * One leading and one trailing separator pipe are the row border (rows may omit them).
+ */
+function splitCells(line) {
+  let t = line.trim();
+  if (t.startsWith("|")) t = t.slice(1);
+  const cuts = [];
+  let inCode = false;
+  let fence = 0;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (inCode) {
+      if (ch !== "`") continue;
+      let j = i;
+      while (j < t.length && t[j] === "`") j++;
+      if (j - i === fence) inCode = false;
+      i = j - 1;
+      continue;
+    }
+    if (ch === "\\") {
+      i++;
+      continue;
+    }
+    if (ch === "`") {
+      let j = i;
+      while (j < t.length && t[j] === "`") j++;
+      inCode = true;
+      fence = j - i;
+      i = j - 1;
+      continue;
+    }
+    if (ch === "|") cuts.push(i);
+  }
+  if (cuts.length && cuts[cuts.length - 1] === t.length - 1) {
+    cuts.pop();
+    t = t.slice(0, -1);
+  }
+  const cells = [];
+  let prev = 0;
+  for (const c of cuts) {
+    cells.push(t.slice(prev, c).trim());
+    prev = c + 1;
+  }
+  cells.push(t.slice(prev).trim());
+  return cells;
+}
+
+/**
  * Parse a findings ledger: reviewer names, and one { line, verdict } per table row. Fails closed (verdict "" =
- * unanswered): a row in a table without a Verdict column, a row whose cell count differs from the header, a
- * header not followed by a separator row (so a row after a blank line is not taken as a header). Rows may omit
- * the outer pipes; `\|` is a literal pipe. Only a bare name or @handle counts as a reviewer (not `<a>`).
+ * unanswered): a row in a table without a Verdict column, a header not followed by a separator row (so a row
+ * after a blank line is not taken as a header). A `|` inside backticks or written as `\|` is not a separator.
+ * A row with fewer cells than its header is malformed; a row with more cells is unanswered (verdict "").
+ * Only a bare name or @handle counts as a reviewer (not `<a>`).
  */
 export function parseLedger(text) {
   const rv = /^reviewers\s*:\s*(.*)$/im.exec(text);
@@ -85,6 +134,10 @@ export function parseLedger(text) {
   const reviewers = [...new Set(names.filter((r) => /^[a-z0-9][\w.+-]*$/.test(r) && r !== "none"))];
   const rows = [];
   const SEP = (cells) => cells.every((c) => /^:?-+:?$/.test(c));
+  const word = (cell) => {
+    const cleaned = cell.toLowerCase().replace(/[*_`~]/g, "");
+    return /^([a-z]+)(?=$|[\s(:,;])/.exec(cleaned)?.[1] ?? cleaned;
+  };
   let head = null; // { line, cells, col, confirmed } of the current table; null = outside a table
   let fence = false;
   const endTable = () => {
@@ -95,7 +148,7 @@ export function parseLedger(text) {
     if (/^\s*(```|~~~)/.test(line)) fence = !fence;
     const t = line.trim();
     if (fence || !/(^|[^\\])\|/.test(t)) return endTable();
-    const cells = t.replace(/^\|/, "").replace(/(^|[^\\])\|$/, "$1").split(/(?<!\\)\|/).map((c) => c.trim());
+    const cells = splitCells(t);
     if (!head) return void (head = { line: i + 1, cells, col: cells.findIndex((c) => /^verdict\b/i.test(c)), confirmed: false });
     if (!head.confirmed) {
       if (SEP(cells)) return void (head.confirmed = true);
@@ -104,8 +157,11 @@ export function parseLedger(text) {
       head.col = -1;
     }
     if (SEP(cells)) return;
-    const cell = head.col < 0 || cells.length !== head.cells.length ? "" : cells[head.col].toLowerCase().replace(/[*_`~]/g, "");
-    rows.push({ line: i + 1, verdict: /^([a-z]+)(?=$|[\s(:,;])/.exec(cell)?.[1] ?? cell });
+    // A short row is malformed; a long row (an unescaped pipe somewhere) is unanswered: reading by position could
+    // take Evidence text as the verdict (fail open).
+    if (head.col >= 0 && cells.length < head.cells.length) return void rows.push({ line: i + 1, verdict: "", malformed: true });
+    const cell = head.col < 0 || cells.length !== head.cells.length ? "" : cells[head.col];
+    rows.push({ line: i + 1, verdict: word(cell) });
   });
   endTable();
   return { reviewers, rows, none: /^findings\s*:\s*none\s*$/im.test(text) };
@@ -245,12 +301,13 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
   else if (!ledgerPath || !existsSync(ledgerPath)) add("review", "FAIL", `tier ${tier} needs ${need} reviewer(s); no findings ledger${ledgerPath ? ` at ${ledgerPath}` : " (--findings or --plan)"}`);
   else {
     const { reviewers, rows, none } = parseLedger(readFileSync(ledgerPath, "utf8"));
-    const open = rows.filter((r) => !VERDICTS.includes(r.verdict)).map((r) => `${ledgerPath}:${r.line}: verdict "${r.verdict}"`);
+    const malformed = rows.filter((r) => r.malformed).map((r) => `${ledgerPath}:${r.line}: malformed`);
+    const open = rows.filter((r) => !r.malformed && !VERDICTS.includes(r.verdict)).map((r) => `${ledgerPath}:${r.line}: verdict "${r.verdict}"`);
     const tally = VERDICTS.map((v) => `${rows.filter((r) => r.verdict === v).length} ${v}`).join(", ");
     if (reviewers.length < need) add("review", "FAIL", `tier ${tier} needs ${need} reviewer(s), ledger names ${reviewers.length}`);
     else if (rows.length === 0 && !none) add("review", "FAIL", "no findings table rows; write `findings: none` when the reviewers found nothing");
     else if (rows.length > 0 && none) add("review", "FAIL", `\`findings: none\` but ${rows.length} finding row(s)`);
-    else if (!bad("review", open, "unanswered finding(s) (verdict must be fixed | rejected | deferred)")) add("review", "PASS", `${reviewers.join(" + ")}; ${rows.length} finding(s): ${tally}`);
+    else if (!bad("review", malformed, "malformed ledger row(s)") && !bad("review", open, "unanswered finding(s) (verdict must be fixed | rejected | deferred)")) add("review", "PASS", `${reviewers.join(" + ")}; ${rows.length} finding(s): ${tally}`);
   }
 
   const lines = ["## Merge gate", `base ${values.base} ${short(baseSha)} / head ${values.head ?? "worktree"} ${short(headSha)}`, `changed files: ${paths.length}`, `tier: ${tier}`];

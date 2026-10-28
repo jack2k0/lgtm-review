@@ -17,4 +17,4 @@ schema: no
 - REVIEW.md: one sentence in the ledger format section: escape a literal pipe as `\|` or keep it in backticks.
 - Tests in `packages/cli/src/gate.test.ts`, failing on main: a row with `` `||` `` in Finding and verdict `fixed` -> PASS; a row with `a \| b` -> PASS; a row with an unescaped `a || b` in Finding -> PASS (end-anchored); a row with only 5 cells -> malformed FAIL naming the line.
 - Done: `pnpm check` green; gate exit 0/2.
-- [ ] Phase 1 done
+- [x] Phase 1 done
