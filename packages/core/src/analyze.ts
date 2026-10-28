@@ -436,10 +436,21 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
   let detailCache: PromptDetail[] | null = null;
   const filesCache = new Map<number, FileChange[]>();
 
-  /** File class (S-20): documentation first, then scratch, else code. */
+  /**
+   * Collapse `.` / `..` in an absolute path before the scratch test.
+   * `/tmp/../home/user/project/src/a.ts` is not under `/tmp`. Relative paths stay as written.
+   */
+  function canonicalAbs(path: string): string {
+    if (!path.startsWith("/")) return path;
+    if (!path.split("/").some((seg) => seg === "." || seg === "..")) return path;
+    return normalizePath(path);
+  }
+
+  /** File class (S-20): documentation first, then scratch, else code. Absolute `.` / `..` is collapsed first. */
   function classify(path: string, use: PendingUse): FileTouch["cls"] {
-    if (isDocPath(path)) return "doc";
-    return isScratchPath(path, parser.meta().cwd, use.cwd) ? "scratch" : "code";
+    const p = canonicalAbs(path);
+    if (isDocPath(p)) return "doc";
+    return isScratchPath(p, parser.meta().cwd, use.cwd) ? "scratch" : "code";
   }
 
   /** Retains `patch` for an edit of `path`, within the per-file line cap and the session budget. */
@@ -713,15 +724,16 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             const plain = sm.hasHistoryGitOp && !sm.gitOnly && !sm.opaque ? plainDiffPaths(sm, ev.bashEditDiff, cwd, (path) => classify(path, use) === "code") : null;
             const all = ev.bashEditDiff.map((f) => {
               const gitMade = plain === null ? sm.gitOnly : !plain.has(f.path);
+              const path = canonicalAbs(f.path);
               const t: FileTouch = {
-                path: f.path,
+                path,
                 kind: f.kind,
                 added: f.added,
                 removed: f.removed,
                 maybeIncomplete: f.maybeIncomplete || gitMade,
                 inFix: phase === "fix",
                 stats: f.stats,
-                cls: classify(f.path, use),
+                cls: classify(path, use),
               };
               if (detail) t.patch = retain(use.prompt, f.path, f.patch);
               return { t, gitMade };
@@ -735,7 +747,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             // No diff in the log (the session did not start inside the repo), or an empty one next to an explicit
             // edit (the harness snapshots before the command ends and misses edits committed within it): count the command text.
             const all = sm.edits.map((e) => {
-              const path = resolveTarget(e.file, cwd, sm.hasCd, e.baseDir);
+              const path = canonicalAbs(resolveTarget(e.file, cwd, sm.hasCd, e.baseDir));
               const t: FileTouch = {
                 path,
                 kind: e.kind ?? ("M" as const),

@@ -1339,3 +1339,82 @@ describe("C13: gate script after an absolute cd", () => {
     expect(run(build).status).toBe("unchecked");
   });
 });
+
+describe("review round 1 status", () => {
+  const P = "/home/user/project";
+  const diffOf = (paths: string[]) => ({
+    bashEditDiff: {
+      files: paths.map((filePath) => ({ filePath, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-a", "+b", "+c"] }] })),
+    },
+  });
+  const withDiff = (cmd: string, paths: string[]) =>
+    one([prompt("q"), toolUse("b1", "Bash", { command: cmd }), toolResult("b1", "", { toolUseResult: diffOf(paths) })]);
+
+  test("eval cd then a relative sed is unchecked, not scratch", () => {
+    const cmd = `cd /tmp/x; eval "cd /home/user/project"; sed -i 's/a/b/' src/a.ts`;
+    expect(one([prompt("q"), ...bash("b1", cmd)])).toMatchObject({
+      status: "unchecked",
+      reason: "no checks ran (shell edits may be incomplete)",
+    });
+  });
+
+  test("source and builtin cd then a relative sed are unchecked, not scratch", () => {
+    for (const hide of ["source env.sh", "builtin cd /home/user/project", ". ./env.sh"]) {
+      const cmd = `cd /tmp/x; ${hide}; sed -i 's/a/b/' src/a.ts`;
+      expect(one([prompt("q"), ...bash("b1", cmd)]), hide).toMatchObject({
+        status: "unchecked",
+        reason: "no checks ran (shell edits may be incomplete)",
+      });
+    }
+  });
+
+  test("python -c sys.modules subprocess beside a merge is unchecked", () => {
+    const cmd = `git merge b && sed -i 's/x/y/' plan.md && python3 -c "import sys; sys.modules['subprocess'].run(['sh','-c','echo > src/c.ts'])"`;
+    expect(withDiff(cmd, [`${P}/plan.md`, `${P}/src/c.ts`])).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("node --eval before a gate script beside a merge is unchecked", () => {
+    const cmd = `git merge b && sed -i 's/x/y/' plan.md && node --eval="require('fs').writeFileSync('src/c.ts','x')" scripts/gate.mjs`;
+    expect(withDiff(cmd, [`${P}/plan.md`, `${P}/src/c.ts`])).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("node --require before a gate script beside a merge is unchecked", () => {
+    const cmd = "git merge b && sed -i 's/x/y/' plan.md && node --require=/tmp/x.cjs scripts/gate.mjs";
+    expect(withDiff(cmd, [`${P}/plan.md`, `${P}/src/c.ts`])).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("npm install --frozen-lockfile beside a merge is unchecked", () => {
+    const cmd = "git merge b && sed -i 's/x/y/' plan.md && npm install --frozen-lockfile";
+    expect(withDiff(cmd, [`${P}/plan.md`, `${P}/src/c.ts`])).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("a dash-less heredoc code write then a passing check is checked", () => {
+    const cmd = "python3 <<'EOF'\np = \"src/a.ts\"\nopen(p, 'w').write('x')\nEOF";
+    expect(one([prompt("q"), ...bash("b1", cmd), ...bash("b2", "pnpm test")])).toMatchObject({
+      status: "checked",
+      reason: "pnpm test passed after last edit (shell edits may be incomplete)",
+    });
+  });
+
+  test("a dash-less heredoc code write alone is unchecked", () => {
+    const cmd = "python3 <<'EOF'\np = \"src/a.ts\"\nopen(p, 'w').write('x')\nEOF";
+    expect(one([prompt("q"), ...bash("b1", cmd)])).toMatchObject({
+      status: "unchecked",
+      reason: "no checks ran (shell edits may be incomplete)",
+    });
+  });
+
+  test("an absolute path with .. is a code edit, not scratch", () => {
+    const cmd = "sed -i 's/a/b/' /tmp/../home/user/project/src/a.ts";
+    const p = one([prompt("q"), ...bash("b1", cmd)]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran (shell edits may be incomplete)" });
+    expect(p.files.map((f) => f.path)).toEqual(["/home/user/project/src/a.ts"]);
+  });
+
+  test("a diff path under /tmp/.. is code", () => {
+    const raw = "/tmp/../home/user/project/src/a.ts";
+    const p = withDiff("echo hi", [raw]);
+    expect(p.status).toBe("unchecked");
+    expect(p.files.map((f) => f.path)).toEqual(["/home/user/project/src/a.ts"]);
+  });
+});

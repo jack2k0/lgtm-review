@@ -396,8 +396,6 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     "yarn --immutable i",
     "corepack pnpm install --frozen-lockfile",
     "node scripts/gate.mjs --base main",
-    "node -r x/register scripts/gate.mjs",
-    "node --require ./reg scripts/verify-run.mjs",
     "python3 -u scripts/gate.py",
     "python3 -uBI scripts/validate_all.py",
     "cd scripts && node gate.mjs",
@@ -415,6 +413,9 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     "pnpm install",
     "yarn install",
     "pnpm i",
+    // C15: a node option that loads code is not GATEREAD, including the forms C9 used to skip.
+    "node -r x/register scripts/gate.mjs",
+    "node --require ./reg scripts/verify-run.mjs",
     "node scripts/build.mjs",
     "cd sub && node scripts/gate.mjs",
     "cd /repo && node scripts/gate.mjs",
@@ -561,5 +562,120 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     const pathReplace = classifyShellMutation(`python3 -c ${JSON.stringify("from pathlib import Path; Path(p).replace(q)")}`);
     expect(pathReplace.opaque).toBe(true);
     expect(pathReplace.edits.map((e) => e.file)).toEqual([SHELL_EDIT_FILE]);
+  });
+});
+
+describe("review round 1: directory hiders, python -c escapes, gate options, heredocs, scratch ..", () => {
+  const mixed = (seg: string) => `git merge b && sed -i s/x/y/ plan.md && ${seg}`;
+
+  test("eval, source, dot, builtin, command and exec poison later relative targets", () => {
+    const rel = "sed -i 's/a/b/' src/a.ts";
+    for (const hide of [
+      `eval "cd /home/user/project"`,
+      "source env.sh",
+      ". ./env.sh",
+      "builtin cd /home/user/project",
+      "command cd /home/user/project",
+      "exec cd /home/user/project",
+    ]) {
+      expect(files(`cd /tmp/x; ${hide}; ${rel}`), hide).toEqual([SHELL_EDIT_FILE]);
+    }
+    // The hider's own relative edit is unresolved too (`command` may be `command cd`).
+    expect(files("cd /tmp/x; command sed -i 's/a/b/' src/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files(`eval "cd /tmp/x"; sed -i 's/a/b/' /home/user/project/src/a.ts`)).toEqual(["/home/user/project/src/a.ts"]);
+  });
+
+  test("a subshell hider does not leak, and pnpm exec is not the shell builtin", () => {
+    expect(files(`(eval "cd /home/user/project"; sed -i 's/a/b/' src/a.ts); sed -i 's/a/b/' b.ts`)).toEqual([SHELL_EDIT_FILE, "b.ts"]);
+    const kept = classifyShellMutation("cd sub && pnpm exec vitest && sed -i x a.ts");
+    expect(kept.edits).toEqual([{ file: "a.ts", gitOp: false, kind: "M", baseDir: "sub" }]);
+    expect(kept.opaque).toBe(false);
+  });
+
+  test("python -c module subscript, dunder, private attribute and frame names are opaque", () => {
+    for (const seg of [
+      `python3 -c "import sys; sys.modules['subprocess'].run(['sh','-c','echo > src/c.ts'])"`,
+      `python3 -c "import sys; sys.modules['os'].execvp('sed', ['sed','-i','s/a/b/','src/a.ts'])"`,
+      `python3 -c "[c for c in ().__class__.__base__.__subclasses__() if c.__name__=='Popen'][0](['sed'])"`,
+      `python3 -c "import random; random._os.execvp('sed', ['sed','-i','s/a/b/','src/a.ts'])"`,
+      `python3 -c "x = __globals__['sy'+'stem']"`,
+      `python3 -c "import sys; print(sys.version)"`,
+      `python3 -c "x = f_code"`,
+      `python3 -c "import json; print(json.dumps({}).gi_frame)"`,
+    ]) {
+      expect(classifyShellMutation(mixed(seg)).opaque, seg).toBe(true);
+    }
+  });
+
+  test("python -c documented safe calls stay non-opaque", () => {
+    const ok = (seg: string) => classifyShellMutation(mixed(seg));
+    expect(ok(`python3 -c "import json; print(json.dumps({}))"`).opaque).toBe(false);
+    expect(ok(`python3 -c "import json as j; print(j.dumps({}))"`).opaque).toBe(false);
+    expect(ok(`python3 -c "import hashlib; print(hashlib.sha256(b'x').hexdigest())"`).opaque).toBe(false);
+    expect(ok(`python3 -c "import platform; print(platform.machine())"`).opaque).toBe(false);
+    expect(ok(`python3 -c "import sys; print(1)"`).opaque).toBe(false);
+    expect(ok(`python3 -c "from json import dumps; print(dumps({}))"`).opaque).toBe(false);
+    expect(files(`python3 -c "open(p,'w')"`)).toEqual([SHELL_EDIT_FILE]);
+    expect(classifyShellMutation(mixed(`python3 -c "open(p,'w')"`)).opaque).toBe(false);
+  });
+
+  test("node options that take or load code before a gate script are not GATEREAD", () => {
+    for (const seg of [
+      `node --eval="require('fs').writeFileSync('src/c.ts','x')" scripts/gate.mjs`,
+      "node --print=1 scripts/gate.mjs",
+      "node --print scripts/gate.mjs",
+      "node -e scripts/gate.mjs",
+      "node -p scripts/gate.mjs",
+      "node -r x/register scripts/gate.mjs",
+      "node --require ./reg scripts/verify-run.mjs",
+      "node --require=/tmp/x.cjs scripts/gate.mjs",
+      "node --require /tmp/x.cjs scripts/gate.mjs",
+      "node -r./x.cjs scripts/gate.mjs",
+      "node --import=./x.mjs scripts/gate.mjs",
+      "node --import ./x.mjs scripts/gate.mjs",
+      "node --loader=./x.mjs scripts/gate.mjs",
+      "node --loader ./x.mjs scripts/gate.mjs",
+      "node --experimental-loader=./x.mjs scripts/gate.mjs",
+      "node --experimental-loader ./x.mjs scripts/gate.mjs",
+      `python3 -c "print(1)" scripts/gate.py`,
+      "python3 -m json.tool scripts/gate.py",
+    ]) {
+      expect(classifyShellMutation(mixed(seg)).opaque, seg).toBe(true);
+    }
+    expect(classifyShellMutation(mixed("node scripts/gate.mjs --base main")).opaque).toBe(false);
+    expect(classifyShellMutation(mixed("python3 -u scripts/gate.py")).opaque).toBe(false);
+    expect(classifyShellMutation(mixed("python3 -uBI scripts/validate_all.py")).opaque).toBe(false);
+    expect(classifyShellMutation(mixed(`python3 -c "print(1)"`)).opaque).toBe(false);
+  });
+
+  test("npm install is not frozen, npm ci and pnpm/yarn frozen still are", () => {
+    for (const seg of ["npm install --frozen-lockfile", "npm i --frozen-lockfile", "npm install --ignore-scripts", "npm i --ignore-scripts"]) {
+      expect(classifyShellMutation(mixed(seg)).opaque, seg).toBe(true);
+    }
+    for (const seg of ["npm ci", "npm ci --ignore-scripts", "pnpm install --frozen-lockfile", "pnpm i --immutable", "yarn install --immutable"]) {
+      expect(classifyShellMutation(mixed(seg)).opaque, seg).toBe(false);
+    }
+  });
+
+  test("dash-less python heredocs record a code write, a doc write and a pathlib write", () => {
+    const bodies: [string, string][] = [
+      ["p = \"src/a.ts\"\nopen(p, 'w').write('x')", "src/a.ts"],
+      ["p = \"docs/x.md\"\nopen(p, 'w').write('x')", "docs/x.md"],
+      ["from pathlib import Path\nPath(\"src/a.ts\").write_text('x')", "src/a.ts"],
+    ];
+    for (const head of ["python3 <<'EOF'", "python <<'EOF'", "python3.11 <<'EOF'", "python3 -B <<EOF"]) {
+      for (const [body, file] of bodies) {
+        const cmd = `${head}\n${body}\nEOF`;
+        const m = classifyShellMutation(cmd);
+        expect(m.edits.map((e) => e.file), cmd).toEqual([file]);
+        expect(m.opaque, cmd).toBe(false);
+      }
+    }
+  });
+
+  test(".. and ./ in an absolute path are normalised before the scratch test", () => {
+    expect(files("sed -i 's/a/b/' /tmp/../home/user/project/src/a.ts")).toEqual(["/home/user/project/src/a.ts"]);
+    expect(files("sed -i 's/a/b/' /tmp/./../home/user/project/src/a.ts")).toEqual(["/home/user/project/src/a.ts"]);
+    expect(files(`V=/tmp/s; sed -i 's/a/b/' "$V/../../../home/user/project/src/a.ts"`)).toEqual(["/home/user/project/src/a.ts"]);
   });
 });

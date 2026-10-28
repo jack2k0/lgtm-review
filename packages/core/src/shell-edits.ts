@@ -154,9 +154,20 @@ const IGNORED_PATH_RES: RegExp[] = [
   /(?:^|\/)(?:log|out|output|err|stdout|stderr)$/,
 ];
 
+/**
+ * Path the scratch test sees. A literal `.` / `..` is collapsed first, so `/tmp/../repo/a.ts` is not under `/tmp`.
+ * A `$` / glob / `~` target stays as written: `$S/../x` must still match `TMP_VAR`, and normalising it would pop `$S`.
+ */
+function pathForIgnore(p: string): string {
+  if (/[$`*?~]/.test(p)) return p;
+  if (p.startsWith("/") || p.split("/").some((seg) => seg === "." || seg === "..")) return normalizePath(p);
+  return p;
+}
+
 /** Scratch, cache and log-capture targets are not edits of the work tree. */
 function isIgnoredPath(p: string): boolean {
-  return IGNORED_PATH_RES.some((re) => re.test(p));
+  const n = pathForIgnore(p);
+  return IGNORED_PATH_RES.some((re) => re.test(n));
 }
 
 /** Unknown variable / substitution targets of a redirect: nothing reliable to say, so no edit. */
@@ -794,6 +805,35 @@ function containedCommandSubs(text: string): number {
   return count;
 }
 
+/** Shell words that can change the directory without a `cd` this scanner can see (C15). */
+const DIR_HIDERS = new Set(["eval", "source", ".", "builtin", "command", "exec"]);
+
+/**
+ * True when this segment's command is `eval`, `source`, `.`, `builtin`, `command` or `exec`.
+ * The tracked directory is unknown from here on. `pnpm exec` / `npm exec` are package-manager wrappers, not `exec`.
+ */
+function hidesDirectory(segment: string): boolean {
+  // `(eval` is one token to `parseWords`; strip grouping punctuation the way `stripPrefixes` does.
+  const words = parseWords(segment.trim().replace(/^[({!]+\s*/, "")).words;
+  let i = 0;
+  while (i < words.length) {
+    const t = (words[i] as Word).text;
+    if (t === "(" || t === "{" || t === "!" || t === "do" || t === "then" || t === "else" || /^[A-Za-z_]\w*=/.test(t)) {
+      i++;
+      continue;
+    }
+    if (t === "time" || t === "nohup" || t === "nice" || t === "sudo" || t === "env" || t === "corepack") {
+      i++;
+      while (i < words.length && (words[i] as Word).text.startsWith("-") && (words[i] as Word).text !== "-") i++;
+      continue;
+    }
+    if ((t === "pnpm" || t === "npm") && words[i + 1]?.text === "exec") return false;
+    if (t === "yarn" && words[i + 1]?.text === "dlx") return false;
+    return DIR_HIDERS.has(t);
+  }
+  return false;
+}
+
 /** Directory after this `cd` / `pushd`. No operand, an extra operand, or an unknown flag poisons it. */
 function nextDir(words: Word[], dir: Dir): Dir {
   const ops: Word[] = [];
@@ -819,7 +859,10 @@ function placeFile(file: string, dir: Dir, sawCd: boolean): { file: string; base
   return sawCd ? { file, baseDir: "" } : { file };
 }
 
-/** `npm ci`, or `npm` / `pnpm` / `yarn` `install`|`i` with `--frozen-lockfile` / `--immutable` (any order, plus `-C` / `--dir` / `--prefix`). */
+/**
+ * `npm ci`, or `pnpm` / `yarn` `install`|`i` with `--frozen-lockfile` / `--immutable` (any order, plus `-C` / `--dir` / `--prefix`).
+ * `npm install` / `npm i` is never frozen: npm ignores `--frozen-lockfile` (C15).
+ */
 function isFrozenInstall(words: Word[]): boolean {
   const head = words[0]?.text;
   if (head !== "npm" && head !== "pnpm" && head !== "yarn") return false;
@@ -834,25 +877,31 @@ function isFrozenInstall(words: Word[]): boolean {
     args.push(t);
   }
   const positional = args.filter((t) => !t.startsWith("-"));
+  if (head === "npm") return positional[0] === "ci";
   const frozen = args.includes("--frozen-lockfile") || args.includes("--immutable");
-  if (head === "npm" && positional[0] === "ci") return true;
   return (positional[0] === "install" || positional[0] === "i") && frozen;
 }
 
-const NODE_VALUE_OPTS = new Set(["-r", "--require", "--import", "--loader"]);
+/** Node options that take code (`-e`/`--eval`, `-p`/`--print`) or load code (`-r`/`--require`, `--import`, `--loader`). */
+const NODE_LOAD_RE = /^--(?:eval|print|require|import|loader|experimental-loader)(?:=|$)/;
+
+function nodeLoadsCode(t: string): boolean {
+  return NODE_LOAD_RE.test(t) || /^-[epr]/.test(t);
+}
+
 const GATE_BASE_RE = /^(?:gate|check|verify|validate)[\w.-]*\.(?:mjs|cjs|js|py|ts)$/;
 
-/** First positional operand, skipping the flags C9 names. Null when `-c` / `-m` takes that slot. */
+/**
+ * First positional operand. Null when that slot is not a script file (C15): node `-e`/`--eval`, `-p`/`--print`,
+ * `-r`/`--require`, `--import`, `--loader`/`--experimental-loader` (spaced, `=`, or attached `-e`/`-p`/`-r`),
+ * or python `-c` / `-m`. Harmless flags (`--no-warnings`, python `-u`/`-B`/`-I`) are still skipped.
+ */
 function scriptOperand(words: Word[], kind: "node" | "py"): Word | null {
   for (let i = 1; i < words.length; i++) {
     const w = words[i] as Word;
     const t = w.text;
     if (kind === "node") {
-      if (NODE_VALUE_OPTS.has(t)) {
-        i++;
-        continue;
-      }
-      if (t.startsWith("--require=") || t.startsWith("--import=") || t.startsWith("--loader=")) continue;
+      if (nodeLoadsCode(t)) return null;
       if (t.startsWith("-") && t !== "-") continue;
       return w;
     }
@@ -1154,32 +1203,157 @@ function c14Exempt(src: string): Set<number> {
 }
 
 /**
- * `python -c <src>` (optional `-u`/`-B`/`-I`/`-E`/`-s`/`-S`/`-O` before `-c`). Null when this is not `-c`
- * (a script operand or `-` for a heredoc). An escape (C1) drops a parsed write. Otherwise C12: non-writing only
- * when every import is allow-listed and no forbidden name occurs; a resolved write stays, and is non-opaque
- * only when those same conditions hold and every forbidden name belongs to that write. C14: on that resolved
- * write, a read `open` and `str.replace` do not count, and a non-literal `open` mode stays opaque.
+ * Documented calls on an allow-listed module (`json.dumps(`, `hashlib.sha256(`). Anything else — a subscript,
+ * a private attribute, a name that is not a plain call — is an escape (C15). `platform.system` stays off the list.
+ * Modules with an empty set have no safe attribute access (`import sys; print(1)` is still fine).
+ */
+const PY_SAFE_CALLS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  Object.entries({
+    json: ["dump", "dumps", "load", "loads"],
+    sys: [],
+    re: ["compile", "search", "match", "fullmatch", "findall", "finditer", "split", "sub", "subn", "escape", "purge"],
+    math: ["sqrt", "floor", "ceil", "log", "log2", "log10", "exp", "pow", "fabs", "sin", "cos", "tan", "isnan", "isfinite", "isinf"],
+    datetime: ["datetime", "date", "time", "timedelta", "timezone"],
+    time: ["time", "time_ns", "monotonic", "monotonic_ns", "perf_counter", "perf_counter_ns", "process_time", "sleep", "ctime", "gmtime", "localtime", "strftime", "strptime", "mktime"],
+    collections: ["namedtuple", "deque", "Counter", "OrderedDict", "defaultdict", "ChainMap"],
+    itertools: ["chain", "islice", "count", "cycle", "repeat", "product", "permutations", "combinations", "groupby", "accumulate", "zip_longest", "starmap", "tee", "filterfalse", "dropwhile", "takewhile", "compress"],
+    functools: ["reduce", "partial", "cache", "lru_cache", "wraps", "cmp_to_key", "total_ordering", "cached_property"],
+    textwrap: ["dedent", "indent", "fill", "wrap", "shorten"],
+    pprint: ["pprint", "pformat", "pp"],
+    statistics: ["mean", "median", "mode", "stdev", "pstdev", "variance", "pvariance", "quantiles", "fmean"],
+    random: ["random", "uniform", "randint", "randrange", "choice", "choices", "sample", "shuffle", "seed", "getrandbits", "randbytes", "gauss", "normalvariate"],
+    string: ["capwords"],
+    decimal: ["Decimal", "getcontext"],
+    fractions: ["Fraction"],
+    operator: ["add", "sub", "mul", "truediv", "floordiv", "mod", "pow", "eq", "ne", "lt", "le", "gt", "ge", "not_", "truth", "abs", "and_", "or_", "xor", "contains", "countOf", "concat"],
+    typing: [],
+    enum: ["Enum", "IntEnum", "StrEnum", "Flag", "auto"],
+    dataclasses: ["dataclass", "field", "asdict", "astuple", "fields"],
+    uuid: ["uuid1", "uuid3", "uuid4", "uuid5", "UUID"],
+    hashlib: ["md5", "sha1", "sha224", "sha256", "sha384", "sha512", "sha3_224", "sha3_256", "sha3_384", "sha3_512", "blake2b", "blake2s", "shake_128", "shake_256", "pbkdf2_hmac", "scrypt", "new"],
+    base64: ["b64encode", "b64decode", "b32encode", "b32decode", "b16encode", "b16decode", "urlsafe_b64encode", "urlsafe_b64decode", "standard_b64encode", "standard_b64decode"],
+    platform: ["machine", "python_version", "python_implementation", "platform", "node", "release", "version", "processor", "architecture", "uname"],
+  }).map(([mod, names]) => [mod, new Set(names)]),
+);
+
+/** Frame and code-object attributes used to walk out of a `python -c` sandbox (C15). */
+const PY_FRAME_RE =
+  /\b(?:gi_frame|gi_code|gi_yieldfrom|f_globals|f_builtins|f_code|f_back|f_locals|cr_frame|cr_code|ag_frame|ag_code|tb_frame|co_consts)\b/;
+
+/** Import lines blanked, so a binding is judged by its uses and not by the `import` itself. */
+function blankPyImports(s: string): string {
+  return s
+    .replace(/\bfrom\s+\S+\s+import\s+[^#;\n]*/g, (all) => " ".repeat(all.length))
+    .replace(/\bimport\s+[^#;\n]*/g, (all) => " ".repeat(all.length));
+}
+
+/** `import mod` / `import mod as alias` of an allow-listed module. The bound name maps to the top-level module. */
+function moduleBindings(s: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const withoutFrom = s.replace(/\bfrom\s+\S+\s+import\b/g, (all) => " ".repeat(all.length));
+  for (const m of withoutFrom.matchAll(/\bimport\s+([^#;\n]*)/g)) {
+    const raw = m[1] ?? "";
+    if (raw.includes("\\") || raw.trim() === "") continue;
+    for (const part of raw.split(",")) {
+      const bits = part.trim().split(/\s+as\s+/);
+      const mod = (bits[0] ?? "").trim().split(/\s+/)[0] ?? "";
+      if (!/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(mod)) continue;
+      const root = mod.split(".")[0] ?? "";
+      if (!PY_ALLOW_IMPORTS.has(root)) continue;
+      const alias = (bits[1] ?? "").trim().split(/\s+/)[0] ?? "";
+      const name = alias !== "" ? alias : root;
+      if (/^[A-Za-z_]\w*$/.test(name)) out.set(name, root);
+    }
+  }
+  return out;
+}
+
+/**
+ * `from mod import attr` of an allow-listed module. A name that is not a documented safe function is an escape.
+ * A safe name is an escape when it is subscripted or used as an attribute (`dumps.__globals__` is also a dunder).
+ */
+function fromImportEscape(s: string): boolean {
+  const code = blankPyImports(s);
+  for (const m of s.matchAll(/\bfrom\s+(\S+)\s+import\s+([^#;\n]*)/g)) {
+    const root = ((m[1] as string).split(".")[0] ?? "");
+    if (!PY_ALLOW_IMPORTS.has(root)) continue;
+    const clause = (m[2] as string).replace(/[()]/g, " ");
+    if (clause.includes("*")) return true;
+    for (const part of clause.split(",")) {
+      const bits = part.trim().split(/\s+as\s+/);
+      const attr = (bits[0] ?? "").trim().split(/\s+/)[0] ?? "";
+      if (!/^[A-Za-z_]\w*$/.test(attr)) return true;
+      const aliasRaw = (bits[1] ?? "").trim().split(/\s+/)[0] ?? "";
+      const alias = aliasRaw !== "" ? aliasRaw : attr;
+      if (!/^[A-Za-z_]\w*$/.test(alias)) return true;
+      if (PY_SAFE_CALLS.get(root)?.has(attr) !== true) return true;
+      if (new RegExp(`\\b${alias}\\s*[.\\[]`).test(code)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Extra `python -c` escapes (C15), on code with strings and comments blanked: any dunder, a frame-walk name,
+ * or a subscript / non-call attribute on an imported allow-listed module. A plain `json.dumps(` stays allowed.
+ */
+function pyExtraEscape(src: string): boolean {
+  const s = pyCode(src);
+  if (/\b__[A-Za-z0-9_]+__\b/.test(s)) return true;
+  if (PY_FRAME_RE.test(s)) return true;
+  if (fromImportEscape(s)) return true;
+  const code = blankPyImports(s);
+  for (const [name, root] of moduleBindings(s)) {
+    if (new RegExp(`\\b${name}\\s*\\[`).test(code)) return true;
+    const re = new RegExp(`\\b${name}\\s*\\.\\s*([A-Za-z_]\\w*)`, "g");
+    for (const m of code.matchAll(re)) {
+      const attr = m[1] as string;
+      const after = code.slice((m.index ?? 0) + m[0].length);
+      if (PY_SAFE_CALLS.get(root)?.has(attr) !== true || !/^\s*\(/.test(after)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * `python -c <src>` (optional `-u`/`-B`/`-I`/`-E`/`-s`/`-S`/`-O` before `-c`). Null when this is not `-c`:
+ * a script, `-m`, `-` or a dash-less heredoc (`python3 <<EOF`) so the heredoc writer scan still runs.
+ * `-c` with no source, or another positional after the source (`python3 -c "print(1)" scripts/gate.py`), is opaque.
+ * An escape (C1, C15) drops a parsed write. Otherwise C12: non-writing only when every import is allow-listed and
+ * no forbidden name occurs; a resolved write stays, and is non-opaque only when those same conditions hold and
+ * every forbidden name belongs to that write. C14: on that resolved write, a read `open` and `str.replace` do not
+ * count, and a non-literal `open` mode stays opaque.
  */
 function classifyPyC(words: Word[], vars: ReadonlyMap<string, string>): PyC | null {
   const head = words[0]?.text ?? "";
   if (!/^python[\d.]*$/.test(head)) return null;
+  let sawC = false;
   let src: Word | null = null;
+  let trailing = false;
   for (let i = 1; i < words.length; i++) {
     const t = (words[i] as Word).text;
-    if (t === "-c") {
-      src = (words[i + 1] as Word | undefined) ?? null;
-      break;
+    if (!sawC) {
+      if (t === "-c") {
+        sawC = true;
+        src = (words[i + 1] as Word | undefined) ?? null;
+        if (src !== null) i++;
+        continue;
+      }
+      if (t === "-m" || t === "-" || !t.startsWith("-")) return null;
+      if (/^-[uBIEsSO]+$/.test(t)) continue;
+      if (t.startsWith("-")) continue;
+      return null;
     }
-    if (t === "-m" || t === "-" || !t.startsWith("-")) return null;
-    if (/^-[uBIEsSO]+$/.test(t)) continue;
-    if (t.startsWith("-")) continue;
-    return null;
+    if (t.startsWith("-") && t !== "-") continue;
+    trailing = true;
+    break;
   }
-  if (src === null) return { kind: "opaque" };
+  if (!sawC) return null;
+  if (src === null || trailing) return { kind: "opaque" };
   const text = substPySource(src, vars);
   if (text === null) return { kind: "opaque" };
   const code = dedent(text);
-  if (hasEscape(code)) return { kind: "opaque" };
+  if (hasEscape(code) || pyExtraEscape(code)) return { kind: "opaque" };
   const info = inspectPythonWrites(code, []);
   const extra = hasExtraWrite(code);
   const importsOk = pyImportsAllowed(code);
@@ -1449,13 +1623,19 @@ export function classifyShellMutation(
       // A piped python with no heredoc in its pipeline, while the command has one elsewhere: unsure, not "no write".
       const unsure = heredoc === null && prevPipe && heredocs > 0 && pipeHeredoc === null;
       const isCheck = matchSegment(expanded, repo);
+      const hides = hidesDirectory(expanded);
       const { words, redirects } = parseWords(normalizeFirstToken(stripPrefixes(expanded)));
       const subWords = words.map((w) => substituteVars(w, vars));
       const head = subWords[0]?.text;
       // Bash applies this segment's redirections before `cd`, so they belong to the directory we are in now.
-      const placeDir = dir;
-      const placeSaw = sawCd;
-      if (head === "cd" || head === "pushd") {
+      // A hider (`eval`, `source`, `command`, …) makes this segment's own relative targets unresolved too.
+      const placeDir: Dir = hides ? { k: "unknown" } : dir;
+      const placeSaw = hides || sawCd;
+      if (hides) {
+        hasCd = true;
+        dir = { k: "unknown" };
+        sawCd = true;
+      } else if (head === "cd" || head === "pushd") {
         hasCd = true;
         dir = nextDir(subWords, dir);
         sawCd = true;
