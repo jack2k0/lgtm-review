@@ -53,6 +53,7 @@ Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-li
 
 ## Aktywne slice'y / worktree
 brak
+- 2026-10-28 (wieczór): ZMERGOWANE, nie wypchnięte: gate-pipes d25bfc0 (High; Grok + poprawka Opusa po fail-open znalezionym przez Haiku), status-accuracy-5 (High; impl Sonnet po limicie 402 Groka; R1-R3 luki + R4 = decyzja Q3). Audyt po Q3: B 97,5% -> 84,8% (20 zmian w stronę ostrożności, 0 ukrytych edycji). Odłożone runda 6: rozwinięcia w niecytowanych heredocach, posix/execv w heredoc python, `case )` w `$(...)`, apostrof w heredocu ukrywa późniejsze `$(...)`.
 - 2026-10-28: ZMERGOWANE (nie wypchnięte): bom-strip 2351ae0 (High), ui-nav ea80367 (Medium), S-08 llm-titles 6e9118e (High), status-accuracy-4 96ac2a0 (High; audyt B 86,1% -> 97,5%, A 85,3% -> 96,6%, 0 regresji; 31 uwag: 24 fixed, 2 rejected, 5 deferred; zmiana podejścia dwa razy: allow-listy C16, potem zawężenie C17-C19b). Implementacje: Grok (grok-4.7); truth.py: Sonnet; recenzje: OpenCode (GLM-5.3-Flash, limit do 29.10 01:10), Haiku, Sonnet; Agy 401 (czeka na logowanie Jacka).
 - Odłożone na rundę 5 statusów: komendy w $(...)/backtickach, isDocPath po nazwie, komenda git-only z nieznanym zapisem, eskejpy w heredocach, względny cd do rodzeństwa przed gate.mjs. Bramka: kreski `|` w komórkach rejestru psują parser `gate.mjs` (obejście: bez `|`; do poprawy u źródła przy drugim wystąpieniu).
 
