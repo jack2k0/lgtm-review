@@ -1,0 +1,96 @@
+{
+  "sessionId": "sa5-hidden-writes",
+  "title": "Rename a value in src/a.ts.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Rename a value in src/a.ts.",
+      "status": "unchecked",
+      "reason": "no checks ran (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/src/a.ts",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/a.ts",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000004",
+      "text": "Record the current commit.",
+      "status": "no-changes",
+      "reason": "no edits",
+      "files": [],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 2,
+      "uuid": "00000000-0000-4000-8000-000000000007",
+      "text": "Merge branch b and rebuild.",
+      "status": "unchecked",
+      "reason": "no checks ran",
+      "files": [
+        {
+          "path": "/home/user/project/src/c.ts",
+          "kind": "M",
+          "added": 2,
+          "removed": 1,
+          "maybeIncomplete": false
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/home/user/project/src/c.ts",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    }
+  ],
+  "warnings": []
+}

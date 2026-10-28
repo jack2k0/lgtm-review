@@ -918,7 +918,8 @@ describe("C17: python -c withdrawn, cd only on && / || exit, exact gate, temp cl
     expect(files("(if cd /tmp/s; then sed -i x a.ts; fi); sed -i x b.ts")).toEqual([SHELL_EDIT_FILE, "b.ts"]);
     expect(files("(popd); sed -i x b.ts")).toEqual(["b.ts"]);
     expect(files("(pushd /tmp/s); sed -i x b.ts")).toEqual(["b.ts"]);
-    expect(files("cd /repo && (cd /tmp/s); sed -i x b.ts")).toEqual(["/repo/b.ts"]);
+    // C19: the `;` ends the && chain, so the outer code edit is not kept under /repo.
+    expect(files("cd /repo && (cd /tmp/s); sed -i x b.ts")).toEqual([SHELL_EDIT_FILE]);
     expect(files("cd /tmp/x; (cd /repo && sed -i x a.ts); sed -i x b.ts")).toEqual(["/repo/a.ts", SHELL_EDIT_FILE]);
   });
 
@@ -984,23 +985,101 @@ describe("C19: cd resolves code only inside its && chain", () => {
   test.each<[string, string, string[]]>([
     ["backgrounded && chain", "cd /tmp/s && sleep 1 & sed -i x src/a.ts", [SHELL_EDIT_FILE]],
     ["preceded by ||", "true || cd /tmp/s && sed -i x src/a.ts", [SHELL_EDIT_FILE]],
-    ["semicolon keeps the directory", "cd /tmp/s && true; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
-    ["semicolon keeps a doc path", "cd /tmp/s && true; sed -i x a.md", ["/tmp/s/a.md"]],
+    ["semicolon ends the chain", "cd /tmp/s && true; sed -i x src/a.ts", [SHELL_EDIT_FILE]],
+    ["semicolon falls back to the doc path", "cd /tmp/s && true; sed -i x a.md", ["/tmp/s/a.md"]],
     ["edit inside the && chain", "cd /tmp/s && sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
     ["|| exit keeps the rest of the command", "cd /tmp/s || exit 1; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
     ["|| exit with no code keeps the rest", "cd /tmp/s || exit; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
     ["|| tail is outside the chain", "cd /tmp/s && echo ok || sed -i x src/a.ts", [SHELL_EDIT_FILE]],
-    ["|| tail then semicolon", "cd /tmp/s && true || false; sed -i x src/a.ts", [SHELL_EDIT_FILE]],
     [
       "background across a newline",
       "cd /tmp/s && npm start &\nsleep 2; sed -i x src/a.ts",
       [SHELL_EDIT_FILE],
     ],
     ["|| cd after a test", "[ -d /tmp/s ] || cd /tmp/s && sed -i x src/a.ts", [SHELL_EDIT_FILE]],
-    ["semicolon before a redirect", "cd /tmp/s && git status; echo x > src/a.ts", ["/tmp/s/src/a.ts"]],
-    ["pipe keeps the directory", "cd /tmp/s && true | cat; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
-    ["if compound keeps the directory", "cd /tmp/s && if true; then true; fi; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
-    ["newline keeps the directory", "cd /tmp/s && true\nsed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
+    ["semicolon before a redirect", "cd /tmp/s && git status; echo x > src/a.ts", [SHELL_EDIT_FILE]],
+    ["pipe ends the chain", "cd /tmp/s && true | cat; sed -i x src/a.ts", [SHELL_EDIT_FILE]],
+    ["if compound ends the chain", "cd /tmp/s && if true; then true; fi; sed -i x src/a.ts", [SHELL_EDIT_FILE]],
+  ])("%s", (_name, cmd, expected) => {
+    expect(files(cmd), cmd).toEqual(expected);
+  });
+});
+
+describe("status-accuracy-5 R1: command substitutions are analysed", () => {
+  test.each<[string, string[]]>([
+    ["echo $(sed -i s/a/b/ src/a.ts)", ["src/a.ts"]],
+    ["echo `sed -i s/a/b/ src/a.ts`", ["src/a.ts"]],
+    ["cat <(sed -i s/a/b/ src/a.ts)", ["src/a.ts"]],
+    ["echo x > >(tee src/a.ts)", ["src/a.ts"]],
+    ["echo $(echo $(sed -i s/a/b/ src/a.ts))", ["src/a.ts"]],
+    ["echo '$(sed -i s/a/b/ src/a.ts)'", []],
+    ["cd /tmp/s && echo $(sed -i s/a/b/ src/a.ts)", [SHELL_EDIT_FILE]],
+  ])("%s", (cmd, expected) => {
+    expect(files(cmd)).toEqual(expected);
+  });
+
+  test("an inner cd places its own edit and is analysed on its own", () => {
+    expect(files("echo $(cd /tmp/s && sed -i s/a/b/ src/a.ts)")).toContain("/tmp/s/src/a.ts");
+  });
+
+  test("a writing substitution without a parsed target is opaque", () => {
+    expect(classifyShellMutation("echo $(node scripts/build.mjs)").opaque).toBe(true);
+    expect(classifyShellMutation('echo "$(touch src/a.ts)"').opaque).toBe(true);
+    expect(classifyShellMutation("node scripts/gate.mjs $(touch src/a.ts)").opaque).toBe(true);
+    expect(classifyShellMutation("echo $(sed -i s/a/b/ src/a.ts)").gitOnly).toBe(false);
+  });
+
+  test("an unterminated substitution is opaque", () => {
+    expect(classifyShellMutation("echo $(sed -i s/a/b/ src/a.ts").opaque).toBe(true);
+    expect(classifyShellMutation("echo `touch x").opaque).toBe(true);
+  });
+
+  test("x=$(git rev-parse HEAD) has no edits", () => {
+    expect(classifyShellMutation("x=$(git rev-parse HEAD)").edits).toEqual([]);
+  });
+
+  test("read-only substitutions stay non-writing", () => {
+    for (const cmd of ["echo $(pwd)", "echo $(date +%s)", "echo $(cat f)", "echo $((1 + 2))"]) {
+      const m = classifyShellMutation(cmd);
+      expect(m.edits, cmd).toEqual([]);
+      expect(m.opaque, cmd).toBe(false);
+    }
+  });
+});
+
+describe("status-accuracy-5 R2: heredoc python with an execution surface is opaque", () => {
+  const py = (body: string): string => `python3 - <<'EOF'\n${body}\nEOF`;
+  test.each([
+    ["import os", "import os\nos.system('make')\nopen('docs/a.md', 'w').write('x')"],
+    ["subprocess", "import subprocess\nsubprocess.run(['make'])\nopen('docs/a.md', 'w').write('x')"],
+    ["from shutil", "from shutil import rmtree\nopen('docs/a.md', 'w').write('x')"],
+    ["import pathlib", "import pathlib\nopen('docs/a.md', 'w').write('x')"],
+    ["exec", "exec(code)\nopen('docs/a.md', 'w').write('x')"],
+    ["getattr", "getattr(m, 'f')()\nopen('docs/a.md', 'w').write('x')"],
+    ["__import__", "__import__('o' + 's')\nopen('docs/a.md', 'w').write('x')"],
+  ])("%s", (_name, body) => {
+    const m = classifyShellMutation(py(body));
+    expect(m.opaque).toBe(true);
+    expect(m.edits.map((e) => e.file)).toContain("docs/a.md");
+  });
+
+  test("resolved writes alone stay non-opaque", () => {
+    const m = classifyShellMutation(py("open('docs/a.md', 'w').write('x')"));
+    expect(m.opaque).toBe(false);
+    expect(m.edits.map((e) => e.file)).toEqual(["docs/a.md"]);
+    expect(classifyShellMutation(py("from pathlib import Path\nPath('docs/a.md').write_text('x')")).opaque).toBe(false);
+  });
+});
+
+describe("status-accuracy-5 R4: cd resolves code only inside its && chain", () => {
+  test.each<[string, string, string[]]>([
+    ["semicolon", "cd /tmp/s && true; sed -i x src/a.ts", [SHELL_EDIT_FILE]],
+    ["semicolon before a redirect", "cd /tmp/s && git status; echo x > src/a.ts", [SHELL_EDIT_FILE]],
+    ["newline", "cd /tmp/s && true\nsed -i x src/a.ts", [SHELL_EDIT_FILE]],
+    ["|| tail then semicolon", "cd /tmp/s && true || false; sed -i x src/a.ts", [SHELL_EDIT_FILE]],
+    ["semicolon keeps a doc path", "cd /tmp/s && true; sed -i x a.md", ["/tmp/s/a.md"]],
+    ["inside the chain", "cd /tmp/s && sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
+    ["|| exit guard", "cd /tmp/s || exit 1; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
   ])("%s", (_name, cmd, expected) => {
     expect(files(cmd), cmd).toEqual(expected);
   });

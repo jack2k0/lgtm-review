@@ -27,6 +27,6 @@ schema: no
 - One fixture `sa5-hidden-writes` (labels from the rules).
 - Never change an existing expectation; if one conflicts, stop and report.
 - Done: `pnpm check` green; gate exit 0/2.
-- [ ] Phase 1 done (R1-R4)
+- [x] Phase 1 done (R1-R4)
 
 ## Phase 2 (orchestrator): real-log audit PRE/POST, counts only; any regression adjudicated by a Claude subagent.
