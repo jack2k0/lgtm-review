@@ -137,9 +137,9 @@ describe("GitView", () => {
     expect(html).not.toContain("Uncommitted (0)");
     expect(html.indexOf("Uncommitted (3)")).toBeLessThan(html.indexOf("Committed in the window (1)"));
     expect(html).toContain("src/ — 2 files");
-    expect(html).toContain("(root)/ — 1 file");
+    expect(html).toContain("(root) — 1 file");
     expect(html).toContain("pkg/ — 1 file");
-    expect(html.indexOf("src/ — 2 files")).toBeLessThan(html.indexOf("(root)/ — 1 file"));
+    expect(html.indexOf("src/ — 2 files")).toBeLessThan(html.indexOf("(root) — 1 file"));
     expect(html).not.toContain("logged.ts");
     expect(html).not.toContain("<th scope=\"col\">Where</th>");
   });

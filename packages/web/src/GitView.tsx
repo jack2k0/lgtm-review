@@ -11,7 +11,7 @@ function DirSection({ title, rows }: { title: string; rows: readonly GitFileEntr
       <h4>{title} ({rows.length})</h4>
       {groups.map((g) => (
         <details key={g.dir} open={open}>
-          <summary>{g.dir}/ — {plural(g.items.length, "file")}</summary>
+          <summary>{g.dir === "(root)" ? g.dir : `${g.dir}/`} — {plural(g.items.length, "file")}</summary>
           <div className="table-scroll">
             <table>
               <thead>
