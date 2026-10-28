@@ -60,7 +60,7 @@ reviewers: agy, opencode
 | 1 | Important | packages/core/src/redact.ts:120 | `whsec_` kept in titles | opencode | agy: confirmed (repro) | fixed (abc1234) | test `redact.test.ts` "webhook secret" | — |
 ```
 
-- Findings go only in tables with a Verdict column. The gate fails closed: a table without a Verdict column, a row with a different cell count than its header, or a row after a blank line counts as unanswered. A ledger with no finding rows must say `findings: none` on its own line; prose or bullet findings without it fail the gate. Escape a pipe inside a cell as `\|`, also inside code spans.
+- Findings go only in tables with a Verdict column. The gate fails closed: a table without a Verdict column, or a row after a blank line, counts as unanswered. The Verdict cell is read from the end of the row, so extra pipes in the Finding text cannot shift it; a row with fewer cells than its header is malformed and the failure names that line. A ledger with no finding rows must say `findings: none` on its own line; prose or bullet findings without it fail the gate. Escape a literal pipe as `\|` or keep it in backticks.
 - Verdict is `fixed` (with commit), `rejected` (with the reason) or `deferred` (with where it is tracked). An empty verdict fails the gate.
 - An accepted Important finding lands with a test or fixture that fails on the old code.
 - "Caught late by" names the layer that should have caught it (plan review, gate, worker check, pre-merge review, audit) when the finding came after merge.

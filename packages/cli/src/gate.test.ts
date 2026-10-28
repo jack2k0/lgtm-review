@@ -269,6 +269,25 @@ describe("scripts/gate.mjs", () => {
     expect(ok.out).toMatch(/2 finding\(s\): 1 fixed, 0 rejected, 1 deferred/);
   });
 
+  test("--merge: pipes inside backticks or \\| stay in the cell; the verdict is read from the end; a short row is malformed", () => {
+    const d = repo({}, { "scripts/x.mjs": "1\n" });
+    const H = "| # | Tag | file:line | Finding | Reviewer | Cross-check | Verdict | Evidence |\n|---|---|---|---|---|---|---|---|\n";
+    const run = (row: string) => {
+      const f = join(tmp, `p${n++}.md`);
+      writeFileSync(f, `reviewers: a\n\n${H}${row}\n`);
+      return gate(d, ["--merge", "--findings", f]);
+    };
+    const pass = /PASS review: a; 1 finding\(s\): 1 fixed, 0 rejected, 0 deferred/;
+    expect(run("| 1 | Nit | a.ts:1 | see `||` | a | ok | fixed | test |").out).toMatch(pass);
+    expect(run("| 1 | Nit | a.ts:1 | a \\| b | a | ok | fixed | test |").out).toMatch(pass);
+    expect(run("| 1 | Nit | a.ts:1 | a || b | a | ok | fixed | test |").out).toMatch(pass);
+    const short = run("| 1 | Nit | a.ts:1 | only | five |");
+    expect(short.code).toBe(1);
+    expect(short.out).toMatch(/FAIL review: 1 malformed ledger row/);
+    expect(short.out).toMatch(/:5: malformed/);
+    expect(short.out).not.toMatch(/verdict ""/);
+  });
+
   test("--merge fails on uncommitted or untracked files; without --merge they only count as changes", () => {
     const d = repo({}, { "docs/a.md": "hi\n" });
     writeFileSync(join(d, "docs/a.md"), "changed\n");
