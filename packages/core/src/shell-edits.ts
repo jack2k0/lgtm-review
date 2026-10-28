@@ -1690,10 +1690,11 @@ export function classifyShellMutation(
     // Untrusted `cd` / `pushd` / `popd` outside a subshell leaves the directory unknown.
     // A grouping `( … )` saves the directory state and puts it back at the closing `)`.
     let sticky = false;
-    // Literal absolute `cd` / `pushd` that does not resolve code (C18, or a C19 chain that has ended).
+    // Literal absolute `cd` / `pushd` that does not resolve code (C18, or a C19b `||` / `&` list).
     // Documentation is placed there; every other relative target stays unresolved.
     let docDir: string | null = null;
-    // C19: code resolves only while this `cd &&` chain is still open, at `chainParen` / `chainCompound`.
+    // C19b: set while a `cd &&` list is open, so a later `||` at this depth can drop the directory.
+    // `;`, a newline, and `|` leave the directory in place (C17).
     let chainCode = false;
     let chainDoc: string | null = null;
     let chainParen = 0;
@@ -1754,8 +1755,9 @@ export function classifyShellMutation(
       const headIsDir = head === "cd" || head === "pushd" || head === "popd";
       const otherDir = bareDirWordCount(expanded) - (headIsDir ? 1 : 0) > 0 || aliasDefinesDirChange(expanded);
       const nextHead = commandHead(segs[i + 1]?.text ?? "");
-      // Code follows a top-level `cd` / `pushd` only inside its `&&` chain (C19), or for the rest of the
-      // command after `|| exit` / `|| return`. A `||` before the cd, or a list that ends in `&`, does neither.
+      // C19b: a top-level `cd` / `pushd` followed by `&&` keeps its directory (C17), including after
+      // `;`, a newline, `|`, or a compound. It does not when the list is backgrounded, the cd is
+      // preceded by `||`, or a `||` tail follows (other than `|| exit` / `|| return`).
       const dirHead = (head === "cd" || head === "pushd") && !otherDir && !nested && !hides && !prevPipe;
       const baseParen = dirStack.length;
       const baseCompound = compound;
@@ -1890,13 +1892,22 @@ export function classifyShellMutation(
           funcBraces = 0;
         }
       }
-      // The segment was placed with the chain directory. A terminator at the chain's own depth
-      // (`;`, newline, `|`, `||`, `&`, end) drops code resolution. A literal absolute cd keeps docs.
-      if (chainCode && dirStack.length === chainParen && compound === chainCompound && seg.op !== "&&") {
-        dir = { k: "unknown" };
-        docDir = chainDoc;
-        sawCd = true;
-        sticky = true;
+      // `|` stays in the list (`cd && a | b || c`). `;`, newline, and end of command close it
+      // without forgetting the directory. `||` and `&` are the deterministic misses: later code is
+      // unresolved, and a literal absolute cd still places documentation.
+      if (
+        chainCode &&
+        dirStack.length === chainParen &&
+        compound === chainCompound &&
+        seg.op !== "&&" &&
+        seg.op !== "|"
+      ) {
+        if (seg.op === "||" || seg.op === "&") {
+          dir = { k: "unknown" };
+          docDir = chainDoc;
+          sawCd = true;
+          sticky = true;
+        }
         chainCode = false;
       }
       listMarks.push({ afterParen: dirStack.length, afterCompound: compound, op: seg.op });

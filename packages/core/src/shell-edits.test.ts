@@ -918,8 +918,7 @@ describe("C17: python -c withdrawn, cd only on && / || exit, exact gate, temp cl
     expect(files("(if cd /tmp/s; then sed -i x a.ts; fi); sed -i x b.ts")).toEqual([SHELL_EDIT_FILE, "b.ts"]);
     expect(files("(popd); sed -i x b.ts")).toEqual(["b.ts"]);
     expect(files("(pushd /tmp/s); sed -i x b.ts")).toEqual(["b.ts"]);
-    // C19: the `;` ends the && chain, so the outer code edit is not kept under /repo.
-    expect(files("cd /repo && (cd /tmp/s); sed -i x b.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("cd /repo && (cd /tmp/s); sed -i x b.ts")).toEqual(["/repo/b.ts"]);
     expect(files("cd /tmp/x; (cd /repo && sed -i x a.ts); sed -i x b.ts")).toEqual(["/repo/a.ts", SHELL_EDIT_FILE]);
   });
 
@@ -985,21 +984,23 @@ describe("C19: cd resolves code only inside its && chain", () => {
   test.each<[string, string, string[]]>([
     ["backgrounded && chain", "cd /tmp/s && sleep 1 & sed -i x src/a.ts", [SHELL_EDIT_FILE]],
     ["preceded by ||", "true || cd /tmp/s && sed -i x src/a.ts", [SHELL_EDIT_FILE]],
-    ["semicolon ends the chain", "cd /tmp/s && true; sed -i x src/a.ts", [SHELL_EDIT_FILE]],
-    ["semicolon falls back to the doc path", "cd /tmp/s && true; sed -i x a.md", ["/tmp/s/a.md"]],
+    ["semicolon keeps the directory", "cd /tmp/s && true; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
+    ["semicolon keeps a doc path", "cd /tmp/s && true; sed -i x a.md", ["/tmp/s/a.md"]],
     ["edit inside the && chain", "cd /tmp/s && sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
     ["|| exit keeps the rest of the command", "cd /tmp/s || exit 1; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
     ["|| exit with no code keeps the rest", "cd /tmp/s || exit; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
     ["|| tail is outside the chain", "cd /tmp/s && echo ok || sed -i x src/a.ts", [SHELL_EDIT_FILE]],
+    ["|| tail then semicolon", "cd /tmp/s && true || false; sed -i x src/a.ts", [SHELL_EDIT_FILE]],
     [
       "background across a newline",
       "cd /tmp/s && npm start &\nsleep 2; sed -i x src/a.ts",
       [SHELL_EDIT_FILE],
     ],
     ["|| cd after a test", "[ -d /tmp/s ] || cd /tmp/s && sed -i x src/a.ts", [SHELL_EDIT_FILE]],
-    ["semicolon before a redirect", "cd /tmp/s && git status; echo x > src/a.ts", [SHELL_EDIT_FILE]],
-    ["pipe ends the chain", "cd /tmp/s && true | cat; sed -i x src/a.ts", [SHELL_EDIT_FILE]],
-    ["if compound ends the chain", "cd /tmp/s && if true; then true; fi; sed -i x src/a.ts", [SHELL_EDIT_FILE]],
+    ["semicolon before a redirect", "cd /tmp/s && git status; echo x > src/a.ts", ["/tmp/s/src/a.ts"]],
+    ["pipe keeps the directory", "cd /tmp/s && true | cat; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
+    ["if compound keeps the directory", "cd /tmp/s && if true; then true; fi; sed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
+    ["newline keeps the directory", "cd /tmp/s && true\nsed -i x src/a.ts", ["/tmp/s/src/a.ts"]],
   ])("%s", (_name, cmd, expected) => {
     expect(files(cmd), cmd).toEqual(expected);
   });
