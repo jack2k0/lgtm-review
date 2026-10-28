@@ -66,11 +66,12 @@ Files: `analyze.ts` (and `subagents.ts` only if Q2 needs it), tests, new fixture
 ## Phase 3: real-log audit (orchestrator only, no external model)
 
 PRE = main, POST = branch, `node scripts/audit/compare.mjs` aggregates + PRE->POST transitions (counts); a Sonnet adjudicates any new disagreement. Record in `reviews/audit.md`.
+- [x] Phase 3 done
 
 ## Phase 4: truth-script fixes (a different agent than phases 1-2; Claude subagent, real logs allowed only as aggregates)
 
 `scripts/audit/truth.py`: (a) `bashEditDiff` with empty `files` is not an edit; (b) subagent events after the next prompt's first timestamp belong to that next prompt's window (match the tool's split); (c) the python write scan ignores quoted strings that are not file paths (URLs, strings with `://`, spaces); (d) Q4 and Q5 as in rules 8-9; (e) the new tool rules 1-7 where truth lacks them (truth stays independent code). One synthetic case each in `scripts/audit/fixtures`, `node --test scripts/audit/audit.test.mjs` green.
-- [ ] Phase 4 done
+- [x] Phase 4 done
 
 ## Review
 
