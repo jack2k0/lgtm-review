@@ -1085,7 +1085,9 @@ describe("status-accuracy-5 R4: cd resolves code only inside its && chain", () =
   });
 
   test("sa5: seq is read-only", () => {
-    expect(classifyShellMutation("for i in $(seq 1 3); do echo $i; done").opaque).not.toBe(true);
+    const r = classifyShellMutation("for i in $(seq 1 3); do echo $i; done");
+    expect(r.opaque).toBeFalsy();
+    expect(r.edits).toEqual([]);
   });
 
 });
