@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { PromptAnalysis } from "@lgtm/core";
 import {
   PROMPT_PAGE, actionsLabel, checkOutcome, fileTotals, filesText, formatClock, formatDuration, formatStarted, formatStepDuration,
-  getLastListRoute, incompleteMarkers, lastListHref, nextLimit, parseRoute, phaseLabel, promptHeading, resetLastListRoute,
+  getLastListRoute, groupByTopDir, incompleteMarkers, lastListHref, nextLimit, parseRoute, phaseLabel, promptHeading, resetLastListRoute,
   routeHref, setLastListRoute, statusCountItems, statusLabel, stepTitle,
   retainKeys, splitInherited, timeBarText, timeSegments, toggleKey, visiblePrompts,
 } from "./viewmodel";
@@ -332,6 +332,30 @@ describe("worktree routing", () => {
     expect(lastListHref()).toBe("#/?show=attention&worktree=wt-1");
     resetLastListRoute();
     expect(lastListHref()).toBe("#/");
+  });
+});
+
+describe("groupByTopDir", () => {
+  test("root files and nested paths share the first segment", () => {
+    const groups = groupByTopDir([
+      { path: "README" },
+      { path: "src/a.ts" },
+      { path: "src/web/b.ts" },
+      { path: "pkg/c.ts" },
+    ]);
+    expect(groups.map((g) => [g.dir, g.items.map((i) => i.path)])).toEqual([
+      ["src", ["src/a.ts", "src/web/b.ts"]],
+      ["(root)", ["README"]],
+      ["pkg", ["pkg/c.ts"]],
+    ]);
+  });
+
+  test("sorts by descending count then name, and that order does not depend on input order", () => {
+    const rows = [{ path: "b/one" }, { path: "a/one" }, { path: "c/one" }, { path: "c/two" }];
+    expect(groupByTopDir(rows).map((g) => g.dir)).toEqual(["c", "a", "b"]);
+    expect(groupByTopDir([...rows].reverse()).map((g) => g.dir)).toEqual(["c", "a", "b"]);
+    expect(groupByTopDir(rows).find((g) => g.dir === "c")!.items.map((i) => i.path)).toEqual(["c/one", "c/two"]);
+    expect(groupByTopDir([...rows].reverse()).find((g) => g.dir === "c")!.items.map((i) => i.path)).toEqual(["c/two", "c/one"]);
   });
 });
 

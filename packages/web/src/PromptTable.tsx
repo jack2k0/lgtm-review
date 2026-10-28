@@ -100,14 +100,16 @@ export function InheritedGroup({ sessionId, rows, from, others, openIdx, onToggl
         {`${plural(rows.length, "inherited prompt")} from ${from.slice(0, 8)}${others > 0 ? ` and ${plural(others, "other session")}` : ""}`}
       </button>
       {open ? (
-        <table className="prompts">
-          <PromptHead />
-          <tbody>
-            {rows.map((p) => (
-              <Row key={p.index} sessionId={sessionId} p={p} open={openIdx.has(p.index)} onToggle={() => onToggle(p.index)} />
-            ))}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="prompts">
+            <PromptHead />
+            <tbody>
+              {rows.map((p) => (
+                <Row key={p.index} sessionId={sessionId} p={p} open={openIdx.has(p.index)} onToggle={() => onToggle(p.index)} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : null}
     </div>
   );
@@ -202,14 +204,16 @@ export function PromptTable({ session, show = "all" }: { session: SessionAnalysi
             ) : (
               <>
                 <TimeLegend />
-                <table className="prompts">
-                  <PromptHead />
-                  <tbody>
-                    {shown.map((p) => (
-                      <Row key={p.index} sessionId={id} p={p} open={openIdx.has(p.index)} onToggle={() => toggle(p.index)} />
-                    ))}
-                  </tbody>
-                </table>
+                <div className="table-scroll">
+                  <table className="prompts">
+                    <PromptHead />
+                    <tbody>
+                      {shown.map((p) => (
+                        <Row key={p.index} sessionId={id} p={p} open={openIdx.has(p.index)} onToggle={() => toggle(p.index)} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 {hidden > 0 ? (
                   <p>
                     <button type="button" className="more" onClick={() => setLimit(nextLimit(limit, rows.length))}>

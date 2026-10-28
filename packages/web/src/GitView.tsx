@@ -1,5 +1,40 @@
-import type { GitCrosscheckResponse } from "@lgtm/core";
-import { formatStarted, routeHref } from "./viewmodel";
+import type { GitCrosscheckResponse, GitFileEntry } from "@lgtm/core";
+import { formatStarted, groupByTopDir, plural, routeHref } from "./viewmodel";
+
+/** One not-in-log section: directory groups, each a disclosure of path and status. */
+function DirSection({ title, rows }: { title: string; rows: readonly GitFileEntry[] }) {
+  if (rows.length === 0) return null;
+  const open = rows.length <= 20;
+  const groups = groupByTopDir(rows);
+  return (
+    <section>
+      <h4>{title} ({rows.length})</h4>
+      {groups.map((g) => (
+        <details key={g.dir} open={open}>
+          <summary>{g.dir === "(root)" ? g.dir : `${g.dir}/`} — {plural(g.items.length, "file")}</summary>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Path</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.items.map((e) => (
+                  <tr key={e.path}>
+                    <td>{e.path}</td>
+                    <td>{e.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      ))}
+    </section>
+  );
+}
 
 export function GitView({
   data,
@@ -41,14 +76,9 @@ export function GitView({
     );
   }
 
-  const notInLogEntries = [
-    ...data.uncommitted
-      .filter((e) => !e.inLog)
-      .map((e) => ({ ...e, where: "uncommitted" })),
-    ...data.committed
-      .filter((e) => !e.inLog)
-      .map((e) => ({ ...e, where: "committed in the window" })),
-  ];
+  const uncommitted = data.uncommitted.filter((e) => !e.inLog);
+  const committed = data.committed.filter((e) => !e.inLog);
+  const notInLogCount = uncommitted.length + committed.length;
 
   const inBoth = new Set<string>();
   for (const e of data.uncommitted) {
@@ -69,28 +99,14 @@ export function GitView({
             )} (${data.commitCount} commits, merges excluded).`}
       </p>
 
-      <h3>Changed in git but not in the log ({notInLogEntries.length})</h3>
-      {notInLogEntries.length === 0 ? (
+      <h3>Changed in git but not in the log ({notInLogCount})</h3>
+      {notInLogCount === 0 ? (
         <p className="muted">Nothing: every file git shows was edited by this session.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Path</th>
-              <th scope="col">Where</th>
-              <th scope="col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {notInLogEntries.map((e, i) => (
-              <tr key={i}>
-                <td>{e.path}</td>
-                <td>{e.where}</td>
-                <td>{e.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          <DirSection title="Uncommitted" rows={uncommitted} />
+          <DirSection title="Committed in the window" rows={committed} />
+        </>
       )}
 
       <h3>Edited in the log but not changed in git ({data.notInGit.length})</h3>

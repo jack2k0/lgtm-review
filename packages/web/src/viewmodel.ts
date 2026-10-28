@@ -25,6 +25,29 @@ export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+/** First path segment, or "(root)" for a file at the repository root. */
+function topDir(path: string): string {
+  const slash = path.indexOf("/");
+  return slash <= 0 ? "(root)" : path.slice(0, slash);
+}
+
+/**
+ * Group rows by top-level directory. Groups are ordered by descending size, then by directory name.
+ * Equal counts stay in that name order no matter the input order. Rows inside a group keep their input order.
+ */
+export function groupByTopDir<T extends { path: string }>(rows: readonly T[]): { dir: string; items: T[] }[] {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const dir = topDir(row.path);
+    const list = groups.get(dir);
+    if (list) list.push(row);
+    else groups.set(dir, [row]);
+  }
+  return [...groups.entries()]
+    .map(([dir, items]) => ({ dir, items }))
+    .sort((a, b) => b.items.length - a.items.length || (a.dir < b.dir ? -1 : a.dir > b.dir ? 1 : 0));
+}
+
 const pad = (n: number): string => String(n).padStart(2, "0");
 
 /** Local `YYYY-MM-DD HH:MM`, or an em dash when unknown/invalid. */

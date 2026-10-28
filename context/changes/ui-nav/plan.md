@@ -42,11 +42,11 @@ The response carries no worktree per file, so group by what it does carry. In `G
   - Git view renders two sections and the groups; ≤20 rows open, >20 closed.
   - Every `<table>` rendered by the web app sits inside `.table-scroll` (a test may render the prompt table, session list and Git view and assert `table.closest('.table-scroll')`).
 - `pnpm check` green; `node scripts/gate.mjs --base main --plan context/changes/ui-nav/plan.md` exit 0 or 2 with reasons.
-- No existing test expectation changed or deleted.
+- No existing test expectation changed or deleted, except the two `git.test.tsx` lines that section 3 makes obsolete ("committed in the window" as a cell, the Where column header).
 
 ### Non-goals
 - No schema/API change (no worktree field per git entry).
 - No author filter, no "files the session touched" filter in the Git view.
 - No responsive redesign beyond the horizontal scroller.
 
-- [ ] Phase 1 done
+- [x] Phase 1 done
