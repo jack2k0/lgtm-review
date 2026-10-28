@@ -61,7 +61,9 @@ export const HEREDOC_START_RE = /(?<!<)<<(-?)\s*(?:'([^']+)'|"([^"]+)"|\\([A-Za-
 
 /** Whether a heredoc line ends the body: exactly the delimiter; `<<-` also allows leading tabs. */
 export function heredocEnds(line: string, delim: string, dash: boolean): boolean {
-  return (dash ? line.replace(/^\t+/, "") : line) === delim;
+  // A CRLF log line closes on `EOF\r` like bash does with a carriage return in the delimiter word.
+  const l = line.endsWith("\r") ? line.slice(0, -1) : line;
+  return (dash ? l.replace(/^\t+/, "") : l) === delim;
 }
 
 export function stripHeredocs(cmd: string): string {

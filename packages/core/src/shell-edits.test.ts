@@ -1160,4 +1160,9 @@ describe("status-accuracy-7 heredoc forms", () => {
   test("D3 a heredoc that never closes is opaque", () => {
     expect(classifyShellMutation(`cat <<EOF\n  EOF\n$(${sub})`).opaque).toBe(true);
   });
+
+  test("sa7 review: a CRLF heredoc closes on EOF\\r and the next command is seen", () => {
+    const r = classifyShellMutation("cat <<EOF\r\nx\r\nEOF\r\nsed -i s/orig/X/ src/a.ts");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
 });
