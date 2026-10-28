@@ -368,7 +368,8 @@ describe("GET /api/sessions/:id/titles", () => {
     utimesSync(join(pdir, "checked-basic.jsonl"), later, later);
     const first = await get(titled, "/api/sessions/checked-basic/titles");
     expect(first.json.pending).toBeGreaterThan(0);
-    expect(first.json.titles).toEqual({});
+    // The previous ready title stays visible while the new stamp revalidates.
+    expect(first.json.titles).toEqual({ "0": "Shipped the parser" });
     const done = await waitReady(titled, "checked-basic");
     expect(done.json.titles["0"]).toBe("Shipped the parser");
     expect(model.hits.length).toBe(hits);

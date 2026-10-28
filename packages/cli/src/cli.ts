@@ -95,6 +95,7 @@ async function serve(
   llm?: { endpoint: URL; model: string; cacheDir: string },
 ): Promise<number> {
   const webRoot = join(dirname(fileURLToPath(import.meta.url)), "web");
+  const titler = llm === undefined ? undefined : createTitler({ endpoint: llm.endpoint, model: llm.model, cacheDir: llm.cacheDir });
   let running;
   try {
     running = await startServer({
@@ -104,7 +105,7 @@ async function serve(
       roots,
       webRoot,
       port,
-      ...(llm !== undefined ? { llm: createTitler({ endpoint: llm.endpoint, model: llm.model, cacheDir: llm.cacheDir }) } : {}),
+      ...(titler !== undefined ? { llm: titler } : {}),
     });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
@@ -138,7 +139,7 @@ async function serve(
   return new Promise<number>((done) => {
     const stop = () => {
       cleanup();
-      void running.close().then(() => done(0));
+      void Promise.all([running.close(), titler?.stop() ?? Promise.resolve()]).then(() => done(0));
     };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);

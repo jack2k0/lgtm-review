@@ -48,7 +48,7 @@ function SessionView({ token, id, show }: { token: string | null; id: string; sh
         <a href={routeHref({ kind: "map", id, index: null })}>Map</a>{" · "}
         <a href={routeHref({ kind: "git", id })}>Git cross-check</a>
       </p>
-      <Status res={res}>{(d) => <PromptTable key={d.sessionId} session={d} show={show} />}</Status>
+      <Status res={res}>{(d) => <PromptTable key={d.sessionId} session={d} show={show} token={token} />}</Status>
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingHttpHeaders, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -987,6 +987,102 @@ describe("createTitler", () => {
     expect(t.view("s").titles["0"]).toBe("Shipped the parser");
     expect(lstatSync(dest).isSymbolicLink()).toBe(true);
     expect(readFileSync(outside, "utf8")).toBe("KEEP");
+  });
+
+  test("stamp change keeps ready titles for an unchanged key", async () => {
+    const model = await fake((_hit, res) => {
+      const input = JSON.parse(_hit.body).messages[1].content as string;
+      ok(res, input === "changed-later" ? "Rewrote the parser" : "Shipped the parser");
+    });
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"));
+    const source = (inputs: Record<number, string>) => async (index: number) => ({ input: inputs[index]!, redact: {} });
+    t.enqueue("s", "a", [0, 1], source({ 0: "stable", 1: "also-stable" }));
+    await t.settled();
+    expect(model.hits).toHaveLength(2);
+    const before = { ...t.view("s").titles };
+    expect(before).toEqual({ "0": "Shipped the parser", "1": "Shipped the parser" });
+
+    t.enqueue("s", "b", [0, 1], source({ 0: "stable", 1: "also-stable" }));
+    const mid = t.view("s");
+    expect(mid.titles["0"]).toBe(before["0"]);
+    expect(mid.titles["1"]).toBe(before["1"]);
+    expect(Object.keys(mid.titles).length).toBeGreaterThanOrEqual(Object.keys(before).length);
+    await t.settled();
+    expect(model.hits).toHaveLength(2);
+    expect(t.view("s").titles).toEqual(before);
+    expect(t.view("s").pending).toBe(0);
+
+    t.enqueue("s", "c", [0, 1], source({ 0: "changed-later", 1: "also-stable" }));
+    expect(t.view("s").titles["1"]).toBe(before["1"]);
+    await t.settled();
+    expect(model.hits).toHaveLength(3);
+    expect(JSON.parse(model.hits[2]!.body).messages[1].content).toBe("changed-later");
+    expect(t.view("s").titles["1"]).toBe("Shipped the parser");
+    expect(t.view("s").titles["0"]).toBe("Rewrote the parser");
+  });
+
+  test("a null outcome is remembered for the run and is not written to disk", async () => {
+    const dir = join(scratch(), "cache");
+    const model = await fake((_hit, res) => ok(res, "<think>x</think>"));
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), dir);
+    const input = "nothing useful";
+    const key = titleCacheKey("qwen3:4b", input);
+    t.enqueue("s", "stamp-a", [0], load(input));
+    await t.settled();
+    expect(model.hits).toHaveLength(1);
+    expect(t.view("s").titles).toEqual({});
+    expect(existsSync(join(dir, `${key}.json`))).toBe(false);
+
+    t.enqueue("s", "stamp-b", [0], load(input));
+    await t.settled();
+    expect(model.hits).toHaveLength(1);
+    expect(t.view("s").titles).toEqual({});
+
+    t.enqueue("other", "stamp-a", [3], load(input));
+    await t.settled();
+    expect(model.hits).toHaveLength(1);
+    expect(existsSync(dir)).toBe(false);
+    expect(t.view("s").error).toBeNull();
+  });
+
+  test("stop() aborts the in-flight request and drains the queue", async () => {
+    let open!: () => void;
+    const opened = new Promise<void>((r) => {
+      open = r;
+    });
+    const model = await fake((_hit, res) => {
+      res.on("error", () => {});
+      open();
+    });
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), join(scratch(), "cache"), { timeoutMs: 60_000 });
+    t.enqueue("s", "1", [0, 1], loadN(2, "hung"));
+    await opened;
+    expect(model.hits).toHaveLength(1);
+    await t.stop();
+    expect(t.view("s").pending).toBe(0);
+    expect(t.view("s").error).toBeNull();
+    expect(model.hits).toHaveLength(1);
+    t.enqueue("s", "2", [0], load("again"));
+    await t.settled();
+    expect(model.hits).toHaveLength(1);
+  });
+
+  test("a pre-existing cache directory keeps its mode", async () => {
+    const dir = join(scratch(), "shared");
+    mkdirSync(dir, { mode: 0o755 });
+    chmodSync(dir, 0o755);
+    writeFileSync(join(dir, "mine.txt"), "keep");
+    expect(statSync(dir).mode & 0o777).toBe(0o755);
+    const model = await fake();
+    const t = titler(mustUrl(`http://127.0.0.1:${model.port}/v1`), dir);
+    t.enqueue("s", "1", [0], load("mode"));
+    await t.settled();
+    expect(t.view("s").titles["0"]).toBe("Shipped the parser");
+    expect(statSync(dir).mode & 0o777).toBe(0o755);
+    expect(readFileSync(join(dir, "mine.txt"), "utf8")).toBe("keep");
+    const cacheFile = readdirSync(dir).find((name) => name.endsWith(".json"));
+    expect(cacheFile).toBeDefined();
+    expect(statSync(join(dir, cacheFile!)).mode & 0o777).toBe(0o600);
   });
 
   test("a symlink cache root is not followed", async () => {

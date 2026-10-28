@@ -3,6 +3,7 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { LiveContext } from "./LiveView";
+import { App } from "./App";
 import { PromptTable, Row } from "./PromptTable";
 import { click } from "./testing/dom";
 import { makePrompt, makeSession } from "./testing/fixtures";
@@ -140,14 +141,56 @@ describe("prompt table titles", () => {
     expect(calls).toHaveLength(0);
   });
 
-  test("a stored token is sent when the table is not given one", async () => {
+  test("an omitted token does not read storage or the hash", async () => {
     resolveToken(`#k=${TOKEN}`, sessionStore());
-    const calls = install(() => ({ enabled: true, titles: { "0": "From storage" }, pending: 0, error: null }));
-    const view = await render(<PromptTable session={makeSession([makePrompt(0)])} />);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.init.headers).toEqual({ "X-Lgtm-Token": TOKEN });
-    expect(view.el.textContent).toContain("From storage");
-    expect(view.el.querySelector(".gen-label")?.textContent).toBe("generated");
+    window.location.hash = `#k=${TOKEN}`;
+    try {
+      const calls = install(() => ({ enabled: true, titles: { "0": "From storage" }, pending: 0, error: null }));
+      const view = await render(<PromptTable session={makeSession([makePrompt(0)])} />);
+      expect(calls).toHaveLength(0);
+      expect(view.el.textContent).not.toContain("From storage");
+      expect(view.el.querySelector(".gen-label")).toBeNull();
+    } finally {
+      window.location.hash = "";
+    }
+  });
+
+  test("blocked storage still loads titles when App passes its token", async () => {
+    const desc = Object.getOwnPropertyDescriptor(window, "sessionStorage");
+    Object.defineProperty(window, "sessionStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("blocked");
+      },
+    });
+    try {
+      const direct = install(() => ({ enabled: true, titles: { "0": "From prop" }, pending: 0, error: null }));
+      const table = await render(<Harness paused={false} session={makeSession([makePrompt(0)])} token={TOKEN} />);
+      expect(direct).toHaveLength(1);
+      expect(direct[0]!.init.headers).toEqual({ "X-Lgtm-Token": TOKEN });
+      expect(table.el.textContent).toContain("From prop");
+      await table.unmount();
+
+      window.location.hash = "#/session/sess-own";
+      const seen: { url: string; token: string | null }[] = [];
+      const session = makeSession([makePrompt(0, { text: "do the thing" })]);
+      vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+        const headers = init.headers as Record<string, string>;
+        seen.push({ url: String(url), token: headers["X-Lgtm-Token"] ?? null });
+        const body = String(url).endsWith("/titles")
+          ? { enabled: true, titles: { "0": "From app" }, pending: 0, error: null }
+          : session;
+        return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+      });
+      const app = await render(<App token={TOKEN} />);
+      const titles = seen.filter((call) => call.url.endsWith("/titles"));
+      expect(titles).toHaveLength(1);
+      expect(titles[0]!.token).toBe(TOKEN);
+      expect(app.el.textContent).toContain("From app");
+    } finally {
+      if (desc) Object.defineProperty(window, "sessionStorage", desc);
+      window.location.hash = "";
+    }
   });
 
   test("titles render above the prompt with the generated label", async () => {

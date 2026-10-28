@@ -223,13 +223,23 @@ function cutAtWord(s: string, max: number): string {
   return body === "" ? "" : `${body}…`;
 }
 
+function lineStartsWithThink(s: string): boolean {
+  for (const line of s.split(/\r\n|\n|\r/)) {
+    if (line.trim().toLowerCase().startsWith("<think")) return true;
+  }
+  return false;
+}
+
 /**
- * One title from a model reply: drop `<think>` blocks, keep the first non-empty line, strip quotes,
- * a leading `Title:` / `#` / `*` / `-`, markdown emphasis and backticks, collapse whitespace, drop control
- * characters, and cut to 120 characters on a word boundary. Empty becomes null.
+ * One title from a model reply: drop closed `<think>` blocks. An opening `<think>` tag with no closing tag,
+ * or any line that still starts with `<think` after stripping, is not a title (null). Otherwise keep the
+ * first non-empty line, strip quotes, a leading `Title:` / `#` / `*` / `-`, markdown emphasis and backticks,
+ * collapse whitespace, drop control characters, and cut to 120 characters on a word boundary. Empty becomes null.
  */
 export function sanitizeTitle(raw: string): string | null {
-  const line = firstNonEmptyLine(raw.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, ""));
+  const withoutClosed = raw.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "");
+  if (/<think\b[^>]*>/i.test(withoutClosed) || lineStartsWithThink(withoutClosed)) return null;
+  const line = firstNonEmptyLine(withoutClosed);
   if (line === null) return null;
   let t = line;
   for (let i = 0; i < 6; i++) {
@@ -238,7 +248,7 @@ export function sanitizeTitle(raw: string): string | null {
     t = next;
   }
   t = collapse(stripControls(collapse(t)));
-  if (t === "") return null;
+  if (t === "" || /^<think/i.test(t)) return null;
   const cut = cutAtWord(t, TITLE_MAX);
-  return cut === "" ? null : cut;
+  return cut === "" || /^<think/i.test(cut) ? null : cut;
 }

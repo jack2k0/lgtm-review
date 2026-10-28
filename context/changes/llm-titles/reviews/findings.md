@@ -6,9 +6,9 @@ reviewers: sonnet, opencode
 
 | # | Tag | file:line | Finding | Reviewer | Cross-check | Verdict | Evidence or reason |
 |---|---|---|---|---|---|---|---|
-| 1 | Important | packages/cli/src/llm.ts:655 | a stamp change drops ready titles from view() until the queue re-reads the cache; titles flash away on every live refresh | sonnet | opencode #2: confirmed (probe B: titles {} after utimes) | open | |
-| 2 | Important | packages/cli/src/llm.ts:546 | an empty (null) sanitised reply is re-requested after every stamp change; burns the 500 cap | sonnet | — (log counts 4 -> 9 -> 15) | open | |
-| 3 | Important | packages/core/src/llm-input.ts:232 | an unterminated `<think>` block becomes the title and is cached | sonnet | — (node repro) | open | |
-| 4 | Important | packages/web/src/PromptTable.tsx:14 | token re-read from sessionStorage; with storage blocked titles never load | sonnet | opencode: same behaviour noted, judged cosmetic | open | |
-| 5 | Important | packages/cli/src/llm.ts:496 | SIGINT waits up to 60 s for an in-flight title request (no stop(), timer not unref'd) | opencode | — (59 s vs 4 ms measured) | open | |
-| 6 | Nit | packages/cli/src/llm.ts:419 | chmod 0700 applied to a pre-existing user directory given as --llm-cache-dir | sonnet | — (stat 755 -> 700) | open | |
+| 1 | Important | packages/cli/src/llm.ts:655 | a stamp change drops ready titles from view() until the queue re-reads the cache; titles flash away on every live refresh | sonnet | opencode #2: confirmed (probe B: titles {} after utimes) | fixed | llm.test.ts "stamp change keeps ready titles for an unchanged key" |
+| 2 | Important | packages/cli/src/llm.ts:546 | an empty (null) sanitised reply is re-requested after every stamp change; burns the 500 cap | sonnet | — (log counts 4 -> 9 -> 15) | fixed | llm.test.ts "a null outcome is remembered for the run and is not written to disk" |
+| 3 | Important | packages/core/src/llm-input.ts:232 | an unterminated `<think>` block becomes the title and is cached | sonnet | — (node repro) | fixed | llm-input.test.ts "an unterminated think block is not a title" |
+| 4 | Important | packages/web/src/PromptTable.tsx:14 | token re-read from sessionStorage; with storage blocked titles never load | sonnet | opencode: same behaviour noted, judged cosmetic | fixed | titles.test.tsx "blocked storage still loads titles when App passes its token" |
+| 5 | Important | packages/cli/src/llm.ts:496 | SIGINT waits up to 60 s for an in-flight title request (no stop(), timer not unref'd) | opencode | — (59 s vs 4 ms measured) | fixed | llm.perf.test.ts "SIGINT during a hung title request exits within 2s" |
+| 6 | Nit | packages/cli/src/llm.ts:419 | chmod 0700 applied to a pre-existing user directory given as --llm-cache-dir | sonnet | — (stat 755 -> 700) | fixed | llm.test.ts "a pre-existing cache directory keeps its mode" |

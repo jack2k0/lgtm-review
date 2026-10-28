@@ -230,6 +230,18 @@ describe("sanitizeTitle", () => {
     expect(sanitizeTitle("before <think>hidden</think> after")).toBe("before after");
   });
 
+  test("an unterminated think block is not a title", () => {
+    expect(sanitizeTitle("<think>\nLet me think about the user's request to fix")).toBeNull();
+    expect(sanitizeTitle("<think>Okay, the user wants")).toBeNull();
+    expect(sanitizeTitle("<THINK>still thinking")).toBeNull();
+    expect(sanitizeTitle('<think class="x">reason')).toBeNull();
+    expect(sanitizeTitle("<think>hidden</think>\n<think>still open")).toBeNull();
+    expect(sanitizeTitle("<think")).toBeNull();
+    expect(sanitizeTitle("Title: <think leftover")).toBeNull();
+    expect(sanitizeTitle("**<think** leftover")).toBeNull();
+    expect(sanitizeTitle("Shipped the parser\n<think more")).toBeNull();
+  });
+
   test("strips surrounding quotes", () => {
     expect(sanitizeTitle('"Shipped the parser"')).toBe("Shipped the parser");
     expect(sanitizeTitle("'Shipped the parser'")).toBe("Shipped the parser");

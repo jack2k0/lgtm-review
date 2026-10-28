@@ -6,15 +6,8 @@ import { LiveContext } from "./LiveView";
 import { StatusTag } from "./StatusDot";
 import { TimeBar, TimeLegend } from "./TimeBar";
 import { GENERATED_LABEL, GENERATED_NOTE, TITLES_POLL_MS, shouldPollTitles, titleForPrompt } from "./titles";
-import { resolveToken, sessionStore } from "./token";
 import { attentionPrompts, escapeToList, needText, rowKey, type Show } from "./triage";
 import { PROMPT_PAGE, SHELL_EDIT_FILE, fileTotals, filesText, incompleteMarkers, nextLimit, kindLabel, navigateToList, plural, routeHref, retainKeys, rulesByPath, shortPath, toggleKey, visiblePrompts, splitInherited } from "./viewmodel";
-
-/** Per-run token saved by main.tsx. Absent during static render and when storage is blocked. */
-function readStoredToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return resolveToken(window.location.hash, sessionStore()).token;
-}
 
 /**
  * Loads generated titles for one session.
@@ -224,11 +217,9 @@ export function InheritedGroup({ sessionId, rows, from, others, openIdx, onToggl
   );
 }
 
-export function PromptTable({ session, show = "all", token }: { session: SessionAnalysis; show?: Show; token?: string | null }) {
+export function PromptTable({ session, show = "all", token = null }: { session: SessionAnalysis; show?: Show; token?: string | null }) {
   const [limit, setLimit] = useState(PROMPT_PAGE);
-  // Omitted token: the page's sessionStorage. An explicit null skips the request (tests, storage blocked).
-  const resolvedToken = token !== undefined ? token : readStoredToken();
-  const titlesRes = usePromptTitles(resolvedToken, session);
+  const titlesRes = usePromptTitles(token, session);
   const titleMap = titlesRes?.enabled ? titlesRes.titles : undefined;
   // Keyed by prompt index (append-only in a session file), so rows stay expanded across live refreshes.
   const [openState, setOpenIdx] = useState<ReadonlySet<number>>(new Set());

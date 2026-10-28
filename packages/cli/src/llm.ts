@@ -7,7 +7,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { lstatSync, realpathSync } from "node:fs";
 import { chmod, lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises";
-import { Agent, request as httpRequest } from "node:http";
+import { Agent, request as httpRequest, type ClientRequest } from "node:http";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { TITLE_PROMPT_VERSION, redact, sanitizeTitle, titleRequestBody } from "@lgtm/core";
@@ -156,6 +156,9 @@ export interface TitleView {
 export interface Titler {
   /**
    * Enqueue every own prompt when `stamp` is new. Same stamp: only indexes not already known.
+   * A new stamp keeps an already-resolved title visible until the cache key is known again;
+   * an unchanged key is not requested again. A null sanitised title is remembered for the run
+   * and is not written to disk.
    * Returns immediately. Does not build prompt details and does not wait for the model.
    */
   enqueue(sessionId: string, stamp: string, ownIndexes: readonly number[], load: (index: number) => Promise<TitleSource | null>): void;
@@ -163,6 +166,8 @@ export interface Titler {
   view(sessionId: string): TitleView;
   /** Resolves when nothing is queued or in flight. */
   settled(): Promise<void>;
+  /** Abort the in-flight model request, drop queued work, and resolve when the worker has stopped. */
+  stop(): Promise<void>;
 }
 
 export interface TitlerOptions {
@@ -184,6 +189,8 @@ interface Slot {
   key?: string;
   /** Model accepted the response and the sanitised title was empty. Not an HTTP failure. */
   empty?: boolean;
+  /** Title kept on screen while a new stamp re-checks this index's cache key. */
+  carry?: string;
 }
 
 interface SessionRec {
@@ -278,6 +285,24 @@ function parseCachePayload(text: string): string | null {
   return obj.title;
 }
 
+/** Directories from `dir` upward that do not exist yet, leaf first. Null when a parent cannot be stat'd. */
+async function dirsToCreate(dir: string): Promise<string[] | null> {
+  const missing: string[] = [];
+  let cur = dir;
+  for (;;) {
+    try {
+      await lstat(cur);
+      return missing;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") return null;
+      missing.push(cur);
+      const parent = dirname(cur);
+      if (parent === cur) return missing;
+      cur = parent;
+    }
+  }
+}
+
 function fileInRoot(root: string, key: string): string | null {
   if (!/^[0-9a-f]{64}$/.test(key)) return null;
   const dest = join(root, `${key}.json`);
@@ -297,6 +322,8 @@ export function createTitler(opts: TitlerOptions): Titler {
   const maxRequests = opts.maxRequests ?? TITLE_REQUEST_CAP;
 
   const sessions = new Map<string, SessionRec>();
+  /** Title, or null when sanitise produced nothing. Lives for the run. Null is never written to disk. */
+  const outcomes = new Map<string, string | null>();
   let queue: Job[] = [];
   let pumping = false;
   let inflight = 0;
@@ -305,6 +332,7 @@ export function createTitler(opts: TitlerOptions): Titler {
   let consecutive = 0;
   let requestCount = 0;
   let idleWaiters: (() => void)[] = [];
+  let currentReq: ClientRequest | null = null;
 
   function idle(): boolean {
     return queue.length === 0 && inflight === 0 && !pumping;
@@ -346,8 +374,11 @@ export function createTitler(opts: TitlerOptions): Titler {
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT" || !create) return null;
       try {
+        // chmod only the directories this call creates. A pre-existing cache dir keeps its mode.
+        const created = await dirsToCreate(cacheDir);
+        if (created === null) return null;
         await mkdir(cacheDir, { recursive: true, mode: 0o700 });
-        await chmod(cacheDir, 0o700);
+        for (const dir of created) await chmod(dir, 0o700);
       } catch {
         return null;
       }
@@ -416,7 +447,6 @@ export function createTitler(opts: TitlerOptions): Titler {
       await rename(tmp, dest);
       opened = false;
       await chmod(dest, 0o600);
-      await chmod(root, 0o700);
     } catch {
       if (opened) await unlink(tmp).catch(() => {});
     }
@@ -433,6 +463,7 @@ export function createTitler(opts: TitlerOptions): Titler {
         if (settled) return;
         settled = true;
         if (timer !== undefined) clearTimeout(timer);
+        if (currentReq === req) currentReq = null;
         resolveRequest(outcome);
         agent.destroy();
       };
@@ -497,6 +528,14 @@ export function createTitler(opts: TitlerOptions): Titler {
         req.destroy();
         finish({ kind: "unreachable" });
       }, timeoutMs);
+      // The socket keeps the process alive until stop() aborts it. This timer must not.
+      timer.unref();
+      currentReq = req;
+      if (stopped) {
+        req.destroy();
+        finish({ kind: "unreachable" });
+        return;
+      }
       req.end(json);
     });
   }
@@ -533,6 +572,7 @@ export function createTitler(opts: TitlerOptions): Titler {
       return resolved;
     }
     noteSuccess();
+    remember(key, resolved.title);
     if (resolved.title !== null) {
       try {
         await writeCache(key, resolved.title);
@@ -543,19 +583,13 @@ export function createTitler(opts: TitlerOptions): Titler {
     return resolved;
   }
 
-  function memoryTitle(key: string): string | null | undefined {
-    for (const rec of sessions.values()) {
-      for (const slot of rec.slots.values()) {
-        if (slot.key !== key) continue;
-        if (slot.state === "ready" && slot.title !== undefined) return slot.title;
-        if (slot.state === "miss" && slot.empty === true) return null;
-      }
-    }
-    return undefined;
+  function remember(key: string, title: string | null): void {
+    if (!outcomes.has(key)) outcomes.set(key, title);
   }
 
   function apply(slot: Slot, key: string, title: string | null): void {
     slot.key = key;
+    slot.carry = undefined;
     if (title === null) {
       slot.state = "miss";
       slot.empty = true;
@@ -587,24 +621,29 @@ export function createTitler(opts: TitlerOptions): Titler {
       return;
     }
     const key = titleCacheKey(model, source.input);
-    const remembered = memoryTitle(key);
-    if (remembered !== undefined) {
+    if (outcomes.has(key)) {
+      const remembered = outcomes.get(key) ?? null;
       const shown = remembered === null ? null : presentTitle(remembered, source.redact);
       apply(current, key, shown);
       return;
     }
+    // The input changed. Stop showing the previous title before the new one is fetched.
+    if (current.carry !== undefined && current.key !== undefined && current.key !== key) current.carry = undefined;
     const cached = await readCache(key);
     if (sessions.get(job.sessionId) !== rec) return;
     const afterRead = rec.slots.get(job.index);
     if (!afterRead || afterRead.state !== "inflight") return;
     if (stopped) {
       afterRead.state = "miss";
+      afterRead.carry = undefined;
       return;
     }
     if (cached !== null) {
+      remember(key, cached);
       apply(afterRead, key, presentTitle(cached, source.redact));
       return;
     }
+    afterRead.carry = undefined;
     const result = await requestAndCache(key, source.input, source.redact);
     if (sessions.get(job.sessionId) !== rec) return;
     const after = rec.slots.get(job.index);
@@ -613,6 +652,7 @@ export function createTitler(opts: TitlerOptions): Titler {
       after.state = "miss";
       after.key = key;
       after.empty = false;
+      after.carry = undefined;
       return;
     }
     apply(after, key, result.title);
@@ -646,16 +686,24 @@ export function createTitler(opts: TitlerOptions): Titler {
     void runLoop();
   }
 
+  function carried(old: Slot | undefined): { carry?: string; key?: string } {
+    if (!old) return {};
+    const carry = old.state === "ready" && old.title !== undefined ? old.title : old.carry;
+    if (carry === undefined) return {};
+    return old.key !== undefined ? { carry, key: old.key } : { carry };
+  }
+
   function enqueue(sessionId: string, stamp: string, ownIndexes: readonly number[], load: (index: number) => Promise<TitleSource | null>): void {
     if (stopped) return;
     const indexes = [...new Set(ownIndexes)].filter((n) => Number.isInteger(n) && n >= 0 && n <= 1_000_000_000);
     let rec = sessions.get(sessionId);
     if (!rec || rec.stamp !== stamp) {
+      const prev = rec?.slots;
       queue = queue.filter((job) => job.sessionId !== sessionId);
       rec = { stamp, load, slots: new Map() };
       sessions.set(sessionId, rec);
       for (const index of indexes) {
-        rec.slots.set(index, { state: "queued" });
+        rec.slots.set(index, { state: "queued", ...carried(prev?.get(index)) });
         queue.push({ sessionId, index, stamp });
       }
       if (indexes.length > 0) pump();
@@ -685,7 +733,8 @@ export function createTitler(opts: TitlerOptions): Titler {
       for (const index of [...rec.slots.keys()].sort((a, b) => a - b)) {
         const slot = rec.slots.get(index)!;
         if (slot.state === "ready" && slot.title !== undefined) titles[String(index)] = slot.title;
-        else if (!stopped && (slot.state === "queued" || slot.state === "inflight")) pending += 1;
+        else if ((slot.state === "queued" || slot.state === "inflight") && slot.carry !== undefined) titles[String(index)] = slot.carry;
+        if (!stopped && (slot.state === "queued" || slot.state === "inflight")) pending += 1;
       }
     }
     return { titles, pending, error };
@@ -699,5 +748,30 @@ export function createTitler(opts: TitlerOptions): Titler {
     });
   }
 
-  return { enqueue, view, settled };
+  function abortInFlight(): void {
+    const req = currentReq;
+    currentReq = null;
+    req?.destroy();
+  }
+
+  function stop(): Promise<void> {
+    if (!stopped) {
+      stopped = true;
+      queue = [];
+      for (const rec of sessions.values()) {
+        for (const slot of rec.slots.values()) {
+          if (slot.state === "queued") {
+            slot.state = "miss";
+            slot.carry = undefined;
+          }
+        }
+      }
+    } else {
+      queue = [];
+    }
+    abortInFlight();
+    return settled();
+  }
+
+  return { enqueue, view, settled, stop };
 }
