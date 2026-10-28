@@ -674,9 +674,33 @@ function closeParen(text: string, open: number): number {
   return -1;
 }
 
+/** Unquoted parentheses, matching what `splitSegments` counts. */
+function unquotedParens(text: string): { opens: number; closes: number } {
+  let opens = 0;
+  let closes = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i] as string;
+    if (quote !== null) {
+      if (c === "\\" && quote === '"') i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "\\") {
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'") quote = c;
+    else if (c === "(") opens++;
+    else if (c === ")") closes++;
+  }
+  return { opens, closes };
+}
+
 /**
  * `$(...)` pairs fully inside this segment. `splitSegments` counts those parentheses as a subshell,
- * but they do not wrap the segment's own command (`cd $(pwd)/x` still runs in the current shell).
+ * but they do not wrap the segment's own command (`cd $(pwd)` still runs in the current shell).
+ * A trailing `)` is already removed from `seg.text`, so `closes` puts it back before the scan.
  */
 function containedCommandSubs(text: string): number {
   let count = 0;
@@ -1143,7 +1167,10 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
       // Vars first, then `$E` when E is only NAME=value words, then prefix stripping (C8).
       const expanded = expandEnvSlots(seg.text, vars);
       // `$(...)` closed inside this segment is not a subshell around the command.
-      const buried = containedCommandSubs(seg.text);
+      // `splitSegments` drops a trailing `)`, which is what closes `cd $(pwd)`.
+      const seenParens = unquotedParens(seg.text);
+      const restored = seg.text + ")".repeat(Math.max(0, seg.closes - seenParens.closes));
+      const buried = containedCommandSubs(restored);
       const groupOpens = Math.max(0, seg.opens - buried);
       const groupCloses = Math.max(0, seg.closes - buried);
       for (let n = 0; n < groupOpens; n++) dirStack.push(dir);
