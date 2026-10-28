@@ -1,0 +1,76 @@
+# Status accuracy, round 4 Implementation Plan
+
+## Overview
+
+Owner decisions of 2026-10-27 (ORCHESTRATION "Decyzje właściciela (2026-10-27)"): Q1 a prompt that only merges/rebases is `no-changes`; Q2 a failing subagent check after a green main-thread check gives `failing` (time order); Q3 an unresolvable shell write target counts as code (fail closed, unchanged); Q4 a later background check without a completion notification does not invalidate an earlier covering pass; Q5 a command killed by a signal (exit 130/137/143/144) is not a failing check, it "did not complete".
+
+Adjudication of 2026-10-28 (Sonnet, real logs, aggregates only; `reviews/adjudication.md`): 24 status mismatches (21 unique prompts, 158 rows after Claude Code's log cleanup removed old sessions). A private experiment with the rules below fixed 18 of 24 with 0 regressions. Remaining: 4 are truth-script errors (phase 4), 2 have no safe rule (opaque writers in the same command), 1 is a by-design red probe.
+
+## Current State
+
+- `packages/core/src/shell-edits.ts`: segment parser, `classifyShellMutation` (`gitOnly`, `opaque`, `hasHistoryGitOp`, `hasCd`, `edits`), `pythonWrites` (heredocs only), `resolveTarget`; relative targets after any `cd` stay unresolved; variables resolve only from literal assignments (`R=docs/x.md`).
+- `packages/core/src/check-patterns.ts`: `PREFIXES` stripped before check matching (no `corepack`); script check patterns.
+- `packages/core/src/analyze.ts` ~L640-705: with `bashEditDiff` and a history git op, per-file split via `plainDiffPaths` unless `sm.opaque`; without a diff (`unavailable` / empty) the split happens only when `!sm.opaque`. `judge()` ~L265: `incompleteAfter` turns any incomplete later check into `unchecked "check did not complete"`; `onNotification` ~L430 maps `STOP_STATUSES` to `stopped`.
+
+## Desired End State (rules; names match the adjudication)
+
+1. **CD + VARCHAIN.** Track the working directory through one Bash command: `cd <concrete>` where concrete = absolute literal path, or `$VAR`/`${VAR}`/`"$VAR"`(+ `/literal` suffix) whose value is known; relative `cd x` from a known dir also resolves. `cd` inside `( … )` applies only inside the subshell. `cd -`, `cd ~…`, `cd` with an unknown variable, `cd $(…)` -> directory unknown from there on (today's behaviour). A `cd X || …` / `cd X; …` still counts as having changed to X (accepted risk, same as truth). Relative write targets after a known `cd` resolve against it; class (code/doc/scratch) is then decided on the resolved absolute path as today. Assignments may reference already-known variables: `S=/tmp/x; R=$S/y` -> R known (VARCHAIN). Unknown stays `(shell edit)` = code (Q3).
+2. **ENVVAR.** `env $E git …` / `env "$E" …` where `E` was assigned a literal consisting only of `NAME=value` words: expand and strip like `env NAME=value`.
+3. **NPMCI.** `npm ci` (and `pnpm install --frozen-lockfile`, `yarn install --frozen-lockfile`/`--immutable` if not already) is a known non-writing segment for tracked files (does not make the command opaque, no edit).
+4. **COREPACK.** `corepack` is a prefix stripped before check and package-manager matching (`corepack pnpm check`, `corepack pnpm exec vitest run`, `corepack yarn test`).
+5. **GATEREAD.** `node|python|python3 <path>` where `<path>` is repo-relative under `scripts/` (or `./scripts/`) and the basename matches `^(gate|check|verify|validate)[\w.-]*\.(mjs|cjs|js|py|ts)$` is a known NON-writing segment: it does not make the command opaque and is NOT a check (it does not change any check list). Output redirects of that segment still count as writes as usual.
+6. **PYC.** `python|python3 -c "<src>"` / `-c '<src>'`: analyse `<src>` with the same writer analysis used for heredocs (after substituting known shell variables in a double-quoted source and dedenting). A resolvable write is that edit; an unresolvable write is `(shell edit)` (code); a source with no write API (`open(..., "w"/"a"/"x")`, `write_text`, `write_bytes`, `shutil.*`, `os.rename|replace|remove|unlink`, `Path.unlink/rename/replace/touch/mkdir` …: reuse the heredoc list) is non-writing and no longer opaque.
+7. **SPLIT-OPAQUE.** In the no-diff path (`bashEditDiff` absent, `unavailable`, or empty files) of a command with a history git op or `git mv`/`git rm`: edits are split by their own origin even when the command is opaque — explicitly parsed `git mv`/`git rm` targets are git-made (`gitOp`), and an extensionless `git mv` target that is a directory (another target or diff path starts with `<target>/`, or the source was a directory per A5 of round 3) never counts as a code file. Opaque segments still produce what they produce today (nothing new is trusted). With a diff present nothing changes (round-3 rules).
+8. **Q4.** In `judge()`: an incomplete later check that is a BACKGROUND check without any terminal notification does not trigger `incompleteAfter` when a completed passing check already covers the last edit (`lastCompleted.coveredSeq > lastEdit` and it passed): the status is `checked` with reason suffix `; a later background check did not report`. Without such a pass, or for a foreground check without result, today's `unchecked "check did not complete"` stays.
+9. **Q5.** A check whose exit code is 130, 137, 143 or 144 is treated as stopped (neither passed nor failed): foreground and background (notification exit code). Reason when it is the decisive check: `check did not complete`. A check with these codes never yields `failing`.
+10. **Q2.** Confirm by test only: subagent pass at t1 on the main thread's last edit, main pass at t2, subagent fail at t3 (all after the last edit, t1<t2<t3 by timestamp) -> `failing`; if the code already does this, the test documents it. If not, fix ordering to use the merged timestamp order.
+
+## What We're NOT Doing
+
+- No rule for a red check followed by `git checkout HEAD -- …` (mutation probe): it could hide a real red.
+- No trust in unknown repo-local scripts other than GATEREAD names; `agy`/`opencode`/other launches stay opaque.
+- No change to existing `*.labels.json`, goldens or test expectations. New fixtures only.
+- No schema, web or CLI change.
+
+## Gate
+
+```gate
+allow: ^packages/core/src/(check-patterns|shell-edits|analyze|subagents)(\.test)?\.ts$
+allow: ^packages/core/src/[a-z-]+\.test\.ts$
+allow: ^packages/core/fixtures/sessions/sa4-[a-z0-9-]+\.(jsonl|labels\.json)$
+allow: ^packages/core/fixtures/sessions/__golden__/sa4-[a-z0-9-]+\.
+allow: ^scripts/audit/
+allow: ^context/(changes|archive)/status-accuracy-4/
+goldens: sa4-[a-z0-9-]+\.
+labels: new-only
+deps: no
+schema: no
+```
+
+## Phase 1: shell parsing (rules 1-6)
+
+Files: `shell-edits.ts`, `check-patterns.ts`, their tests, new fixtures `sa4-cd-scratch`, `sa4-gate-merge`.
+- Unit tests per rule, each failing on the old code, including negatives: `cd "$UNKNOWN"; sed -i x a.ts` -> `(shell edit)`; `(cd /tmp/s && sed -i x a.ts); sed -i x b.ts` -> `/tmp/s/a.ts` scratch and `b.ts` relative to the outer cwd; `cd -` -> unknown; `node scripts/build.mjs` stays opaque; `node scripts/gate.mjs > out.md` writes `out.md`; `python3 -c "open('src/a.ts','w').write('x')"` -> `src/a.ts`; `python3 -c "open(p,'w')"` with unknown p -> `(shell edit)`; `python3 -c "print(1)"` non-writing; `corepack pnpm check` is a check, `corepack enable` is not; `env $E git merge b` with `E="GIT_AUTHOR_NAME=x GIT_AUTHOR_EMAIL=y"` is a git op.
+- Fixtures (synthetic; labels written from the rules above, not from the tool's output): `sa4-cd-scratch`: `S=/tmp/claude-1000/x/scratchpad; cd $S/wt && sed -i … src/a.ts`, then a check in scratch -> `no-changes` (scratch only); a second prompt `cd /repo && sed -i … src/a.ts` with no check -> `unchecked`. `sa4-gate-merge`: heredoc doc write, `node scripts/gate.mjs --base main > $S/g.txt`, `git merge --no-ff b && git mv context/changes/x context/archive/x && git commit` with a diff of `.ts` files -> `no-changes`.
+- Done: tests + fixtures pass; `pnpm check` green; gate exit 0/2.
+- [ ] Phase 1 done
+
+## Phase 2: judging (rules 7-10)
+
+Files: `analyze.ts` (and `subagents.ts` only if Q2 needs it), tests, new fixtures `sa4-split-opaque`, `sa4-bg-no-notify`, `sa4-signal-kill`, `sa4-subagent-late-fail`.
+- Unit tests per rule failing on the old code, plus: Q4 negative (no earlier pass -> unchecked "check did not complete"; a foreground check with no result -> unchanged); Q5: exit 137 after a passing check -> checked; exit 144 alone -> unchecked "check did not complete"; exit 1 -> failing (unchanged); SPLIT-OPAQUE negative: an opaque segment plus `git mv` and a parsed `sed -i src/a.ts` -> `src/a.ts` still a code edit.
+- Done: tests + fixtures pass; `pnpm check` green; gate exit 0/2.
+- [ ] Phase 2 done
+
+## Phase 3: real-log audit (orchestrator only, no external model)
+
+PRE = main, POST = branch, `node scripts/audit/compare.mjs` aggregates + PRE->POST transitions (counts); a Sonnet adjudicates any new disagreement. Record in `reviews/audit.md`.
+
+## Phase 4: truth-script fixes (a different agent than phases 1-2; Claude subagent, real logs allowed only as aggregates)
+
+`scripts/audit/truth.py`: (a) `bashEditDiff` with empty `files` is not an edit; (b) subagent events after the next prompt's first timestamp belong to that next prompt's window (match the tool's split); (c) the python write scan ignores quoted strings that are not file paths (URLs, strings with `://`, spaces); (d) Q4 and Q5 as in rules 8-9; (e) the new tool rules 1-7 where truth lacks them (truth stays independent code). One synthetic case each in `scripts/audit/fixtures`, `node --test scripts/audit/audit.test.mjs` green.
+- [ ] Phase 4 done
+
+## Review
+
+Tier High (status rule). Two reviewers other than the implementer, cross-verification of Important findings, ledger `reviews/findings.md`, merge gate with `--merge`.
