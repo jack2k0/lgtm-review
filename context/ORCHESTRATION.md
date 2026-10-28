@@ -12,6 +12,8 @@ Każda pozycja: akcja → dowód → ile minut.
   - UI (4 obserwacje): wąskie ekrany — tabela przewijana poziomo zamiast łamania; Esc w Steps/Map/Git wraca poziom wyżej (jak w Diff); szum Git cross-check przy wielu agentach — grupowanie wg worktree; etykieta worktree tylko gdy >1 root (tak jest).
   - Formaty logów spoza real logs (BOM, „Exit code: N”, prompt bez tekstu, `\ No newline`, string content asystenta): nie ruszać reguły statusu; ewentualnie BOM-strip jako tania odporność (Low/High, bez wpływu na real logs).
 - Nazwa/znak towarowy, publikacja npm → ~?
+- Nowe pytania (2026-10-28, ~3 min): (1) S-20: edycja kodu w git worktree pod katalogiem scratch (`$S/wt-*`) jest dziś `scratch` → prompt orkiestratora `no-changes`; zostawić, czy wyjątek dla worktree? (2) zdarzenia subagenta po starcie następnego promptu: dziś zostają przy promptcie wywołującym (poza kontynuacją SendMessage); potwierdzić? (3) czerwony „probe” mutacyjny (`git checkout main -- …; test; git checkout HEAD -- …`) daje `failing` — zostawić?
+- Claude Code kasuje stare sesje (cleanupPeriodDays): podczas audytu ubyły 2 projekty. Rozważyć `cleanupPeriodDays` w ustawieniach albo regularne `lgtm-review --archive`.
 
 ## Proces przeglądu (od 2026-10-26, na wzór Anthropic; „chcę mieć system pod review Anthropica”)
 Reguły: `AGENTS.md` (wszyscy agenci), `REVIEW.md` (tiery, uwagi, rejestr, maks. 2 rundy, fix at the source), briefy `docs/prompts/03-review.md`, bramka `node scripts/gate.mjs ... --merge`. Domyślne odpowiedzi Opusa na otwarte pytania (do korekty przez właściciela):
@@ -46,8 +48,9 @@ Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-li
 - Uwagi do F-01: create-turbo stawia przykład Next.js, wymienić na core/cli/web; fixture'y w packages/core albo w turbo inputs; LICENSE+README w packages/cli; smoke test `pnpm pack` + npx w `pnpm check`; schemat Story eksportowany bez importów node:.
 
 ## Aktywne slice'y / worktree
-- llm-titles (S-08): `../lgtm-review-llm-titles`, faza 1 (core) zrobiona przez Groka, faza 2a w toku (Grok). Plan-review: OpenCode (A1-A9) + Grok (B1-B8).
-- status-accuracy-4: `../lgtm-review-status-accuracy-4`, faza 1 w toku (Grok high). Rozstrzygnięcie Sonnet (24 niezgodności, 18 naprawialnych bez regresji), plan-review OpenCode (C1-C11). Faza 4 (truth.py) tylko subagent Claude (prawdziwe logi).
+- status-accuracy-4: `../lgtm-review-status-accuracy-4`, fazy 1-4 zrobione (Grok: narzędzie; Sonnet: truth.py). Audyt: B 84,8% -> 98,1%, A 85,3% -> 97,4% (nowa prawda; 0 regresji). Przegląd High (OpenCode + Haiku) w toku.
+- 2026-10-28: S-08 llm-titles ZMERGOWANE (6e9118e, High; impl Grok, recenzje Sonnet + OpenCode, 2 rundy, 8 uwag naprawionych; plan-review OpenCode A1-A9 + Grok B1-B8). Nie wypchnięte.
+
 - v0.3 (2026-10-25): roadmapa i PRD v3 przygotowane przez Opusa (max); S-16..S-21 zaimplementowane przez Haiku/Sonnet/OpenCode (DeepSeek)/Agy (Gemini), zweryfikowane i zmergowane przez Opusa, zarchiwizowane. zod 3 -> 4.6.6 (audit). Czeka na właściciela: S-08 (O-1..O-3 w PRD), widok w przeglądarce S-17/S-19/S-21, ponowny audyt ground truth (>= 97% niezmierzone), push.
 - S-09 walidacja na wdAir (subagent Sonnet, read-only): ekstraktor+resolver vs Python ast 2908/2908 krawędzi, 0 FP/0 FN; luka: zagnieżdżone projekty (vendor/letsfg) -> fix py-roots (OpenCode pQ, 6528775, zmergowany, zweryfikowany: 21/21 importów letsfg rozwiązanych).
 
