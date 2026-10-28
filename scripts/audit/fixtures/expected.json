@@ -151,6 +151,121 @@
    "reason": "u-incomplete"
   },
   {
+   "label": "(a) an empty bash edit diff is not an edit",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(c) a URL in a python heredoc is not a file path",
+   "status": "no-changes",
+   "reason": "nc-doc"
+  },
+  {
+   "label": "(d) Q4 quiet background check after a pass",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(d) Q4 negative: no earlier pass keeps the check open",
+   "status": "unchecked",
+   "reason": "u-incomplete"
+  },
+  {
+   "label": "(d) Q5 exit 137 alone is not a failing check",
+   "status": "unchecked",
+   "reason": "u-incomplete"
+  },
+  {
+   "label": "(d) Q5 exit 144 after a pass leaves the pass",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(d) Q5 exit 1 is still failing",
+   "status": "failing",
+   "reason": "f-failed"
+  },
+  {
+   "label": "(d) Q5 background notification exit 143 did not complete",
+   "status": "unchecked",
+   "reason": "u-incomplete"
+  },
+  {
+   "label": "(e) cd through a variable chain into scratch",
+   "status": "no-changes",
+   "reason": "nc-scratch"
+  },
+  {
+   "label": "(e) a cd inside a subshell does not leak",
+   "status": "unchecked",
+   "reason": "u-nocheck"
+  },
+  {
+   "label": "(e) cd to an unknown variable makes a relative target a shell edit (code)",
+   "status": "unchecked",
+   "reason": "u-nocheck"
+  },
+  {
+   "label": "(e) cd - is unknown",
+   "status": "unchecked",
+   "reason": "u-nocheck"
+  },
+  {
+   "label": "(e) corepack prefix is a check",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(e) env $E expands to a git operation",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(e) npm ci is not a check",
+   "status": "unchecked",
+   "reason": "u-nocheck"
+  },
+  {
+   "label": "(e) a gate script with a scratch redirect writes no code",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(e) a gate script after a cd into a sibling worktree",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(e) python -c writing a code file",
+   "status": "unchecked",
+   "reason": "u-after"
+  },
+  {
+   "label": "(e) python -c without a write",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(e) python -c with a write API outside the allow-list is a shell edit",
+   "status": "unchecked",
+   "reason": "u-after"
+  },
+  {
+   "label": "(e) python -c outside the allow-list without a write API writes nothing",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(e) python -c read, replace, write a markdown file",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(e) python -c with a mode that is not a literal",
+   "status": "unchecked",
+   "reason": "u-after"
+  },
+  {
    "label": "slash command turn",
    "status": "checked",
    "reason": "c-passed"
@@ -164,6 +279,26 @@
    "label": "two concurrent subagents",
    "status": "unchecked",
    "reason": "u-after"
+  },
+  {
+   "label": "(b) late subagent events: spawn",
+   "status": "unchecked",
+   "reason": "u-nocheck"
+  },
+  {
+   "label": "(b) late subagent events: continue",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(b) late events without a send: spawn",
+   "status": "checked",
+   "reason": "c-passed"
+  },
+  {
+   "label": "(b) unrelated next prompt",
+   "status": "no-changes",
+   "reason": "nc-none"
   }
  ],
  "fork": {

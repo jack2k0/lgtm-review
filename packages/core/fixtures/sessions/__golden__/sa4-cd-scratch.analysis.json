@@ -1,0 +1,70 @@
+{
+  "sessionId": "sa4-cd-scratch",
+  "title": "Edit a scratch copy of src and test it there.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Edit a scratch copy of src and test it there.",
+      "status": "no-changes",
+      "reason": "no code edits (scratch files only) (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/tmp/claude-1000/x/scratchpad/wt/src/a.ts",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly reading (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    },
+    {
+      "index": 1,
+      "uuid": "00000000-0000-4000-8000-000000000006",
+      "text": "Edit src in the other checkout, and do not run a check.",
+      "status": "unchecked",
+      "reason": "no checks ran (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/repo/src/a.ts",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly reading (100%), 0 checks",
+      "hints": [
+        {
+          "rule": "unchecked-edit",
+          "severity": "warn",
+          "path": "/repo/src/a.ts",
+          "reason": "edited and no check completed in this prompt"
+        }
+      ],
+      "recommendation": "read-flagged"
+    }
+  ],
+  "warnings": []
+}

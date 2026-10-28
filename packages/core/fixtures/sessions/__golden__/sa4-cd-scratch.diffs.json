@@ -1,0 +1,16 @@
+{
+  "0:/tmp/claude-1000/x/scratchpad/wt/src/a.ts": {
+    "path": "/tmp/claude-1000/x/scratchpad/wt/src/a.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "1:/repo/src/a.ts": {
+    "path": "/repo/src/a.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  }
+}

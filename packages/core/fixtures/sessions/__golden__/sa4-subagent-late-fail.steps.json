@@ -1,0 +1,112 @@
+[
+  {
+    "index": 0,
+    "text": "Edit add and have the suite re-check it.",
+    "status": "failing",
+    "reason": "pnpm test failed: 1 failed (by subagent Run the test suite)",
+    "headline": "Mostly checking (95%), 3 checks",
+    "startedAt": "2026-01-01T00:00:00.000Z",
+    "activeMs": 40000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "read-flagged",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "write",
+        "title": "Edit src/add.js (+1 -1), delegate to a subagent",
+        "startedAt": "2026-01-01T00:00:01.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Edit",
+            "summary": "src/add.js",
+            "ok": true,
+            "ts": "2026-01-01T00:00:01.000Z"
+          },
+          {
+            "tool": "Agent",
+            "summary": "Agent: Run the test suite",
+            "ok": true,
+            "ts": "2026-01-01T00:00:03.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/add.js"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Subagent: Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:10.000Z",
+        "durationMs": 1000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:10.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 3,
+        "phase": "check",
+        "title": "Run pnpm test -> passed",
+        "startedAt": "2026-01-01T00:00:30.000Z",
+        "durationMs": 28000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": true,
+            "ts": "2026-01-01T00:00:30.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      },
+      {
+        "n": 4,
+        "phase": "check",
+        "title": "Subagent: Run pnpm test -> failed (exit 1)",
+        "startedAt": "2026-01-01T00:00:40.000Z",
+        "durationMs": 30000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "pnpm test",
+            "ok": false,
+            "ts": "2026-01-01T00:00:40.000Z",
+            "via": "subagent"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "pnpm test",
+          "exitCode": 1,
+          "passed": false,
+          "excerpt": "1 failed"
+        }
+      }
+    ]
+  }
+]

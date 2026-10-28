@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { analyzeSession, createAnalyzer } from "./analyze.js";
-import { F, bash, bgBash, edit, prompt, resetIds, taskNotification, toolResult, toolUse } from "./testing/records.js";
+import { parseSubagent } from "./subagents.js";
+import { F, at, bash, bgBash, edit, patchResult, prompt, resetIds, taskNotification, toolResult, toolUse } from "./testing/records.js";
 
 beforeEach(resetIds);
 
@@ -1085,6 +1086,18 @@ describe("mixed git and plain commands (status-accuracy-3, G)", () => {
     expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
   });
 
+  test("cd into /tmp classifies the resolved sed target as scratch", () => {
+    const p = one([prompt("q"), ...bash("b1", "cd /tmp/s && sed -i 's/x/y/' src/a.ts")]);
+    expect(p.status).toBe("no-changes");
+    expect(p.files.map((f) => f.path)).toEqual(["/tmp/s/src/a.ts"]);
+  });
+
+  test("an absolute cd outside the session and /tmp stays a code edit", () => {
+    const p = one([prompt("q"), ...bash("b1", "cd /repo && sed -i 's/x/y/' src/a.ts")]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran (shell edits may be incomplete)" });
+    expect(p.files.map((f) => f.path)).toEqual(["/repo/src/a.ts"]);
+  });
+
   test("(e) an unresolved plain target keeps the old behaviour: everything is a plain edit", () => {
     const glob = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge b && sed -i 's/x/y/' src/*.md", [`${P}src/a.ts`, `${P}src/a.md`])]);
     expect(glob.status).toBe("unchecked");
@@ -1105,4 +1118,318 @@ describe("mixed git and plain commands (status-accuracy-3, G)", () => {
       expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
     },
   );
+});
+
+describe("status-accuracy-4 phase 2", () => {
+  const P = "/home/user/project";
+  const hintPaths = (lines: string[]) => one(lines).hints.map((h) => h.path);
+  const diffOf = (paths: string[]) => ({
+    bashEditDiff: {
+      files: paths.map((filePath) => ({ filePath, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-a", "+b", "+c"] }] })),
+    },
+  });
+
+  test("SPLIT-OPAQUE: opaque command, git mv of a directory, doc sed => no code edits", () => {
+    const cmd = "node scripts/build.mjs && git mv context/changes/x context/archive/x && sed -i 's/a/b/' context/archive/x/change.md";
+    const p = one([prompt("q"), ...bash("b1", cmd)]);
+    expect(p).toMatchObject({ status: "no-changes", reason: "no code edits (documentation only) (shell edits may be incomplete)" });
+    expect(p.hints).toEqual([]);
+    expect(p.files.map((f) => f.path)).toEqual([
+      `${P}/context/archive/x`,
+      `${P}/context/archive/x/change.md`,
+      `${P}/context/changes/x`,
+    ]);
+  });
+
+  test("SPLIT-OPAQUE: the same command with an empty bashEditDiff still splits", () => {
+    const cmd = "node scripts/build.mjs && git mv context/changes/x context/archive/x && sed -i 's/a/b/' context/archive/x/change.md";
+    const p = one([prompt("q"), toolUse("b1", "Bash", { command: cmd }), toolResult("b1", "", { toolUseResult: { bashEditDiff: { files: [] } } })]);
+    expect(p).toMatchObject({ status: "no-changes", reason: "no code edits (documentation only) (shell edits may be incomplete)" });
+  });
+
+  test("SPLIT-OPAQUE negative: opaque command, git mv of files, sed of src/a.ts keeps src/a.ts as code", () => {
+    const cmd = "node scripts/build.mjs && git mv old/a.ts new/a.ts && sed -i 's/a/b/' src/a.ts";
+    const p = one([prompt("q"), ...bash("b1", cmd)]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran (shell edits may be incomplete)" });
+    expect(p.files.map((f) => f.path)).toEqual([`${P}/new/a.ts`, `${P}/old/a.ts`, `${P}/src/a.ts`]);
+    expect(hintPaths([prompt("q"), ...bash("b1", cmd)])).toEqual([`${P}/src/a.ts`]);
+  });
+
+  test("C10: git rm is git-made beside a parsed sed", () => {
+    const cmd = "git rm old/a.ts && sed -i 's/a/b/' src/a.ts";
+    const p = one([prompt("q"), ...bash("b1", cmd)]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran (shell edits may be incomplete)" });
+    expect(p.files.map((f) => f.path)).toEqual([`${P}/old/a.ts`, `${P}/src/a.ts`]);
+    expect(p.hints.map((h) => h.path)).toEqual([`${P}/src/a.ts`]);
+  });
+
+  test("an extensionless git mv dest with no child stays listed; a plain extensionless target stays code", () => {
+    const makefile = one([prompt("q"), ...bash("b1", "node scripts/build.mjs && git mv src/GNUmakefile dest/GNUmakefile && sed -i 's/a/b/' README.md")]);
+    expect(makefile.status).toBe("no-changes");
+    expect(makefile.files.map((f) => f.path)).toContain(`${P}/dest/GNUmakefile`);
+    const plain = one([prompt("q"), ...bash("b1", "node scripts/build.mjs && git mv old/a.ts new/a.ts && sed -i 's/a/b/' Makefile")]);
+    expect(plain.hints.map((h) => h.path)).toEqual([`${P}/Makefile`]);
+  });
+
+  test("a non-empty diff on an opaque command does not split git mv from the plain edit", () => {
+    const cmd = "node scripts/build.mjs && git mv old/a.ts new/a.ts && sed -i 's/a/b/' src/a.ts";
+    const paths = [`${P}/old/a.ts`, `${P}/new/a.ts`, `${P}/src/a.ts`];
+    const p = one([prompt("q"), toolUse("b1", "Bash", { command: cmd }), toolResult("b1", "", { toolUseResult: diffOf(paths) })]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+    expect(p.hints.map((h) => h.path).sort()).toEqual([...paths].sort());
+  });
+
+  test("Q4: a later background check with no notification keeps a covering pass", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bgBash("b2", "t1", "pnpm lint")]);
+    expect(p).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit; a later background check did not report" });
+    expect(p.hints).toEqual([]);
+    expect(p.recommendation).toBe("skim");
+  });
+
+  test("Q4: several quiet background checks add the suffix once", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bgBash("b2", "t1", "pnpm lint"), ...bgBash("b3", "t2", "pnpm test")]);
+    expect(p.reason).toBe("pnpm test passed after last edit; a later background check did not report");
+  });
+
+  test("Q4 negative: no earlier pass stays unchecked", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm lint")])).toMatchObject({ status: "unchecked", reason: "check did not complete" });
+  });
+
+  test("Q4 negative: a foreground check with no result is unchanged", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bash("b2", "pnpm lint", { none: true })]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "check did not complete" });
+    expect(p.reason).not.toContain("did not report");
+    expect(p.hints).toEqual([]);
+  });
+
+  test("Q4: a quiet background check launched before the covering pass adds no suffix", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm lint"), ...bash("b2", "pnpm test")]).reason).toBe("pnpm test passed after last edit");
+  });
+
+  test.each([130, 137, 143, 144])("Q5: foreground exit %s alone did not complete", (code) => {
+    expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test", { exit: code })])).toMatchObject({ status: "unchecked", reason: "check did not complete" });
+  });
+
+  test("Q5: exit 137 after a passing check stays checked", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bash("b2", "pnpm lint", { exit: 137 })])).toMatchObject({
+      status: "checked",
+      reason: "pnpm test passed after last edit",
+    });
+  });
+
+  test("Q5: exit 1 is still failing", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test", { exit: 1 })])).toMatchObject({ status: "failing", reason: "pnpm test failed (exit 1)" });
+  });
+
+  test("Q5: a covering failure stays failing when a later signal arrives", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test", { exit: 1 }), ...bash("b2", "pnpm lint", { exit: 137 })])).toMatchObject({
+      status: "failing",
+      reason: "pnpm test failed (exit 1)",
+    });
+  });
+
+  test("Q5: a foreground signal does not open the Fix phase", () => {
+    const lines = [prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test", { exit: 137 }), ...edit("e2", `${P}/src/a.test.ts`)];
+    const a = createAnalyzer({ detail: true });
+    for (const l of lines) a.push(l);
+    const p = a.finish().prompts[0]!;
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+    expect(p.hints.map((h) => h.rule)).not.toContain("test-modified-during-fix");
+    const steps = a.details()[0]!.steps;
+    expect(steps.map((s) => s.phase)).not.toContain("fix");
+    const check = steps.find((s) => s.check !== undefined)!;
+    expect(check.title).toBe("Run pnpm test -> no result");
+    expect(check.check).toMatchObject({ exitCode: null, passed: null });
+    expect(check.check?.stopped).toBeUndefined();
+  });
+
+  test.each([
+    ["failed", "exit code 137"],
+    ["completed", "exit code 143"],
+    ["", "exit code 130"],
+    ["failed", "exit code 144"],
+  ])("Q5: background notification status %j with %s is a signal stop", (status, summary) => {
+    const note = status === "" ? taskNotification({ taskId: "t1", summary }) : taskNotification({ taskId: "t1", status, summary });
+    const lines = [prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), note];
+    const a = createAnalyzer({ detail: true });
+    for (const l of lines) a.push(l);
+    expect(a.finish().prompts[0]).toMatchObject({ status: "unchecked", reason: "check did not complete" });
+    const check = a.details()[0]!.steps.find((s) => s.check !== undefined)!;
+    expect(check.title).toBe("Run pnpm test -> no result");
+    expect(check.check).toMatchObject({ exitCode: null, passed: null, background: true });
+    expect(check.check?.stopped).toBeUndefined();
+  });
+
+  test("Q5: a background signal after a covering pass stays checked", () => {
+    const lines = [
+      prompt("q"),
+      ...edit("e1"),
+      ...bash("b1", "pnpm test"),
+      ...bgBash("b2", "t2", "pnpm lint"),
+      taskNotification({ taskId: "t2", status: "failed", summary: "exit code 137" }),
+    ];
+    expect(one(lines)).toMatchObject({ status: "checked", reason: "pnpm test passed after last edit" });
+  });
+
+  test("C3: a killed notification stays check stopped even when the summary names exit 143", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bgBash("b1", "t1", "pnpm test"), taskNotification({ taskId: "t1", status: "killed", summary: "exit code 143" })])).toMatchObject({
+      status: "unchecked",
+      reason: "check stopped",
+    });
+  });
+
+  test("Q2: subagent pass, then main pass, then subagent fail, by timestamp, is failing", () => {
+    const lines = [
+      prompt("q", { timestamp: at(0) }),
+      toolUse("e1", "Edit", { file_path: F, old_string: "a", new_string: "b" }, at(1)),
+      toolResult("e1", "File updated.", { toolUseResult: patchResult(["b"], ["a"]), ts: at(2) }),
+      toolUse("ag", "Agent", { description: "Run the test suite", prompt: "p" }, at(3)),
+      toolUse("b1", "Bash", { command: "pnpm test" }, at(30)),
+      toolResult("b1", "ok", { toolUseResult: { stdout: "ok" }, ts: at(31) }),
+      toolResult("ag", "done", { ts: at(50) }),
+    ];
+    let n = 0;
+    const side = (type: string, ts: string, message: unknown, extra: Record<string, unknown> = {}): string => {
+      n++;
+      return JSON.stringify({ type, uuid: `A-${n}`, isSidechain: true, agentId: "A", sessionId: "s", cwd: P, timestamp: ts, message, ...extra });
+    };
+    const check = (id: string, t0: number, t1: number, exit = 0): string[] => [
+      side("assistant", at(t0), { role: "assistant", content: [{ type: "tool_use", id, name: "Bash", input: { command: "pnpm test" } }] }),
+      exit === 0
+        ? side("user", at(t1), { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "ok" }] }, { toolUseResult: { stdout: "ok" } })
+        : side("user", at(t1), { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: `Exit code ${exit}\n1 failed`, is_error: true }] }),
+    ];
+    const tr = parseSubagent(
+      [side("user", at(3.5), { role: "user", content: "the delegated task" }), ...check("c1", 10, 11), ...check("c2", 40, 41, 1)],
+      { agentId: "A", description: "Run the test suite" },
+    );
+    const p = analyzeSession(lines, { subagents: new Map([["ag", tr]]) }).prompts[0]!;
+    expect(p.status).toBe("failing");
+    expect(p.reason).toContain("failed");
+    expect(p.reason).toContain("(by subagent Run the test suite)");
+    expect(p.reason).not.toContain("passed");
+    expect(p.recommendation).toBe("read-flagged");
+    expect(p.hints).toEqual([]);
+  });
+});
+
+describe("C13: gate script after an absolute cd", () => {
+  const P = "/home/user/project";
+  const diffOf = (paths: string[]) => ({
+    bashEditDiff: {
+      files: paths.map((filePath) => ({ filePath, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-a", "+b", "+c"] }] })),
+    },
+  });
+  const run = (cmd: string) =>
+    one([
+      prompt("q"),
+      toolUse("b1", "Bash", { command: cmd }),
+      toolResult("b1", "", { toolUseResult: diffOf([`${P}/src/a.ts`]) }),
+    ]);
+
+  test("a sibling worktree gate script lets the merge diff stay git-made", () => {
+    const cmd = `cd ${P}-x && node scripts/gate.mjs --merge > /tmp/g.txt && git merge --no-ff b && sed -i 's/a/b/' README.md`;
+    expect(run(cmd)).toMatchObject({ status: "no-changes", reason: "no edits (git operations only)" });
+  });
+
+  test("an unrelated absolute directory and a non-gate script stay opaque", () => {
+    const other = `cd /tmp/other && node scripts/gate.mjs && git merge --no-ff b && sed -i 's/a/b/' README.md`;
+    const build = `cd ${P} && node scripts/build.mjs && git merge --no-ff b && sed -i 's/a/b/' README.md`;
+    expect(run(other).status).toBe("unchecked");
+    expect(run(build).status).toBe("unchecked");
+  });
+});
+
+describe("review round 1 status", () => {
+  const P = "/home/user/project";
+  const diffOf = (paths: string[]) => ({
+    bashEditDiff: {
+      files: paths.map((filePath) => ({ filePath, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-a", "+b", "+c"] }] })),
+    },
+  });
+  const withDiff = (cmd: string, paths: string[]) =>
+    one([prompt("q"), toolUse("b1", "Bash", { command: cmd }), toolResult("b1", "", { toolUseResult: diffOf(paths) })]);
+
+  test("eval cd then a relative sed is unchecked, not scratch", () => {
+    const cmd = `cd /tmp/x; eval "cd /home/user/project"; sed -i 's/a/b/' src/a.ts`;
+    expect(one([prompt("q"), ...bash("b1", cmd)])).toMatchObject({
+      status: "unchecked",
+      reason: "no checks ran (shell edits may be incomplete)",
+    });
+  });
+
+  test("source and builtin cd then a relative sed are unchecked, not scratch", () => {
+    for (const hide of ["source env.sh", "builtin cd /home/user/project", ". ./env.sh"]) {
+      const cmd = `cd /tmp/x; ${hide}; sed -i 's/a/b/' src/a.ts`;
+      expect(one([prompt("q"), ...bash("b1", cmd)]), hide).toMatchObject({
+        status: "unchecked",
+        reason: "no checks ran (shell edits may be incomplete)",
+      });
+    }
+  });
+
+  test("python -c sys.modules subprocess beside a merge is unchecked", () => {
+    const cmd = `git merge b && sed -i 's/x/y/' plan.md && python3 -c "import sys; sys.modules['subprocess'].run(['sh','-c','echo > src/c.ts'])"`;
+    expect(withDiff(cmd, [`${P}/plan.md`, `${P}/src/c.ts`])).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("node --eval before a gate script beside a merge is unchecked", () => {
+    const cmd = `git merge b && sed -i 's/x/y/' plan.md && node --eval="require('fs').writeFileSync('src/c.ts','x')" scripts/gate.mjs`;
+    expect(withDiff(cmd, [`${P}/plan.md`, `${P}/src/c.ts`])).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("node --require before a gate script beside a merge is unchecked", () => {
+    const cmd = "git merge b && sed -i 's/x/y/' plan.md && node --require=/tmp/x.cjs scripts/gate.mjs";
+    expect(withDiff(cmd, [`${P}/plan.md`, `${P}/src/c.ts`])).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("npm install --frozen-lockfile beside a merge is unchecked", () => {
+    const cmd = "git merge b && sed -i 's/x/y/' plan.md && npm install --frozen-lockfile";
+    expect(withDiff(cmd, [`${P}/plan.md`, `${P}/src/c.ts`])).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("a dash-less heredoc code write then a passing check is checked", () => {
+    const cmd = "python3 <<'EOF'\np = \"src/a.ts\"\nopen(p, 'w').write('x')\nEOF";
+    expect(one([prompt("q"), ...bash("b1", cmd), ...bash("b2", "pnpm test")])).toMatchObject({
+      status: "checked",
+      reason: "pnpm test passed after last edit (shell edits may be incomplete)",
+    });
+  });
+
+  test("a dash-less heredoc code write alone is unchecked", () => {
+    const cmd = "python3 <<'EOF'\np = \"src/a.ts\"\nopen(p, 'w').write('x')\nEOF";
+    expect(one([prompt("q"), ...bash("b1", cmd)])).toMatchObject({
+      status: "unchecked",
+      reason: "no checks ran (shell edits may be incomplete)",
+    });
+  });
+
+  test("an absolute path with .. is a code edit, not scratch", () => {
+    const cmd = "sed -i 's/a/b/' /tmp/../home/user/project/src/a.ts";
+    const p = one([prompt("q"), ...bash("b1", cmd)]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran (shell edits may be incomplete)" });
+    expect(p.files.map((f) => f.path)).toEqual(["/home/user/project/src/a.ts"]);
+  });
+
+  test("a diff path under /tmp/.. is code", () => {
+    const raw = "/tmp/../home/user/project/src/a.ts";
+    const p = withDiff("echo hi", [raw]);
+    expect(p.status).toBe("unchecked");
+    expect(p.files.map((f) => f.path)).toEqual(["/home/user/project/src/a.ts"]);
+  });
+});
+
+describe("C18: documentation after an untrusted absolute cd", () => {
+  const heredoc = (name: string) => `cd /abs/notes; python3 - <<'EOF'\nopen('${name}','w').write('x')\nEOF`;
+
+  test("a doc write after the check stays checked, a code write is unchecked", () => {
+    const checked = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bash("b2", heredoc("plan.md"))]);
+    expect(checked).toMatchObject({
+      status: "checked",
+      reason: "pnpm test passed after last code edit; 1 documentation edit after it (shell edits may be incomplete)",
+    });
+    expect(checked.files.map((f) => f.path)).toContain("/abs/notes/plan.md");
+    const unchecked = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bash("b2", heredoc("a.ts"))]);
+    expect(unchecked.status).toBe("unchecked");
+  });
 });

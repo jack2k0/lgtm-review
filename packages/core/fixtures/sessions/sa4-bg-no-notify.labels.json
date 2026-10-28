@@ -1,0 +1,27 @@
+{
+  "fixture": "sa4-bg-no-notify",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "pnpm test passed after the edit. A later background pnpm lint has no terminal notification. The pass still covers the edit, so checked, with the reason ending in '; a later background check did not report'."
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": ["unchecked-edit:src/add.js"],
+      "note": "The only check is a background pnpm test with no notification and no earlier pass. Unchecked, check did not complete. The edit has no completed check."
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [],
+      "note": "pnpm test passed, then a foreground pnpm lint has no result. That foreground check still yields unchecked, check did not complete, and the reason has no background suffix. The completed pass covers the edit, so there is no unchecked-edit hint."
+    }
+  ]
+}

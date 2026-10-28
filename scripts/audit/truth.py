@@ -35,6 +35,8 @@ import sys
 import time
 from collections import Counter, defaultdict
 
+SIGNAL_EXITS = {130, 137, 143, 144}
+STOP_STATUSES = {"killed", "stopped", "cancelled", "canceled", "timeout", "timed_out", "aborted"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 AGENT_TOOLS = {"Agent", "Task"}
 SKIP_SLASH = {"/clear", "/exit", "/compact"}
@@ -58,6 +60,9 @@ def is_doc(path):
     if base in DOC_NAMES:
         return True
     return ext == ".txt" and stem in DOC_NAMES
+
+
+UNKNOWN_CWD = "\0unknown"
 
 
 class Ctx:
@@ -85,6 +90,8 @@ class Ctx:
         if p.startswith("-") or p in ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty"):
             return "ignore"
         if not p.startswith("/"):
+            if resolve_cwd is UNKNOWN_CWD:
+                return "code"  # the directory is not known any more: the target stays a shell edit of unknown place (code)
             p = posixpath.join(resolve_cwd or call_cwd or self.root, p)
         p = posixpath.normpath(p)
         if p.startswith("/dev/"):
@@ -321,6 +328,8 @@ def check_kind(argv, text):
                 continue
             rest.append(x)
             i += 1
+        if p == "npm" and rest and rest[0] == "ci":
+            return None  # `npm ci` installs the lockfile; it is not the package script "ci"
         if rest and rest[0] in ("run", "run-script", "exec", "dlx"):
             if rest[0] in ("exec", "dlx"):
                 return check_kind(unwrap(rest[1:]), text)
@@ -345,7 +354,93 @@ def check_kind(argv, text):
 GIT_OPS = {"merge", "rebase", "pull", "checkout", "switch", "stash", "cherry-pick", "mv", "rm", "restore", "reset", "revert", "am"}
 INPLACE_FMT = {"prettier": ("--write", "-w"), "eslint": ("--fix",), "biome": ("--write", "--apply"), "ruff": ("--fix",)}
 SHELL_WRITE_RE = re.compile(r"""open\s*\([^)]*,\s*['"](?:w|a|wb|ab|r\+|x|w\+)['"]|\.write_text\(|\.write_bytes\(|writeFile(?:Sync)?\(|appendFile(?:Sync)?\(|fs\.(?:rename|unlink|copyFile|rm|writeSync)|shutil\.(?:copy|copy2|copyfile|move|rmtree)|os\.(?:rename|remove|replace|unlink)|json\.dump\(|\.write\(""")
-QUOTED_PATH_RE = re.compile(r"""['"]([~/.$\w][^'"\s]*(?:/[^'"\s]*|\.\w{1,6}))['"]""")
+QUOTED_STR_RE = re.compile(r"'([^'\n]*)'|\"([^\"\n]*)\"")
+PATHLIKE_RE = re.compile(r"""^[~/.$\w][^'"\s]*(?:/[^'"\s]*|\.\w{1,6})$""")
+
+
+def quoted_paths(code):
+    """Quoted strings of an interpreter source that can be file paths: no whitespace, no URL ("://"), no query / format characters."""
+    out = []
+    for m in QUOTED_STR_RE.finditer(code):
+        x = m.group(1) if m.group(1) is not None else m.group(2)
+        if "://" in x or re.search(r"[\s?&=#%{}*<>|]", x):
+            continue  # a URL, an HTTP path with a query, a format string or a pattern is not a file path
+        if PATHLIKE_RE.match(x):
+            out.append(x)
+    return out
+
+
+# `python -c "<src>"`: a source is read-only unless it can write; what cannot be shown to be safe counts as a write of
+# unknown place (code). Independent of the tool: an allow-list of imports and a deny-list of identifiers.
+PYC_ALLOW = {"json", "sys", "re", "math", "datetime", "time", "collections", "itertools", "functools", "textwrap", "pprint", "statistics", "random", "string",
+             "decimal", "fractions", "operator", "typing", "enum", "dataclasses", "uuid", "hashlib", "base64", "platform"}
+PYC_DENY = ["open", "Path", "exec", "eval", "compile", "__import__", "__builtins__", "getattr", "globals", "system", "popen", "spawn", "write", "rename", "unlink",
+            "remove", "rmdir", "touch", "mkdir", "makedirs", "symlink", "chmod", "copy", "move", "truncate", "dump"]  # `replace`: str.replace is read-only without Path/os
+PYC_IMPORT_RE = re.compile(r"(?:^|[;\n:])\s*(?:import\s+([^;\n]+)|from\s+([\w.]+)\s+import\b)")
+PYC_WRITE_API_RE = re.compile(r"\.write_text\(|\.write_bytes\(|shutil\.(?:copy|copy2|copyfile|copytree|move|rmtree)|\bos\.(?:rename|remove|replace|unlink|makedirs|mkdir|rmdir)\b|\.unlink\(|\.touch\(|\.rename\(|\.mkdir\(")
+PYC_OPEN_RE = re.compile(r"\bopen\s*\(")
+PYC_OPEN_MODE_RE = re.compile(r"""\bopen\s*\(\s*('[^'\n]*'|"[^"\n]*"|[A-Za-z_]\w*)\s*,\s*(?:mode\s*=\s*)?('[^'\n]*'|"[^"\n]*")\s*(?:,\s*encoding\s*=\s*(?:'[^'\n]*'|"[^"\n]*"))?\s*\)""")
+PYC_OPEN_READ_RE = re.compile(r"""\bopen\s*\(\s*(?:[^(),'"]|'[^'\n]*'|"[^"\n]*"|\([^()]*\))+?\s*(?:,\s*encoding\s*=\s*(?:'[^'\n]*'|"[^"\n]*"))?\s*\)""")
+
+
+def _call_end(src, i):
+    """Index just after the parenthesis that opens at src[i]."""
+    depth = 0
+    for j in range(i, len(src)):
+        if src[j] == "(":
+            depth += 1
+        elif src[j] == ")":
+            depth -= 1
+            if depth == 0:
+                return j + 1
+    return len(src)
+
+
+def pyc_analyse(src):
+    """Returns (writes, opaque): the literal paths (None = not resolvable) it writes, and whether anything unsafe remains."""
+    opaque = False
+    for m in PYC_IMPORT_RE.finditer(src):
+        mods = [x.strip().split()[0].split(".")[0] for x in m.group(1).split(",") if x.strip()] if m.group(1) else [m.group(2).split(".")[0]]
+        if any(x not in PYC_ALLOW for x in mods):
+            opaque = True
+    covered, writes, fvars = [], [], []
+    for m in PYC_OPEN_RE.finditer(src):
+        w = PYC_OPEN_MODE_RE.match(src, m.start())
+        if w:
+            mode = w.group(2)[1:-1]
+            if any(c in mode for c in "wax+"):
+                arg = w.group(1)
+                if arg[0] in "'\"":
+                    writes.append(arg[1:-1])
+                else:
+                    a = re.search(r"\b" + re.escape(arg) + r"""\s*=\s*(?:'([^'\n]*)'|"([^"\n]*)")""", src)
+                    writes.append((a.group(1) if a.group(1) is not None else a.group(2)) if a else None)
+                end = w.end()
+                tail = re.match(r"\s*\.\s*write(?:lines)?\b", src[end:])
+                covered.append((m.start(), end + (tail.end() if tail else 0)))
+                asv = re.match(r"\s+as\s+(\w+)", src[end:])
+                if asv:
+                    fvars.append(asv.group(1))
+                continue
+            covered.append((m.start(), w.end()))  # an explicit read mode
+            continue
+        r = PYC_OPEN_READ_RE.match(src, m.start())
+        if r:
+            covered.append((m.start(), r.end()))
+        else:
+            opaque = True  # open(p, mode) with a mode that is not a literal, or an odd form
+    for v in fvars:
+        for m in re.finditer(r"\b" + re.escape(v) + r"\s*\.\s*write(?:lines)?\b", src):
+            covered.append((m.start(), m.end()))
+    for m in re.finditer(r"\bdump\s*\(", src):
+        end = _call_end(src, m.end() - 1)
+        if any(m.start() < a < end for a, _ in covered):
+            covered.append((m.start(), m.end()))
+    for word in PYC_DENY:
+        for m in re.finditer(r"\b" + word + r"\b", src):
+            if not any(a <= m.start() < b for a, b in covered):
+                opaque = True
+    return writes, opaque
 
 
 def git_strict_edit(sub, args):
@@ -378,14 +473,21 @@ def analyse_bash(cmd, ctx, call_cwd):
     env.setdefault("HOME", HOME)
 
     def expand(x):
-        for _ in range(3):
+        for _ in range(6):
             y = re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: env.get(m.group(1) or m.group(2), m.group(0)), x)
             if y == x:
                 break
             x = y
         return x
 
+    stack, pop_next = [], False
     for si, (txt, opb, opa, line) in enumerate(segs):
+        if pop_next:  # the previous segment closed a subshell / command substitution: its cd does not leak
+            cwd = stack.pop() if stack else cwd
+            pop_next = False
+        if opb == "(":
+            stack.append(cwd)
+        pop_next = opa == ")"
         av = []
         words = [expand(w) for w in words_of(txt)]
         argv = unwrap(words, av)
@@ -394,10 +496,15 @@ def analyse_bash(cmd, ctx, call_cwd):
         p, a = argv[0], argv[1:]
         body = bodies.get(line, "")
         # cd tracking for relative paths
-        if p == "cd" and a:
-            t = a[0]
-            t = HOME + t[1:] if t.startswith("~") else t
-            cwd = posixpath.normpath(t if t.startswith("/") else posixpath.join(cwd or "/", t))
+        if p in ("cd", "pushd", "popd"):
+            args = [x for x in a if x not in ("-L", "-P", "-e", "-@")]
+            t = args[0] if args else None
+            if p == "popd" or t is None or t == "-" or t.startswith("~") or "$" in t or "`" in t:
+                cwd = UNKNOWN_CWD  # cd -, cd ~..., a variable that is not known, a command substitution
+            elif t.startswith("/"):
+                cwd = posixpath.normpath(t)
+            elif cwd is not UNKNOWN_CWD:
+                cwd = posixpath.normpath(posixpath.join(cwd or "/", t))
             continue
         kind = check_kind(argv, txt)
         masked = False
@@ -426,7 +533,7 @@ def analyse_bash(cmd, ctx, call_cwd):
             ga = [x for x in ga if not x.startswith("--no-pager")]
             sub = ga[0] if ga else ""
             if sub == "apply":
-                add(ctx.classify("?", cwd), "git-apply")
+                add(ctx.classify("?", call_cwd), "git-apply")
             elif sub in GIT_OPS:
                 add("gitstrict" if git_strict_edit(sub, ga[1:]) else "git", "git")
             continue
@@ -471,10 +578,21 @@ def analyse_bash(cmd, ctx, call_cwd):
                 add(_worst(cl), "tee")
         elif p in ("pnpm", "npm", "yarn", "bun") and a[:1] and a[0] in ("add", "remove", "rm", "uninstall") and len([x for x in a[1:] if not x.startswith("-")]) > 0:
             add("code", "pkg-change")
+        elif p in PY_NAMES and "-c" in a and a.index("-c") + 1 < len(a):
+            writes, opaque = pyc_analyse(a[a.index("-c") + 1])
+            for wp in writes:
+                c = ctx.classify(wp, call_cwd, var_scratch, unk, cwd) if wp else "code"
+                if c != "ignore":
+                    add(c, "pyc-write")
+            # an opaque source (import outside the allow-list, escape identifiers) is a write only when it shows a write API;
+            # without one it changes no tracked file as far as the log shows (sqlite3 / django / os reads are common)
+            srcc = a[a.index("-c") + 1]
+            if opaque and (PYC_WRITE_API_RE.search(srcc) or (not writes and re.search(r"\bopen\s*\(", srcc) and re.search(r"\.write(?:lines)?\(", srcc))):
+                add("code", "pyc-write-api")
         elif p in PY_NAMES | {"node", "ruby", "perl", "php", "deno", "bun", "tsx"} or (p in ("bash", "sh", "zsh") and "-c" in a):
             code = body + " " + txt
             if SHELL_WRITE_RE.search(code):
-                paths = QUOTED_PATH_RE.findall(code)
+                paths = quoted_paths(code)
                 cl = [ctx.classify(x, call_cwd, var_scratch, unk, cwd) for x in paths]
                 cl = [c for c in cl if c != "ignore"]
                 add(_worst(cl) if cl else "code", "interp-write")
@@ -533,6 +651,12 @@ def block_text(c):
     return ""
 
 
+def has_diff_files(d):
+    """A recorded bash edit diff counts only when it names at least one file (an empty or unavailable diff is no edit)."""
+    files = d.get("files") if isinstance(d, dict) else None
+    return isinstance(files, list) and any(isinstance(f, dict) and isinstance(f.get("filePath"), str) and f["filePath"] for f in files)
+
+
 def result_info(rec, block):
     tur = rec.get("toolUseResult")
     tur = tur if isinstance(tur, dict) else {}
@@ -550,7 +674,7 @@ def result_info(rec, block):
         "text": text,
         "interrupted": bool(tur.get("interrupted")),
         "bg": tur.get("backgroundTaskId"),
-        "bashdiff": bool(tur.get("bashEditDiff")),
+        "bashdiff": has_diff_files(tur.get("bashEditDiff")),
     }
 
 
@@ -601,6 +725,7 @@ def read_thread(path, is_sub, ctx_root):
     """Parse one JSONL into prompts + events. Returns dict(prompts, events, agent_calls, notifs, first_ts, cwd)."""
     recs = load(path)
     prompts, events, agent_calls, notifs = [], [], {}, {}
+    agent_pos, sends = {}, {}
     pending = {}
     cur = -1 if is_sub else None
     first_ts, cwd0 = None, None
@@ -634,6 +759,11 @@ def read_thread(path, is_sub, ctx_root):
                 for b in c:
                     if isinstance(b, dict) and b.get("type") == "tool_result":
                         use = pending.pop(b.get("tool_use_id"), None)
+                        sm = sends.get(b.get("tool_use_id"))
+                        if sm is not None:
+                            tur = o.get("toolUseResult")
+                            tur = tur if isinstance(tur, dict) else {}
+                            sm["resumed"] = tur.get("resumedAgentId") or tur.get("revivedAgentId") or None
                         if use is None:
                             continue
                         _emit(use, o, b, pos, ts, events, ctx, cur)
@@ -643,16 +773,19 @@ def read_thread(path, is_sub, ctx_root):
                 continue
             for b in content:
                 if isinstance(b, dict) and b.get("type") == "tool_use":
-                    pending[b.get("id")] = {"id": b.get("id"), "name": b.get("name"), "input": b.get("input") or {}, "cwd": o.get("cwd") or cwd0, "prompt": cur, "ts": ts}
+                    pending[b.get("id")] = {"id": b.get("id"), "name": b.get("name"), "input": b.get("input") or {}, "cwd": o.get("cwd") or cwd0, "prompt": cur, "ts": ts, "upos": pos}
                     if b.get("name") in AGENT_TOOLS:
                         agent_calls[b.get("id")] = cur
+                        agent_pos[b.get("id")] = pos
+                    elif b.get("name") == "SendMessage":
+                        sends[b.get("id")] = {"to": (b.get("input") or {}).get("to"), "ts": ts, "prompt": cur, "pos": pos, "resumed": None}
     # tool calls without result: still count agent calls; checks/edits without a result never completed
     for use in pending.values():
         if use["name"] == "Bash":
             checks, edits, _ = analyse_bash(str(use["input"].get("command", "")), ctx, use["cwd"])
             if checks:
-                events.append({"kind": "check", "prompt": use["prompt"], "pos": 10**9, "ts": use["ts"], "seg": checks[-1]["seg"], "ck": checks[-1], "outcome": "incomplete", "bgid": None, "tuid": use["id"], "sub": is_sub, "evidence": False})
-    return {"prompts": prompts, "events": events, "agent_calls": agent_calls, "notifs": notifs, "first_ts": first_ts, "cwd": cwd0}
+                events.append({"kind": "check", "prompt": use["prompt"], "pos": use["upos"], "ts": use["ts"], "seg": checks[-1]["seg"], "ck": checks[-1], "outcome": "incomplete", "bgid": None, "tuid": use["id"], "sub": is_sub, "evidence": False})
+    return {"prompts": prompts, "events": events, "agent_calls": agent_calls, "agent_pos": agent_pos, "sends": sends, "notifs": notifs, "first_ts": first_ts, "cwd": cwd0}
 
 
 def _emit(use, rec, block, pos, ts, events, ctx, cur):
@@ -682,7 +815,7 @@ def _emit(use, rec, block, pos, ts, events, ctx, cur):
             elif is_bg:
                 outcome = "bg"
             elif ri["err"]:
-                outcome = "fail"
+                outcome = "stopped" if ri["exit"] in SIGNAL_EXITS else "fail"  # killed by a signal: neither passed nor failed
             else:
                 outcome = "pass"
             evidence = False
@@ -727,13 +860,17 @@ def judge(events, mode):
     checks = [e for e in events if e["kind"] == "check"]
     done = [c for c in checks if c["outcome"] in ("pass", "fail")]
     after = [c for c in done if c["order"] > last_edit]
-    if after:
-        last = max(after, key=lambda c: c["order"])
+    last = max(after, key=lambda c: c["order"]) if after else None
+    # a check still open after the decisive one leaves the prompt unchecked (the check did not complete); Q4: a background
+    # check that never reported does not undo an earlier passing check that covers the last edit
+    inc_after = [c for c in checks if c["outcome"] == "incomplete" and c["order"] > last_edit and (last is None or c["order"] > last["order"])]
+    if inc_after and not (last is not None and last["outcome"] == "pass" and all(c.get("bgid") for c in inc_after)):
+        return "unchecked", "u-incomplete", info
+    if last is not None:
         info["decisive"] = last
         info["same_cmd"] = any(e["pos"] == last["pos"] and e["order"] < last["order"] for e in code)
         return ("checked", "c-passed", info) if last["outcome"] == "pass" else ("failing", "f-failed", info)
-    inc_after = [c for c in checks if c["outcome"] == "incomplete" and c["order"] > last_edit]
-    if inc_after:
+    if any(c["outcome"] == "stopped" and c["order"] > last_edit for c in checks):  # Q5: stopped by a signal / a stop notification
         return "unchecked", "u-incomplete", info
     if done:
         info["fail_then_edit"] = max(done, key=lambda c: c["order"])["outcome"] == "fail"
@@ -826,6 +963,34 @@ def build_orders(prompt_events):
 # ---------------------------------------------------------------------------------------------------------------------
 # Session / project processing
 # ---------------------------------------------------------------------------------------------------------------------
+def split_runs(sub, th, tuid, pr):
+    """Prompt of every event of a subagent transcript. A `SendMessage` to the agent (after its `Agent` call, in the parent
+    thread) continues it: the transcript events later than the send's timestamp belong to the prompt of that send (run j
+    starts at the first event after the j-th send); everything before belongs to the prompt of the `Agent` call."""
+    evs = sub["events"]
+    out = [pr] * len(evs)
+    agent = sub.get("agent_id")
+    called = th["agent_pos"].get(tuid)
+    mine = []
+    for sm in th["sends"].values():
+        tgt = sm["resumed"] or sm["to"]
+        if not agent or tgt != agent or not sm["ts"] or sm["prompt"] is None or sm["prompt"] < 0:
+            continue
+        if called is not None and sm["pos"] < called:
+            continue
+        mine.append(sm)
+    mine.sort(key=lambda m: m["pos"])
+    start = 0
+    for sm in mine:
+        k = start
+        while k < len(evs) and not (evs[k]["ts"] and evs[k]["ts"] > sm["ts"]):
+            k += 1
+        for j in range(k, len(evs)):
+            out[j] = sm["prompt"]
+        start = k
+    return out
+
+
 def process_project(pdir, min_age_s, now):
     files = sorted(glob.glob(os.path.join(pdir, "*.jsonl")))
     out, excluded = [], []
@@ -850,6 +1015,7 @@ def process_project(pdir, min_age_s, now):
                 pass
             sth = read_thread(sf, True, probe)
             sth["meta"] = meta
+            sth["agent_id"] = os.path.basename(sf)[len("agent-"):-len(".jsonl")]
             th["subs"].append(sth)
     # first appearance owner per uuid
     owner = {}
@@ -882,9 +1048,9 @@ def process_project(pdir, min_age_s, now):
                 stats["sub-unattached"] += 1
                 continue
             stats["sub-attached"] += 1
-            for e in s["events"]:
+            for e, target in zip(s["events"], split_runs(s, th, tuid, pr)):
                 e["sub"], e["fileidx"] = True, si + 1
-                per[pr].append(e)
+                per[target].append(e)
         for i, p in enumerate(th["prompts"]):
             evs = per.get(i, [])
             for e in evs:
@@ -892,6 +1058,8 @@ def process_project(pdir, min_age_s, now):
                     n = notifs.get(e["bgid"])
                     if n is None:
                         e["outcome"] = "incomplete"
+                    elif (n["status"] or "").lower() in STOP_STATUSES or n["exit"] in SIGNAL_EXITS:
+                        e["outcome"] = "stopped"
                     elif n["status"] == "failed" or (n["exit"] not in (None, 0)):
                         e["outcome"] = "fail"
                     elif n["status"] == "completed":

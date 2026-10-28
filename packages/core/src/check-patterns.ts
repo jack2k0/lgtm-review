@@ -151,7 +151,7 @@ const PREFIXES: RegExp[] = [
   /^[({!]\s*/,
   /^(?:do|then|else)\s+/,
   ENV_ASSIGN,
-  /^(?:time|nohup|command|exec)\s+/,
+  /^(?:time|nohup|command|exec|corepack)\s+/,
   /^nice\s+(?:-n\s*\d+\s+)?/,
   /^timeout\s+(?:(?:-k|-s|--kill-after|--signal)\s+\S+\s+|-{1,2}\S+\s+)*\d+[smhd]?\s+/,
   /^env\s+(?:-\S+\s+)*/,

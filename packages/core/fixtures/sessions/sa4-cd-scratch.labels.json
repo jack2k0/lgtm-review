@@ -1,0 +1,20 @@
+{
+  "fixture": "sa4-cd-scratch",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "S is a known scratch dir; cd $S/wt && sed resolves to /tmp/.../scratchpad/wt/src/a.ts (scratch). The later pnpm test is also in that dir. Scratch only: no-changes."
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": ["unchecked-edit:/repo/src/a.ts"],
+      "note": "cd /repo && sed resolves to /repo/src/a.ts, which is code and outside the session. No check follows, so unchecked."
+    }
+  ]
+}

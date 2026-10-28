@@ -1,0 +1,13 @@
+{
+  "fixture": "sa4-subagent-late-fail",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "failing",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [],
+      "note": "The subagent's pnpm test passes at t=10s, the main thread's pnpm test passes at t=31s, and the subagent's pnpm test fails at t=41s. All three are after the edit. Merged timestamp order makes the subagent failure the latest covering check, so failing."
+    }
+  ]
+}

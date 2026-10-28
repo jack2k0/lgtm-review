@@ -51,3 +51,11 @@ directory) and never commit them or paste their content. Only aggregates go into
 
 `fixtures/make_fixture.py` regenerates `fixtures/projects` (synthetic logs: one session of 33 prompts, one subagent transcript, one fork copy)
 and `fixtures/expected.json` (the truth status and reason class per prompt, from the PRD rules). Nothing comes from real logs.
+
+Truth rules added for status-accuracy-4 (still independent code): a recorded bash edit diff without files is no edit; a subagent run started by a
+`SendMessage` after the agent's `Agent` call belongs to the prompt of that send (other late events stay with the spawning prompt, the tool's
+split); quoted strings that are URLs or carry query / format characters are not file paths; a background check that never reported does not undo
+an earlier passing check that covers the last edit (Q4), a check that exited 130/137/143/144 or got a stop notification did not complete and is not
+failing (Q5); `cd`/`pushd` tracking through known variables with subshell scope and unknown directories (`cd -`, `~`, unresolved variable) making a
+relative target a code edit; `npm ci` is not a check; `python -c` sources are read with an import allow-list and a deny-list of identifiers (read-only
+`open`/`replace` allowed), and an opaque source counts as an edit only when it shows a write API.
