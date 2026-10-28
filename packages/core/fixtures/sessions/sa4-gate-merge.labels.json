@@ -1,0 +1,13 @@
+{
+  "fixture": "sa4-gate-merge",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "One command: a docs heredoc (not code), node scripts/gate.mjs (known non-writing, not a check) redirecting into scratch, then git merge / git mv / git commit. The .ts diff is git-made. No code edit of the agent, so no-changes. The gate script shares the command so an opaque reading would mark the .ts diff as code."
+    }
+  ]
+}

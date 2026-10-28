@@ -255,7 +255,7 @@ describe("classifyShellMutation: fail closed on unresolved shell writes (review 
     ["cd sub && git merge b && sed -i s/x/y/ plan.md && git status", false],
     ["git merge b && echo done && ls && sleep 1 && true", false],
     ["git merge b && sed -i s/x/y/ plan.md && cp /tmp/x src/a.ts", true],
-    ["git merge b && sed -i s/x/y/ plan.md && python3 -c \"open('src/a.ts','w')\"", true],
+    ["git merge b && sed -i s/x/y/ plan.md && python3 -c \"open('src/a.ts','w')\"", false],
     ["git merge b && sed -i s/x/y/ plan.md && install a b", true],
     ["git merge b && sed -i s/x/y/ plan.md && echo x > \"$UNSET\"", true],
   ])("H1 opaque: %s", (cmd, opaque) => {
@@ -301,5 +301,160 @@ describe("classifyShellMutation: write options of read-only tools, fd redirects 
     "echo x 2>&1", "echo x >&2", "echo x 2>/dev/null", "echo x &> /dev/null", "echo x 2> err.log", "echo x 2> notes.md", "ls >&-",
   ])("still known: %s", (seg) => {
     expect(classifyShellMutation(mixed(seg)).opaque).toBe(false);
+  });
+});
+
+describe("classifyShellMutation: cd and variable chains (status-accuracy-4)", () => {
+  test.each<[string, string[]]>([
+    ["cd \"$UNKNOWN\"; sed -i x a.ts", [SHELL_EDIT_FILE]],
+    ["cd - && sed -i x a.ts", [SHELL_EDIT_FILE]],
+    ["cd $(pwd)/x && sed -i x a.ts", [SHELL_EDIT_FILE]],
+    ["cd ~ && sed -i x a.ts", [SHELL_EDIT_FILE]],
+    ["S=$OTHER/f; cd $S && sed -i x a.ts", [SHELL_EDIT_FILE]],
+    ["(cd /tmp/s && sed -i x a.ts); sed -i x b.ts", ["/tmp/s/a.ts", "b.ts"]],
+    ["pushd /tmp/s && sed -i x a.ts", ["/tmp/s/a.ts"]],
+    ["cd /tmp/s && cd wt && sed -i x a.ts", ["/tmp/s/wt/a.ts"]],
+    ["cd /tmp/s && cd ../t && sed -i x a.ts", ["/tmp/t/a.ts"]],
+    ["cd \"$UNKNOWN\" && sed -i x /abs/a.ts", ["/abs/a.ts"]],
+    ["S=/tmp/x; R=$S/y; cd \"$R\" && sed -i x a.ts", ["/tmp/x/y/a.ts"]],
+    ["S=/tmp/claude-1000/x/scratchpad; cd $S/wt && sed -i x src/a.ts", ["/tmp/claude-1000/x/scratchpad/wt/src/a.ts"]],
+    ["sed -i x a.ts && cd \"$UNKNOWN\"", ["a.ts"]],
+    ["cd sub && sed -i x src/b.ts", ["src/b.ts"]],
+  ])("%s", (cmd, expected) => {
+    expect(files(cmd)).toEqual(expected);
+  });
+
+  test("a subshell cd does not move the next command, and a relative cd keeps its base", () => {
+    const sub = classifyShellMutation("(cd /tmp/s && sed -i x a.ts); sed -i x b.ts");
+    expect(sub.edits.map((e) => [e.file, e.baseDir])).toEqual([
+      ["/tmp/s/a.ts", undefined],
+      ["b.ts", ""],
+    ]);
+    const rel = classifyShellMutation("cd sub && sed -i x src/b.ts");
+    expect(rel.hasCd).toBe(true);
+    expect(rel.edits).toEqual([{ file: "src/b.ts", gitOp: false, kind: "M", baseDir: "sub" }]);
+    const before = classifyShellMutation("sed -i x a.ts && cd \"$UNKNOWN\"");
+    expect(before.edits).toEqual([{ file: "a.ts", gitOp: false, kind: "M", baseDir: "" }]);
+  });
+
+  test("a redirect on cd is applied in the old directory", () => {
+    const m = classifyShellMutation("cd /tmp/s > out.md && sed -i x a.ts");
+    expect(m.edits).toEqual([
+      { file: "out.md", gitOp: false, kind: "M", baseDir: "" },
+      { file: "/tmp/s/a.ts", gitOp: false, kind: "M" },
+    ]);
+  });
+
+  test("popd poisons later relative targets", () => {
+    expect(files("popd && sed -i x a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(classifyShellMutation("popd && sed -i x a.ts").hasCd).toBe(true);
+  });
+
+  test("git rm stays git-made beside a plain sed", () => {
+    const m = classifyShellMutation("git rm old/a.ts && sed -i 's/x/y/' src/a.ts");
+    expect(m.opaque).toBe(false);
+    expect(m.gitOnly).toBe(false);
+    expect(m.edits).toEqual([
+      { file: "old/a.ts", gitOp: true, kind: "D" },
+      { file: "src/a.ts", gitOp: false, kind: "M" },
+    ]);
+  });
+});
+
+describe("classifyShellMutation: env slots, frozen install, gate scripts, python -c (status-accuracy-4)", () => {
+  const mixed = (seg: string) => `git merge b && sed -i s/x/y/ plan.md && ${seg}`;
+
+  test("env $E / env \"$E\" of NAME=value words is a git operation", () => {
+    for (const cmd of [
+      'E="GIT_AUTHOR_NAME=x GIT_AUTHOR_EMAIL=y" && env $E git merge b',
+      'E="GIT_AUTHOR_NAME=x GIT_AUTHOR_EMAIL=y" && env "$E" git merge b',
+    ]) {
+      const m = classifyShellMutation(cmd);
+      expect(m.gitOnly, cmd).toBe(true);
+      expect(m.hasHistoryGitOp, cmd).toBe(true);
+      expect(m.opaque, cmd).toBe(false);
+    }
+  });
+
+  test("an env value that is not only NAME=value stays opaque", () => {
+    const m = classifyShellMutation('E="x y" && git merge b && sed -i s/x/y/ plan.md && env $E true');
+    expect(m.opaque).toBe(true);
+  });
+
+  test.each([
+    "npm ci",
+    "npm ci --ignore-scripts",
+    "npm --prefix packages/core ci",
+    "pnpm install --frozen-lockfile",
+    "pnpm --frozen-lockfile install",
+    "pnpm -C packages/core install --frozen-lockfile",
+    "pnpm i --frozen-lockfile",
+    "yarn install --frozen-lockfile",
+    "yarn install --immutable",
+    "yarn --immutable i",
+    "corepack pnpm install --frozen-lockfile",
+    "node scripts/gate.mjs --base main",
+    "node -r x/register scripts/gate.mjs",
+    "node --require ./reg scripts/verify-run.mjs",
+    "python3 -u scripts/gate.py",
+    "python3 -uBI scripts/validate_all.py",
+    "cd scripts && node gate.mjs",
+    "python3 -c \"print(1)\"",
+    "python3 -c \"import os; print(os.path.join('a', 'b'))\"",
+    "python3 -c \"import os; print(os.getcwd())\"",
+    "python3 -c \"print('exec(')\"",
+  ])("safe: %s", (seg) => {
+    expect(classifyShellMutation(mixed(seg)).opaque).toBe(false);
+  });
+
+  test.each([
+    "npm install",
+    "pnpm install",
+    "yarn install",
+    "pnpm i",
+    "node scripts/build.mjs",
+    "cd sub && node scripts/gate.mjs",
+    "cd /repo && node scripts/gate.mjs",
+    "node /home/user/project/scripts/gate.mjs",
+    "python3 -c \"import os; os.system('sed -i s/x/y/ src/a.ts')\"",
+    "python3 -c \"import shutil\"",
+    "python3 -c \"from shutil import copy\"",
+    "python3 -c \"import os; os.rename('a.ts', 'b.ts')\"",
+    "python3 -c \"$SRC\"",
+  ])("kept opaque: %s", (seg) => {
+    expect(classifyShellMutation(mixed(seg)).opaque).toBe(true);
+  });
+
+  test("python -c open in write mode resolves, an unknown path does not", () => {
+    const h1 = classifyShellMutation("git merge b && sed -i s/x/y/ plan.md && python3 -c \"open('src/a.ts','w')\"");
+    expect(h1.opaque).toBe(false);
+    expect(h1.edits.map((e) => e.file)).toContain("src/a.ts");
+    expect(files("python3 -c \"open('src/a.ts','w').write('x')\"")).toEqual(["src/a.ts"]);
+    expect(files("python3 -c \"open(p,'w')\"")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("python3 -c \"print(1)\"")).toEqual([]);
+    expect(files("F=src/a.ts && python3 -c \"open('$F','w').write('x')\"")).toEqual(["src/a.ts"]);
+    const indented = "python3 -c \"\n    p = 'src/a.ts'\n    open(p, 'w').write('x')\n\"";
+    expect(files(indented)).toEqual(["src/a.ts"]);
+  });
+
+  test("python -c extra write APIs are edits, and an escape wins over a parsed write", () => {
+    expect(files("python3 -c \"from pathlib import Path; Path('a.ts').unlink()\"")).toEqual([SHELL_EDIT_FILE]);
+    expect(classifyShellMutation(mixed("python3 -c \"from pathlib import Path; Path('a.ts').unlink()\"")).opaque).toBe(false);
+    const both = classifyShellMutation("python3 -c \"open('src/a.ts','w').write('x'); exec('1')\"");
+    expect(both.opaque).toBe(false);
+    expect(both.edits).toEqual([]);
+    const mixedEscape = classifyShellMutation(mixed("python3 -c \"open('src/a.ts','w').write('x'); exec('1')\""));
+    expect(mixedEscape.opaque).toBe(true);
+    expect(mixedEscape.edits.map((e) => e.file)).not.toContain("src/a.ts");
+  });
+
+  test("a gate script is not opaque and its redirect still writes", () => {
+    const m = classifyShellMutation("node scripts/gate.mjs > out.md");
+    expect(m.opaque).toBe(false);
+    expect(m.edits).toEqual([{ file: "out.md", gitOp: false, kind: "M" }]);
+    expect(m.order).toBe("unknown");
+    const scratch = classifyShellMutation("S=/tmp/claude-1000/x/scratchpad && node scripts/gate.mjs > \"$S/g.txt\"");
+    expect(scratch.opaque).toBe(false);
+    expect(scratch.edits).toEqual([]);
   });
 });

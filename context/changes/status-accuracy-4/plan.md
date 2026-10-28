@@ -53,7 +53,7 @@ Files: `shell-edits.ts`, `check-patterns.ts`, their tests, new fixtures `sa4-cd-
 - Unit tests per rule, each failing on the old code, including negatives: `cd "$UNKNOWN"; sed -i x a.ts` -> `(shell edit)`; `(cd /tmp/s && sed -i x a.ts); sed -i x b.ts` -> `/tmp/s/a.ts` scratch and `b.ts` relative to the outer cwd; `cd -` -> unknown; `node scripts/build.mjs` stays opaque; `node scripts/gate.mjs > out.md` writes `out.md`; `python3 -c "open('src/a.ts','w').write('x')"` -> `src/a.ts`; `python3 -c "open(p,'w')"` with unknown p -> `(shell edit)`; `python3 -c "print(1)"` non-writing; `corepack pnpm check` is a check, `corepack enable` is not; `env $E git merge b` with `E="GIT_AUTHOR_NAME=x GIT_AUTHOR_EMAIL=y"` is a git op.
 - Fixtures (synthetic; labels written from the rules above, not from the tool's output): `sa4-cd-scratch`: `S=/tmp/claude-1000/x/scratchpad; cd $S/wt && sed -i … src/a.ts`, then a check in scratch -> `no-changes` (scratch only); a second prompt `cd /repo && sed -i … src/a.ts` with no check -> `unchecked`. `sa4-gate-merge`: heredoc doc write, `node scripts/gate.mjs --base main > $S/g.txt`, `git merge --no-ff b && git mv context/changes/x context/archive/x && git commit` with a diff of `.ts` files -> `no-changes`.
 - Done: tests + fixtures pass; `pnpm check` green; gate exit 0/2.
-- [ ] Phase 1 done
+- [x] Phase 1 done
 
 ## Phase 2: judging (rules 7-10)
 

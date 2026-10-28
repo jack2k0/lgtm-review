@@ -1085,6 +1085,18 @@ describe("mixed git and plain commands (status-accuracy-3, G)", () => {
     expect(p).toMatchObject({ status: "unchecked", reason: "1 edit after last check" });
   });
 
+  test("cd into /tmp classifies the resolved sed target as scratch", () => {
+    const p = one([prompt("q"), ...bash("b1", "cd /tmp/s && sed -i 's/x/y/' src/a.ts")]);
+    expect(p.status).toBe("no-changes");
+    expect(p.files.map((f) => f.path)).toEqual(["/tmp/s/src/a.ts"]);
+  });
+
+  test("an absolute cd outside the session and /tmp stays a code edit", () => {
+    const p = one([prompt("q"), ...bash("b1", "cd /repo && sed -i 's/x/y/' src/a.ts")]);
+    expect(p).toMatchObject({ status: "unchecked", reason: "no checks ran (shell edits may be incomplete)" });
+    expect(p.files.map((f) => f.path)).toEqual(["/repo/src/a.ts"]);
+  });
+
   test("(e) an unresolved plain target keeps the old behaviour: everything is a plain edit", () => {
     const glob = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge b && sed -i 's/x/y/' src/*.md", [`${P}src/a.ts`, `${P}src/a.md`])]);
     expect(glob.status).toBe("unchecked");

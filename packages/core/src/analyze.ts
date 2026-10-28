@@ -229,7 +229,7 @@ function plainDiffPaths(sm: ShellMutation, diff: readonly { path: string }[], cw
   for (const e of sm.edits) {
     if (e.gitOp) continue;
     if (e.file === SHELL_EDIT_FILE) return null;
-    const target = resolveTarget(e.file, cwd, sm.hasCd);
+    const target = resolveTarget(e.file, cwd, sm.hasCd, e.baseDir);
     const rel = target.startsWith("/") ? null : normalizePath(target);
     let hit = false;
     for (const f of diff) {
@@ -675,7 +675,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             // No diff in the log (the session did not start inside the repo), or an empty one next to an explicit
             // edit (the harness snapshots before the command ends and misses edits committed within it): count the command text.
             const all = sm.edits.map((e) => {
-              const path = resolveTarget(e.file, cwd, sm.hasCd);
+              const path = resolveTarget(e.file, cwd, sm.hasCd, e.baseDir);
               const t: FileTouch = {
                 path,
                 kind: e.kind ?? ("M" as const),

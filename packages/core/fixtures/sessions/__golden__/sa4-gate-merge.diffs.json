@@ -1,0 +1,44 @@
+{
+  "0:/home/user/project/src/a.ts": {
+    "path": "/home/user/project/src/a.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "a"
+          },
+          {
+            "t": "+",
+            "s": "b"
+          }
+        ]
+      }
+    ]
+  },
+  "0:/home/user/project/src/b.ts": {
+    "path": "/home/user/project/src/b.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": [
+      {
+        "header": "@@ -1,1 +1,1 @@",
+        "lines": [
+          {
+            "t": "-",
+            "s": "c"
+          },
+          {
+            "t": "+",
+            "s": "d"
+          }
+        ]
+      }
+    ]
+  }
+}

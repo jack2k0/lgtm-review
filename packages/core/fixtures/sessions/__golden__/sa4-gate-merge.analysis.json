@@ -1,0 +1,43 @@
+{
+  "sessionId": "sa4-gate-merge",
+  "title": "Note the merge, run the gate script, and merge the branch.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Note the merge, run the gate script, and merge the branch.",
+      "status": "no-changes",
+      "reason": "no edits (git operations only)",
+      "files": [
+        {
+          "path": "/home/user/project/src/a.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": true
+        },
+        {
+          "path": "/home/user/project/src/b.ts",
+          "kind": "M",
+          "added": 1,
+          "removed": 1,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 0,
+        "writeMs": 2000,
+        "checkMs": 0,
+        "fixMs": 0
+      },
+      "activeMs": 2000,
+      "headline": "Mostly writing (100%), 0 checks",
+      "hints": [],
+      "recommendation": "skim"
+    }
+  ],
+  "warnings": []
+}
