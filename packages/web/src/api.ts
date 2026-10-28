@@ -1,4 +1,4 @@
-import { FileDiff, GitCrosscheckResponse, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
+import { FileDiff, GitCrosscheckResponse, ImportMapResponse, LlmTitlesResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
 
 /** Structural subset of a zod schema, so the web package needs no direct zod dependency. */
 interface Schema<T> {
@@ -89,3 +89,10 @@ export const fetchPlay = (token: string | null, id: string, index: number, etag:
 
 export const fetchGitCrosscheck = (token: string | null, id: string, etag: string | null, signal?: AbortSignal): Promise<Conditional<GitCrosscheckResponse>> =>
   getConditional(`api/sessions/${encodeURIComponent(id)}/git`, token, GitCrosscheckResponse, etag, signal);
+
+/**
+ * Generated prompt titles. The route always answers 200 with `no-store` and no ETag;
+ * pass `etag` null. `signal` aborts the GET when the session changes or the view unmounts.
+ */
+export const fetchTitles = (token: string | null, id: string, etag: string | null, signal?: AbortSignal): Promise<Conditional<LlmTitlesResponse>> =>
+  getConditional(`api/sessions/${encodeURIComponent(id)}/titles`, token, LlmTitlesResponse, etag, signal);

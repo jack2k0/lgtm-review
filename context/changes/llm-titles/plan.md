@@ -84,7 +84,7 @@ Files: `packages/web/src/api.ts`, `PromptTable.tsx`, `styles.css`, `titles.ts` (
 - Tests: enabled:false renders nothing and schedules no poll; titles render with the `generated` label; pending>0 polls again, 0 stops; error line; text is rendered as text (a title containing `<b>` shows literally).
 - README: "Local LLM titles (optional)" section: flags, loopback-only rule, what is sent (condensed + redacted: prompt text, step titles, file paths), where the cache lives, that summary/export never contain titles, example for Ollama / llama.cpp / LM Studio.
 - Done: `pnpm check` green; gate exit 0/2; roadmap S-08 status updated.
-- [ ] Phase 3 done
+- [x] Phase 3 done
 
 ## Amendments after plan review (binding; they override the sections above where they differ)
 
