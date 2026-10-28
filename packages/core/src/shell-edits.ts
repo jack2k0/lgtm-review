@@ -10,7 +10,7 @@ import {
   normalizeFirstToken,
   splitSegments,
   stripHeredocs,
-  HEREDOC_START_RE,
+  parseHeredocStart,
   heredocEnds,
   stripPrefixes,
   type RepoScripts,
@@ -648,11 +648,11 @@ function heredocParts(cmd: string): { body: string; quoted: boolean; closed: boo
       } else body.push(line);
       continue;
     }
-    const m = HEREDOC_START_RE.exec(line);
+    const m = parseHeredocStart(line);
     if (m) {
-      delim = m[2] ?? m[3] ?? m[4] ?? m[5] ?? null;
-      quoted = m[5] === undefined;
-      dash = m[1] === "-";
+      delim = m.delim;
+      quoted = m.quoted;
+      dash = m.dash;
     }
   }
   if (delim !== null) out.push({ body: body.join("\n"), quoted, closed: false });
@@ -1831,7 +1831,7 @@ export function classifyShellMutation(
         dirStack.push({ dir, sticky, docDir, chainCode, chainDoc, chainParen, chainCompound });
       }
       // The heredoc fed to this segment's stdin: its own, or the one that opened the pipeline it belongs to.
-      const own = HEREDOC_START_RE.test(seg.text) ? heredocs++ : null;
+      const own = parseHeredocStart(seg.text) !== null ? heredocs++ : null;
       if (!prevPipe) pipeHeredoc = null;
       if (own !== null) pipeHeredoc = own;
       const fed = own ?? (prevPipe ? pipeHeredoc : null);

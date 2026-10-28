@@ -1165,4 +1165,34 @@ describe("status-accuracy-7 heredoc forms", () => {
     const r = classifyShellMutation("cat <<EOF\r\nx\r\nEOF\r\nsed -i s/orig/X/ src/a.ts");
     expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
   });
+
+  test("sa8: the heredoc delimiter is the whole shell word (END-1 closes on END-1)", () => {
+    const r = classifyShellMutation("cat <<END-1\nx\nEND-1\nsed -i s/a/b/ src/a.ts");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
+
+  test("sa8: a quoted word with punctuation is a literal body", () => {
+    const sub = "sed -i s/a/b/ src/a.ts";
+    expect(classifyShellMutation(`cat <<'E-1'\n$(${sub})\nE-1`).edits).toEqual([]);
+    expect(classifyShellMutation(`cat <<E'-'1\n$(${sub})\nE-1`).edits).toEqual([]);
+    expect(classifyShellMutation(`cat <<\\E-1\n$(${sub})\nE-1`).edits).toEqual([]);
+  });
+
+  test("sa8: <<E.x and a quoted word with a space close on the whole word", () => {
+    const sed = "sed -i s/a/b/ src/a.ts";
+    expect(classifyShellMutation(`cat <<E.x\nbody\nE.x\n${sed}`).edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+    expect(classifyShellMutation(`cat <<"a b"\nbody\na b\n${sed}`).edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
+
+  test("sa8 review: an arithmetic << is a shift, not a heredoc", () => {
+    for (const arith of ["x=$((1<<2))", "(( x = 1 << 2 ))", "(( x <<= 2 ))", 'let "x = 1 << 2"', "y=$[1<<2]"]) {
+      const r = classifyShellMutation(`${arith}\nsed -i s/a/b/ src/a.ts`);
+      expect(r.edits.map((e) => e.file), arith).toEqual(["src/a.ts"]);
+    }
+  });
+
+  test("sa8 review: << in a comment is not a heredoc", () => {
+    const r = classifyShellMutation("echo hi # cat <<EOF\nsed -i s/a/b/ src/a.ts");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
 });
