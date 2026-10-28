@@ -1,0 +1,38 @@
+{
+  "fixture": "sa7-heredoc-forms",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "D1: <<\\EOF is a quoted delimiter, so the body is literal and the sed -i inside it never runs."
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "unchecked-edit:src/a.ts"
+      ],
+      "note": "D3: an indented EOF does not end a plain heredoc; the body is expanded by bash, so the sed -i in it writes src/a.ts. No check follows."
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "unchecked-edit:src/b.ts"
+      ],
+      "note": "D1: the apostrophe in a <<\\EOF body is literal and does not hide the later echo $(sed -i ... src/b.ts), a real write."
+    },
+    {
+      "index": 3,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "D2: a heredoc nested in a substitution of an unquoted heredoc body is not followed; the command is opaque but no edit is resolved, so no-changes."
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { projectDirFor } from "@lgtm/core/node";
+import { createTitler } from "./llm.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = join(here, "../dist/cli.js");
@@ -148,4 +149,19 @@ describe("title request shutdown", () => {
       rmSync(tmp, { recursive: true, force: true });
     }
   }, 20_000);
+});
+
+describe("title request timing", () => {
+  test("a non-loopback endpoint settles without waiting for the timeout", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "lgtm-llm-remote-"));
+    try {
+      const t = createTitler({ endpoint: new URL("http://10.0.0.1:1/v1/chat/completions"), model: "qwen3:4b", cacheDir: join(dir, "cache"), timeoutMs: 200 });
+      const started = Date.now();
+      t.enqueue("s", "1", [0, 1, 2], async (index) => ({ input: `remote-${index}`, redact: {} }));
+      await t.settled();
+      expect(Date.now() - started).toBeLessThan(400);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

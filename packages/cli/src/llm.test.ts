@@ -902,10 +902,8 @@ describe("createTitler", () => {
   test("a non-loopback endpoint is not contacted", async () => {
     const model = await fake();
     const t = titler(new URL(`http://10.0.0.1:${model.port}/v1/chat/completions`), join(scratch(), "cache"), { timeoutMs: 200 });
-    const started = Date.now();
     t.enqueue("s", "1", [0, 1, 2], loadN(3, "remote"));
     await t.settled();
-    expect(Date.now() - started).toBeLessThan(400);
     expect(model.hits).toHaveLength(0);
     expect(t.view("s").error).toBe(TITLE_ERR_UNREACHABLE);
     expect(t.view("s").pending).toBe(0);
