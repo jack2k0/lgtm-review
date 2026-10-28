@@ -167,6 +167,26 @@ describe("dedupe, metadata and warnings", () => {
     ].sort((a, b) => a.line - b.line));
   });
 
+  test("a leading UTF-8 BOM on the first line is stripped; the prompt is kept", () => {
+    const { events, warnings } = parseLines(["\uFEFF" + prompt("hello from bom")]);
+    expect(events).toMatchObject([{ type: "prompt", text: "hello from bom" }]);
+    expect(warnings).toEqual([]);
+  });
+
+  test("a BOM in the middle of line 3 is not stripped", () => {
+    const broken = prompt("keep").replace(',"uuid"', ',\uFEFF"uuid"');
+    const lines = [prompt("first"), prompt("second"), broken, prompt("after")];
+    const { events, warnings } = parseLines(lines);
+    expect(events.filter((e) => e.type === "prompt").map((e) => (e.type === "prompt" ? e.text : ""))).toEqual(["first", "second", "after"]);
+    expect(warnings).toEqual([{ line: 3, reason: "invalid JSON" }]);
+  });
+
+  test("a leading BOM on a later line is not stripped", () => {
+    const { events, warnings } = parseLines([prompt("first"), "\uFEFF" + prompt("second"), prompt("third")]);
+    expect(events.filter((e) => e.type === "prompt").map((e) => (e.type === "prompt" ? e.text : ""))).toEqual(["first", "third"]);
+    expect(warnings).toEqual([{ line: 2, reason: "invalid JSON" }]);
+  });
+
   test("malformed line in the middle warns; truncated last line warns once with its own reason", () => {
     const lines = [prompt("a"), "{ nope", "", prompt("b"), '{"type":"user","mess'];
     const { warnings, events } = parseLines(lines);
