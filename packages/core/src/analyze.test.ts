@@ -1312,3 +1312,30 @@ describe("status-accuracy-4 phase 2", () => {
     expect(p.hints).toEqual([]);
   });
 });
+
+describe("C13: gate script after an absolute cd", () => {
+  const P = "/home/user/project";
+  const diffOf = (paths: string[]) => ({
+    bashEditDiff: {
+      files: paths.map((filePath) => ({ filePath, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ["-a", "+b", "+c"] }] })),
+    },
+  });
+  const run = (cmd: string) =>
+    one([
+      prompt("q"),
+      toolUse("b1", "Bash", { command: cmd }),
+      toolResult("b1", "", { toolUseResult: diffOf([`${P}/src/a.ts`]) }),
+    ]);
+
+  test("a sibling worktree gate script lets the merge diff stay git-made", () => {
+    const cmd = `cd ${P}-x && node scripts/gate.mjs --merge > /tmp/g.txt && git merge --no-ff b && sed -i 's/a/b/' README.md`;
+    expect(run(cmd)).toMatchObject({ status: "no-changes", reason: "no edits (git operations only)" });
+  });
+
+  test("an unrelated absolute directory and a non-gate script stay opaque", () => {
+    const other = `cd /tmp/other && node scripts/gate.mjs && git merge --no-ff b && sed -i 's/a/b/' README.md`;
+    const build = `cd ${P} && node scripts/build.mjs && git merge --no-ff b && sed -i 's/a/b/' README.md`;
+    expect(run(other).status).toBe("unchecked");
+    expect(run(build).status).toBe("unchecked");
+  });
+});

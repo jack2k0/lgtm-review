@@ -684,9 +684,12 @@ function writesOutputFile(head: string, words: Word[]): boolean {
  * (`2> f`, `&> f`, `>& f`) also a known target that is neither scratch/log nor documentation.
  */
 function writesUnseen(r: Redirect): boolean {
-  if (r.target === null || isUnknownTarget(r.target)) return true;
+  if (r.target === null) return true;
+  // `$S/…`, `$TMPDIR/…`, logs and other scratch targets are not work-tree writes, even before `$S` is substituted.
+  if (isIgnoredPath(r.target.text)) return false;
+  if (isUnknownTarget(r.target)) return true;
   if (r.fd === "" || r.fd === "1") return false;
-  return !isIgnoredPath(r.target.text) && !isDocPath(r.target.text);
+  return !isDocPath(r.target.text);
 }
 
 /** Working directory while one command is scanned. `rel` is joined onto the session cwd later. */
@@ -862,20 +865,66 @@ function scriptOperand(words: Word[], kind: "node" | "py"): Word | null {
 }
 
 /**
- * `node` / `python` whose first real operand is a repo-relative `scripts/(gate|check|verify|validate)…` file.
- * An absolute cwd or an absolute script fails closed (not repo-relative).
+ * `node` / `python` whose first real operand is `scripts/(gate|check|verify|validate)…`.
+ * A relative cwd must stay repo-relative (`scripts/…`). An absolute cwd counts only when that directory
+ * is the session repo root, a directory under it, or a sibling worktree `<parent>/<basename>-<segment>` (C13).
+ * Any other absolute directory, or an absolute script path, fails closed.
  */
-function isGateScript(words: Word[], dir: Dir): boolean {
+function isGateScript(words: Word[], dir: Dir, repoRoots: readonly string[]): boolean {
   const head = words[0]?.text ?? "";
   const kind = head === "node" ? "node" : /^python[\d.]*$/.test(head) ? "py" : null;
-  if (kind === null || dir.k === "unknown" || dir.k === "abs") return false;
+  if (kind === null || dir.k === "unknown") return false;
   const op = scriptOperand(words, kind);
   if (op === null || op.dynamic || op.text.startsWith("/") || op.text.startsWith("~")) return false;
+  if (dir.k === "abs") {
+    if (!repoRoots.some((root) => gateDirTrusted(dir.path, root))) return false;
+    return isScriptsGateFile(dir.path, op.text);
+  }
   const joined = dir.k === "rel" ? `${dir.path}/${op.text}` : op.text;
   const p = normalizePath(joined);
   if (p.startsWith("/") || p.startsWith("..") || !p.startsWith("scripts/")) return false;
   const base = p.slice(p.lastIndexOf("/") + 1);
   return GATE_BASE_RE.test(base);
+}
+
+/** `<dir>/scripts/<gate|check|verify|validate name>`, not a file nested under `scripts/`. */
+function isScriptsGateFile(dir: string, operand: string): boolean {
+  const script = normalizePath(`${dir}/${operand}`);
+  const prefix = `${normalizePath(dir)}/scripts/`;
+  if (!script.startsWith(prefix)) return false;
+  const name = script.slice(prefix.length);
+  return name !== "" && !name.includes("/") && GATE_BASE_RE.test(name);
+}
+
+/**
+ * Absolute directory that may hold a repo gate script (C13). `<anything>` in the sibling form is one
+ * path segment: the worktree directory itself, not a directory under that worktree.
+ */
+function gateDirTrusted(dir: string, repoRoot: string): boolean {
+  const d = normalizePath(dir);
+  const root = normalizePath(repoRoot);
+  if (!d.startsWith("/") || !root.startsWith("/")) return false;
+  if (d === root || d.startsWith(`${root}/`)) return true;
+  const slash = root.lastIndexOf("/");
+  const parent = root.slice(0, slash);
+  const base = root.slice(slash + 1);
+  if (base === "") return false;
+  const prefix = `${parent}/${base}-`;
+  if (!d.startsWith(prefix)) return false;
+  const rest = d.slice(prefix.length);
+  return rest.length > 0 && !rest.includes("/");
+}
+
+function asRepoRoots(repoRoot: string | readonly (string | null | undefined)[] | null | undefined): string[] {
+  if (repoRoot == null) return [];
+  const list = typeof repoRoot === "string" ? [repoRoot] : repoRoot;
+  const out: string[] = [];
+  for (const raw of list) {
+    if (typeof raw !== "string" || !raw.startsWith("/")) continue;
+    const n = normalizePath(raw);
+    if (n.startsWith("/") && !out.includes(n)) out.push(n);
+  }
+  return out;
 }
 
 /** Drops the common leading indent, the way `textwrap.dedent` does, so a quoted `-c` body binds at column 0. */
@@ -1037,11 +1086,79 @@ function substPySource(w: Word, vars: ReadonlyMap<string, string>): string | nul
 
 type PyC = { kind: "safe" } | { kind: "opaque" } | { kind: "write"; files: string[]; opaque?: boolean };
 
+/** Positional or `mode=` argument of `open(…)`, or undefined for `open(path)` and keyword-only calls. */
+function openModeArg(args: string): string | undefined {
+  const parts = splitTop(args, ",").map((x) => x.trim());
+  const kw = parts.find((x) => /^mode\s*=/.test(x));
+  if (kw !== undefined) return kw.replace(/^mode\s*=\s*/, "").trim();
+  const second = parts[1];
+  if (second === undefined || /^\w+\s*=(?!=)/.test(second)) return undefined;
+  return second.trim();
+}
+
+function modeLiteral(mode: string): string | null {
+  const lit = /^(['"])([^'"\n]*)\1$/.exec(mode);
+  return lit ? (lit[2] as string) : null;
+}
+
+/** `open(path)` or `open(path, "r"|"rb")` (C14). Other literal modes are not reads for this exemption. */
+function isReadOpenArgs(args: string): boolean {
+  const mode = openModeArg(args);
+  if (mode === undefined) return true;
+  const lit = modeLiteral(mode);
+  return lit === "r" || lit === "rb";
+}
+
+/** `open(p, m)` / `open(p, mode)`: the mode is not a string literal, so the call may write (C14). */
+function hasNonLiteralOpenMode(src: string): boolean {
+  const blank = pyCode(src);
+  const stripped = stripPyComments(src);
+  for (const m of blank.matchAll(/\bopen\s*\(/g)) {
+    const at = m.index ?? 0;
+    const paren = at + m[0].length - 1;
+    const args = balancedArgs(stripped, paren);
+    if (args === null) continue;
+    const mode = openModeArg(args);
+    if (mode !== undefined && modeLiteral(mode) === null) return true;
+  }
+  return false;
+}
+
+/** `Path(…).replace(`, which is not `str.replace` (C14). */
+function pathReplaceCall(src: string): boolean {
+  return /Path\s*\([^)]*\)\s*\.\s*replace\s*\(/.test(pyCode(src));
+}
+
+/**
+ * Indexes C14 ignores on a resolved write: read `open` and `.replace(`. Only when every import is
+ * allow-listed and the source has no `Path`, `pathlib`, or `os` import. A source with no resolved write
+ * still uses the full forbidden list, so a bare read or `str.replace` stays opaque.
+ */
+function c14Exempt(src: string): Set<number> {
+  if (!pyImportsAllowed(src)) return new Set();
+  const blank = pyCode(src);
+  if (/\bPath\b/.test(blank) || /\bpathlib\b/.test(blank)) return new Set();
+  if (/\bimport\s+os\b/.test(blank) || /\bfrom\s+os\b/.test(blank)) return new Set();
+  const exempt = new Set<number>();
+  for (const m of blank.matchAll(/\.\s*replace\s*\(/g)) {
+    exempt.add((m.index ?? 0) + m[0].lastIndexOf("replace"));
+  }
+  const stripped = stripPyComments(src);
+  for (const m of blank.matchAll(/\bopen\s*\(/g)) {
+    const at = m.index ?? 0;
+    const paren = at + m[0].length - 1;
+    const args = balancedArgs(stripped, paren);
+    if (args !== null && isReadOpenArgs(args)) exempt.add(at);
+  }
+  return exempt;
+}
+
 /**
  * `python -c <src>` (optional `-u`/`-B`/`-I`/`-E`/`-s`/`-S`/`-O` before `-c`). Null when this is not `-c`
  * (a script operand or `-` for a heredoc). An escape (C1) drops a parsed write. Otherwise C12: non-writing only
  * when every import is allow-listed and no forbidden name occurs; a resolved write stays, and is non-opaque
- * only when those same conditions hold and every forbidden name belongs to that write.
+ * only when those same conditions hold and every forbidden name belongs to that write. C14: on that resolved
+ * write, a read `open` and `str.replace` do not count, and a non-literal `open` mode stays opaque.
  */
 function classifyPyC(words: Word[], vars: ReadonlyMap<string, string>): PyC | null {
   const head = words[0]?.text ?? "";
@@ -1067,7 +1184,20 @@ function classifyPyC(words: Word[], vars: ReadonlyMap<string, string>): PyC | nu
   const extra = hasExtraWrite(code);
   const importsOk = pyImportsAllowed(code);
   const forbidden = forbiddenIdents(code);
-  const allow = importsOk && forbidden.every((id) => info.owned.has(id.index));
+  // A non-literal mode can hide a write. Keep the shell edit and refuse a per-file split (C14).
+  if (hasNonLiteralOpenMode(code)) {
+    const files = info.files.length > 0 ? [...info.files] : [SHELL_EDIT_FILE];
+    if (!files.includes(SHELL_EDIT_FILE)) files.push(SHELL_EDIT_FILE);
+    return { kind: "write", files, opaque: true };
+  }
+  // `Path(…).replace` is not `str.replace`. It stays a shell edit and opaque (C14).
+  if (pathReplaceCall(code)) {
+    const files = info.files.length > 0 ? [...info.files] : [SHELL_EDIT_FILE];
+    if (!files.includes(SHELL_EDIT_FILE)) files.push(SHELL_EDIT_FILE);
+    return { kind: "write", files, opaque: true };
+  }
+  const exempt = c14Exempt(code);
+  const allow = importsOk && forbidden.every((id) => info.owned.has(id.index) || exempt.has(id.index));
   // A path we resolved, and no write we failed to resolve and no extra API.
   if (info.resolved && !info.unresolved && !extra) {
     if (info.files.length === 0) return allow ? { kind: "safe" } : { kind: "opaque" };
@@ -1088,7 +1218,7 @@ function classifyPyC(words: Word[], vars: ReadonlyMap<string, string>): PyC | nu
 }
 
 /** Segments known not to write files (beyond what `segmentMutation` already reported). */
-function isKnownNonWriting(rawWords: Word[], redirects: Redirect[], dir: Dir, vars: ReadonlyMap<string, string>): boolean {
+function isKnownNonWriting(rawWords: Word[], redirects: Redirect[], dir: Dir, vars: ReadonlyMap<string, string>, repoRoots: readonly string[]): boolean {
   const words = unwrapXargs(rawWords.map((w) => substituteVars(w, vars)));
   const head = words[0]?.text;
   if (head === undefined) return redirects.length === 0;
@@ -1103,7 +1233,7 @@ function isKnownNonWriting(rawWords: Word[], redirects: Redirect[], dir: Dir, va
     if (git.sub === "config") return git.args.some((w) => w.text === "--get" || w.text === "--get-all" || w.text === "--list" || w.text === "-l");
     return false;
   }
-  if (isFrozenInstall(words) || isGateScript(words, dir)) return true;
+  if (isFrozenInstall(words) || isGateScript(words, dir, repoRoots)) return true;
   const pyc = classifyPyC(words, vars);
   if (pyc?.kind === "safe") return true;
   if (pyc !== null) return false;
@@ -1270,9 +1400,14 @@ export function resolveTarget(file: string, cwd: string | null, hasCd: boolean, 
  * Heuristic view of a Bash command's file mutations. Does not decide whether the command succeeded:
  * the caller counts the result only for successful calls.
  */
-export function classifyShellMutation(command: string, repo?: RepoScripts): ShellMutation {
+export function classifyShellMutation(
+  command: string,
+  repo?: RepoScripts,
+  repoRoot?: string | readonly (string | null | undefined)[] | null,
+): ShellMutation {
   try {
     if (typeof command !== "string" || command.trim() === "") return NONE;
+    const repoRoots = asRepoRoots(repoRoot);
     const segs = splitSegments(stripHeredocs(command));
     const checkIdx: number[] = [];
     const plainIdx: number[] = [];
@@ -1332,7 +1467,7 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
       }
       const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, heredoc, unsure, vars);
       if (m?.opaque) opaque = true;
-      if (m === null && !isCheck && !isKnownNonWriting(words, redirects, placeDir, vars)) opaque = true;
+      if (m === null && !isCheck && !isKnownNonWriting(words, redirects, placeDir, vars, repoRoots)) opaque = true;
       prevCheck = isCheck;
       prevPipe = seg.op === "|";
       if (isCheck) checkIdx.push(i);
@@ -1369,7 +1504,9 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
         e.baseDir = "";
       }
     }
-    if (!anyMutating) return NONE;
+    // No parsed edit drops `opaque`, so an escaped `python -c` alone stays non-opaque (existing expectation).
+    // After `cd`, keep it: `cd /tmp/other && node scripts/gate.mjs` is opaque (C13) even with no edit.
+    if (!anyMutating) return opaque && hasCd ? { ...NONE, hasCd: true, opaque: true } : NONE;
     let order: ShellMutation["order"] = "unknown";
     if (checkIdx.length > 0 && plainIdx.length > 0) {
       const lastCheck = checkIdx[checkIdx.length - 1] as number;

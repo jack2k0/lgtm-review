@@ -524,4 +524,42 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     expect(scratch.opaque).toBe(false);
     expect(scratch.edits).toEqual([]);
   });
+
+  test("C13: gate scripts after an absolute cd into the repo or a sibling worktree", () => {
+    const repo = "/abs/repo";
+    const at = (cmd: string, root?: string) => classifyShellMutation(cmd, undefined, root);
+    const sibling = "cd /abs/repo-x && node scripts/gate.mjs --merge > $S/g.txt";
+    // Scratch redirect, no work-tree edit. Non-opaque only once that directory is a sibling worktree.
+    const bare = at(sibling, repo);
+    expect(bare.opaque).toBe(false);
+    expect(bare.edits).toEqual([]);
+    // A parsed edit keeps the opaque flag, which an absolute cd used to force on.
+    expect(at(mixed(sibling), repo).opaque).toBe(false);
+    expect(at(mixed("cd /abs/repo && node scripts/gate.mjs"), repo).opaque).toBe(false);
+    expect(at(mixed("cd /abs/repo/pkg && node ./scripts/validate_all.py"), repo).opaque).toBe(false);
+    expect(at("cd /tmp/other && node scripts/gate.mjs", repo).opaque).toBe(true);
+    expect(at("cd /abs/repo && node scripts/build.mjs", repo).opaque).toBe(true);
+    expect(at(mixed("cd /tmp/other && node scripts/gate.mjs"), repo).opaque).toBe(true);
+    expect(at(mixed("cd /abs/repo && node scripts/build.mjs"), repo).opaque).toBe(true);
+    // No known repo root: an absolute cd still refuses the script.
+    expect(at(mixed("cd /abs/repo-x && node scripts/gate.mjs")).opaque).toBe(true);
+  });
+
+  test("C14: read open and str.replace stay allowed on a resolved python -c write", () => {
+    const src = "p='docs/a.md';s=open(p).read();s=s.replace('a','b');open(p,'w').write(s)";
+    const cmd = `python3 -c ${JSON.stringify(src)}`;
+    const m = classifyShellMutation(cmd);
+    expect(m.opaque).toBe(false);
+    expect(m.edits.map((e) => e.file)).toEqual(["docs/a.md"]);
+    expect(classifyShellMutation(mixed(cmd)).opaque).toBe(false);
+    const readMode = `python3 -c ${JSON.stringify("p='docs/a.md';s=open(p, 'rb').read();open(p,'w').write(s)")}`;
+    expect(classifyShellMutation(readMode).opaque).toBe(false);
+    expect(files(readMode)).toEqual(["docs/a.md"]);
+    const dynamic = classifyShellMutation(`python3 -c ${JSON.stringify("open(p, m)")}`);
+    expect(dynamic.opaque).toBe(true);
+    expect(dynamic.edits.map((e) => e.file)).toEqual([SHELL_EDIT_FILE]);
+    const pathReplace = classifyShellMutation(`python3 -c ${JSON.stringify("from pathlib import Path; Path(p).replace(q)")}`);
+    expect(pathReplace.opaque).toBe(true);
+    expect(pathReplace.edits.map((e) => e.file)).toEqual([SHELL_EDIT_FILE]);
+  });
 });

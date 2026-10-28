@@ -706,7 +706,8 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
         // One record per origin: git-made files never change the status, plain edits do (A1).
         const groups: { files: FileTouch[]; gitOp: boolean }[] = [];
         if (use.name === "Bash" && use.input.command !== undefined) {
-          const sm = classifyShellMutation(use.input.command, opts.repo);
+          // C13: the repo root analyze knows is the call cwd and the session cwd (no separate git toplevel).
+          const sm = classifyShellMutation(use.input.command, opts.repo, [use.cwd, parser.meta().cwd]);
           const cwd = use.cwd ?? parser.meta().cwd;
           if (ev.bashEditDiff !== undefined && ev.bashEditDiff.length > 0) {
             const plain = sm.hasHistoryGitOp && !sm.gitOnly && !sm.opaque ? plainDiffPaths(sm, ev.bashEditDiff, cwd, (path) => classify(path, use) === "code") : null;
