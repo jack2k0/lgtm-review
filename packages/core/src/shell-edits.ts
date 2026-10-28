@@ -326,6 +326,16 @@ const GIT_APPLY_READONLY = new Set(["--check", "--stat", "--numstat", "--summary
 
 const PY_WRITE_RE = /\.write_(?:text|bytes)\s*\(/g;
 const PY_OPEN_CALL_RE = /\bopen\s*\(/g;
+// R2: an execution or OS surface in heredoc-fed python. Deny-list in the safe direction (opacity on).
+const PY_SURFACE_MODULE_RE = /\b(?:import|from)\b[^\n;]*\b(?:os|subprocess|shutil|pty|importlib|ctypes|multiprocessing|pathlib)\b/;
+const PY_SURFACE_CALL_RE = /\b(?:exec|eval|compile|__import__|getattr|globals|system|popen|spawn\w*)\b/;
+const PY_PATH_IMPORT_RE = /\bfrom\s+pathlib\s+import\s+Path(?:\s+as\s+\w+)?[ \t]*(?=$|[;\n])/gm;
+
+function pythonHasSurface(raw: string): boolean {
+  const body = stripPyComments(raw).replace(PY_PATH_IMPORT_RE, "");
+  return PY_SURFACE_MODULE_RE.test(body) || PY_SURFACE_CALL_RE.test(body);
+}
+
 const PY_BIND_RE = /(?:^|[;\n])[ \t]*(\w+)[ \t]*=(?!=)[ \t]*([^;\n]+)/g;
 
 /** Splits `s` at the top-level occurrences of `sep` (outside quotes and brackets). */
@@ -563,6 +573,8 @@ interface MutFile {
 }
 
 interface SegMut {
+  /** The segment writes files we resolved, but also runs code we cannot read (R2). */
+  opaque?: boolean;
   gitOp: boolean;
   /** A history-moving git operation (`GIT_OPS`), as opposed to `git rm` / `git apply`. */
   history: boolean;
@@ -717,7 +729,7 @@ const SAFE_HEADS = new Set(
   (
     "cd pushd popd echo printf ls cat true false : test [ [[ sleep export set unset pwd " +
     // read-only text and system tools
-    "tail head grep egrep fgrep rg cut wc tr sort uniq diff cmp jq column nl basename dirname realpath readlink stat file du df date which type whoami hostname -v -V " +
+    "tail head grep egrep fgrep rg cut wc tr sort uniq diff cmp jq column nl basename dirname realpath readlink stat file du df date seq which type whoami hostname -v -V " +
     // shell keywords and grouping
     "for do done if then else elif fi while until case esac break continue exit return { } ( ) " +
     // creates directories only; terminal control
@@ -1233,6 +1245,70 @@ function readCommandNest(s: string, i: number): { body: string; next: number } {
 }
 
 /**
+ * R1: the text inside every `$(…)`, backtick and `<(…)` / `>(…)` of a command (single quotes skipped,
+ * double quotes not). `unsure` when one cannot be followed to its end. `$((…))` is arithmetic: not a body.
+ */
+function substitutionBodies(cmd: string): { bodies: string[]; unsure: boolean } {
+  const bodies: string[] = [];
+  let unsure = false;
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i] as string;
+    if (quote === "'") {
+      if (c === "'") quote = null;
+      continue;
+    }
+    if (c === "\\") {
+      i++;
+      continue;
+    }
+    if (c === "'" && quote === null) {
+      quote = "'";
+      continue;
+    }
+    if (c === '"') {
+      quote = quote === '"' ? null : '"';
+      continue;
+    }
+    if (c === "`") {
+      let end = -1;
+      for (let j = i + 1; j < cmd.length; j++) {
+        if (cmd[j] === "\\") j++;
+        else if (cmd[j] === "`") {
+          end = j;
+          break;
+        }
+      }
+      if (end < 0) {
+        unsure = true;
+        bodies.push(cmd.slice(i + 1).replace(/\\`/g, "`"));
+        break;
+      }
+      bodies.push(cmd.slice(i + 1, end).replace(/\\`/g, "`"));
+      i = end;
+      continue;
+    }
+    const dollar = c === "$" && cmd[i + 1] === "(";
+    const proc = quote === null && (c === "<" || c === ">") && cmd[i + 1] === "(";
+    if (!dollar && !proc) continue;
+    if (dollar && cmd[i + 2] === "(") {
+      i += 2; // arithmetic or a nested group: keep scanning inside it
+      continue;
+    }
+    const open = i + 1;
+    const close = closeParen(cmd, open);
+    if (close < 0) {
+      unsure = true;
+      bodies.push(cmd.slice(open + 1));
+      break;
+    }
+    bodies.push(cmd.slice(open + 1, close));
+    i = close;
+  }
+  return { bodies, unsure };
+}
+
+/**
  * Bare `cd` / `pushd` / `popd` words, including inside `$(...)` and backticks.
  * Quoted text is skipped (a quoted `cd` does not run), except those nests, which do.
  * `/tmp/cd` is one word, not a `cd`.
@@ -1530,6 +1606,7 @@ function segmentMutation(
   let gitOp = false;
   let history = false;
   let mutating = false;
+  let surface = false;
 
   const git = gitSub(words);
   if (git !== null) {
@@ -1596,6 +1673,7 @@ function segmentMutation(
     const dash = words.findIndex((w) => w.text === "-");
     const argv = dash < 0 ? [] : words.slice(dash + 1).map((w) => shellArg(w, vars));
     const f = heredoc === null ? [SHELL_EDIT_FILE] : pythonWrites(heredoc, argv);
+    surface = heredoc !== null && pythonHasSurface(heredoc);
     mutating = f.length > 0;
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
   }
@@ -1614,7 +1692,7 @@ function segmentMutation(
       files.push({ file: r.target.text, kind: "M" as const });
     }
   }
-  return mutating ? { gitOp, history, files } : null;
+  return mutating ? { gitOp, history, files, ...(surface ? { opaque: true } : {}) } : null;
 }
 
 /** Normalizes `.`/`..` segments of a path without touching the file system. */
@@ -1690,11 +1768,10 @@ export function classifyShellMutation(
     // Untrusted `cd` / `pushd` / `popd` outside a subshell leaves the directory unknown.
     // A grouping `( … )` saves the directory state and puts it back at the closing `)`.
     let sticky = false;
-    // Literal absolute `cd` / `pushd` that does not resolve code (C18, or a C19b `||` / `&` list).
+    // Literal absolute `cd` / `pushd` that does not resolve code (C18, or a C19 chain that has ended).
     // Documentation is placed there; every other relative target stays unresolved.
     let docDir: string | null = null;
-    // C19b: set while a `cd &&` list is open, so a later `||` at this depth can drop the directory.
-    // `;`, a newline, and `|` leave the directory in place (C17).
+    // C19: code resolves only while this `cd &&` chain is still open, at `chainParen` / `chainCompound`.
     let chainCode = false;
     let chainDoc: string | null = null;
     let chainParen = 0;
@@ -1755,9 +1832,8 @@ export function classifyShellMutation(
       const headIsDir = head === "cd" || head === "pushd" || head === "popd";
       const otherDir = bareDirWordCount(expanded) - (headIsDir ? 1 : 0) > 0 || aliasDefinesDirChange(expanded);
       const nextHead = commandHead(segs[i + 1]?.text ?? "");
-      // C19b: a top-level `cd` / `pushd` followed by `&&` keeps its directory (C17), including after
-      // `;`, a newline, `|`, or a compound. It does not when the list is backgrounded, the cd is
-      // preceded by `||`, or a `||` tail follows (other than `|| exit` / `|| return`).
+      // Code follows a top-level `cd` / `pushd` only inside its `&&` chain (C19), or for the rest of the
+      // command after `|| exit` / `|| return`. A `||` before the cd, or a list that ends in `&`, does neither.
       const dirHead = (head === "cd" || head === "pushd") && !otherDir && !nested && !hides && !prevPipe;
       const baseParen = dirStack.length;
       const baseCompound = compound;
@@ -1847,6 +1923,7 @@ export function classifyShellMutation(
       if (isCheck) checkIdx.push(i);
       if (m !== null) {
         anyMutating = true;
+        if (m.opaque) opaque = true;
         if (m.history) hasHistoryGitOp = true;
         if (!m.gitOp) {
           anyPlain = true;
@@ -1892,26 +1969,45 @@ export function classifyShellMutation(
           funcBraces = 0;
         }
       }
-      // `|` stays in the list (`cd && a | b || c`). `;`, newline, and end of command close it
-      // without forgetting the directory. `||` and `&` are the deterministic misses: later code is
-      // unresolved, and a literal absolute cd still places documentation.
-      if (
-        chainCode &&
-        dirStack.length === chainParen &&
-        compound === chainCompound &&
-        seg.op !== "&&" &&
-        seg.op !== "|"
-      ) {
-        if (seg.op === "||" || seg.op === "&") {
-          dir = { k: "unknown" };
-          docDir = chainDoc;
-          sawCd = true;
-          sticky = true;
-        }
+      // The segment was placed with the chain directory. A terminator at the chain's own depth
+      // (`;`, newline, `|`, `||`, `&`, end) drops code resolution. A literal absolute cd keeps docs.
+      if (chainCode && dirStack.length === chainParen && compound === chainCompound && seg.op !== "&&") {
+        dir = { k: "unknown" };
+        docDir = chainDoc;
+        sawCd = true;
+        sticky = true;
         chainCode = false;
       }
       listMarks.push({ afterParen: dirStack.length, afterCompound: compound, op: seg.op });
     });
+    // R1: command substitutions are commands of their own. A `cd` inside never leaks out.
+    const nests = substitutionBodies(stripHeredocs(command));
+    if (nests.unsure) opaque = true;
+    for (const body of nests.bodies) {
+      if (body.trim() === "") continue;
+      const inner = classifyShellMutation(body, repo, repoRoot);
+      if (inner.opaque) opaque = true;
+      if (inner.edits.length === 0) continue;
+      anyMutating = true;
+      if (!inner.gitOnly) anyPlain = true;
+      if (inner.hasHistoryGitOp) hasHistoryGitOp = true;
+      const hostAt = segs.findIndex((x) => x.text.includes(body));
+      if (!inner.gitOnly) plainIdx.push(hostAt < 0 ? segs.length - 1 : hostAt);
+      for (const e of inner.edits) {
+        // A relative target after an outer `cd` has no known directory.
+        const lost = hasCd && e.baseDir === undefined && !e.file.startsWith("/") && !e.file.startsWith("~");
+        const target: ShellEditTarget = lost ? { file: SHELL_EDIT_FILE, gitOp: e.gitOp, kind: e.kind ?? "M" } : e;
+        const kind = target.kind ?? "M";
+        const key = `${target.gitOp ? "g" : "e"}\u0000${kind}\u0000${target.file}\u0000${target.baseDir ?? ""}`;
+        if (seen.has(key)) continue;
+        if (edits.length >= FILES_MAX) {
+          truncated = true;
+          continue;
+        }
+        seen.add(key);
+        edits.push(target);
+      }
+    }
     // A relative edit from before the first `cd` still belongs to the session cwd.
     if (hasCd) {
       for (const e of edits) {

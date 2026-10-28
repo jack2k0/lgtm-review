@@ -252,6 +252,23 @@ function plainDiffPaths(sm: ShellMutation, diff: readonly { path: string }[], cw
   return out;
 }
 
+/**
+ * R3: diff files that a parsed git operation of the command explains (`git mv` / `git rm` targets).
+ * Used when the command is opaque: every other diff file may come from the opaque part, so it counts as a plain edit.
+ */
+function gitExplainedDiffPaths(sm: ShellMutation, diff: readonly { path: string }[], cwd: string | null): Set<string> {
+  const out = new Set<string>();
+  for (const e of sm.edits) {
+    if (!e.gitOp || e.file === SHELL_EDIT_FILE) continue;
+    const target = resolveTarget(e.file, cwd, sm.hasCd, e.baseDir);
+    const rel = target.startsWith("/") ? null : normalizePath(target);
+    for (const f of diff) {
+      if (rel === null ? f.path === normalizePath(target) : rel !== "" && !rel.startsWith("..") && !rel.startsWith("~") && (f.path === rel || f.path.endsWith(`/${rel}`))) out.add(f.path);
+    }
+  }
+  return out;
+}
+
 /** Basename has no dot (`archive`, `GNUmakefile`). `.` / `..` and names like `a.ts` are not. */
 function extensionlessPath(path: string): boolean {
   const base = path.replace(/\/+$/, "").split("/").pop() ?? "";
@@ -722,8 +739,10 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           const cwd = use.cwd ?? parser.meta().cwd;
           if (ev.bashEditDiff !== undefined && ev.bashEditDiff.length > 0) {
             const plain = sm.hasHistoryGitOp && !sm.gitOnly && !sm.opaque ? plainDiffPaths(sm, ev.bashEditDiff, cwd, (path) => classify(path, use) === "code") : null;
+            // R3: a history git op next to an opaque segment does not make every diff file git-made.
+            const gitExplained = sm.hasHistoryGitOp && sm.gitOnly && sm.opaque ? gitExplainedDiffPaths(sm, ev.bashEditDiff, cwd) : null;
             const all = ev.bashEditDiff.map((f) => {
-              const gitMade = plain === null ? sm.gitOnly : !plain.has(f.path);
+              const gitMade = gitExplained !== null ? gitExplained.has(f.path) : plain === null ? sm.gitOnly : !plain.has(f.path);
               const path = canonicalAbs(f.path);
               const t: FileTouch = {
                 path,
@@ -738,8 +757,8 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               if (detail) t.patch = retain(use.prompt, f.path, f.patch);
               return { t, gitMade };
             });
-            for (const gitOp of plain === null ? [sm.gitOnly] : [true, false]) {
-              const files = all.filter((x) => (plain === null ? true : x.gitMade === gitOp)).map((x) => x.t);
+            for (const gitOp of plain === null && gitExplained === null ? [sm.gitOnly] : [true, false]) {
+              const files = all.filter((x) => (plain === null && gitExplained === null ? true : x.gitMade === gitOp)).map((x) => x.t);
               if (files.length > 0) groups.push({ files, gitOp });
             }
             touches = all.map((x) => x.t);

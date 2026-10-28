@@ -429,6 +429,17 @@ describe("git operations", () => {
     expect(p.status).toBe("unchecked");
   });
 
+  test("R3: a history git op next to an opaque segment leaves the unexplained diff file a plain code edit", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git merge b && node scripts/build.mjs", "/home/user/project/src/c.js")]);
+    expect(p.status).toBe("unchecked");
+    expect(p.files.map((f) => f.path)).toContain("/home/user/project/src/c.js");
+  });
+
+  test("R3: a parsed git mv target next to an opaque segment stays git-made", () => {
+    const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...diffBash("b2", "git mv a.js b.js && node scripts/build.mjs", "/home/user/project/b.js")]);
+    expect(p.status).toBe("checked");
+  });
+
   test("git op edits do not feed the hints", () => {
     const p = one([prompt("q"), ...diffBash("b1", "git merge main", "/home/user/project/src/auth/login.js")]);
     expect(p.hints).toEqual([]);

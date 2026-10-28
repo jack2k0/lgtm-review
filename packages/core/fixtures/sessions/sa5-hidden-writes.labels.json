@@ -1,0 +1,31 @@
+{
+  "fixture": "sa5-hidden-writes",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "unchecked-edit:src/a.ts"
+      ],
+      "note": "R1: the sed -i inside $( ) is a real write to src/a.ts hidden in a command substitution. It is a code edit and no check follows, so unchecked."
+    },
+    {
+      "index": 1,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "R1 negative: git rev-parse inside $( ) only reads. No edits."
+    },
+    {
+      "index": 2,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "unchecked-edit:src/c.ts"
+      ],
+      "note": "R3: git merge next to an opaque build script. The diff file src/c.ts is not explained by any parsed git operation, so it is a plain code edit. No check follows, so unchecked."
+    }
+  ]
+}
