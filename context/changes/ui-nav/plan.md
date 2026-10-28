@@ -49,4 +49,4 @@ The response carries no worktree per file, so group by what it does carry. In `G
 - No author filter, no "files the session touched" filter in the Git view.
 - No responsive redesign beyond the horizontal scroller.
 
-- [ ] Phase 1 done
+- [x] Phase 1 done

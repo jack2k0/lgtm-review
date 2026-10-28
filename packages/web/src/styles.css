@@ -258,6 +258,8 @@ tr.detail > td { background: var(--surface); }
 .map-legend-dash { display: inline-block; width: 16px; border-top: 2px dashed var(--map-edge); }
 .map-legend-edge-new { display: inline-block; width: 16px; border-top: 2px solid var(--text); }
 .map-scroll { overflow-x: auto; margin-top: 8px; }
+.table-scroll { overflow-x: auto; max-width: 100%; }
+.table-scroll table { min-width: 640px; }
 .import-map { display: block; max-width: none; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); }
 .map-band { fill: var(--map-band); }
 .map-layer-name { fill: var(--text); font-size: 12px; font-weight: 600; }

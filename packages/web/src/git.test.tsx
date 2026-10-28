@@ -45,7 +45,7 @@ describe("GitView", () => {
     expect(html).toContain("uncommitted.txt");
     expect(html).toContain("committed.txt");
     expect(html).toContain("uncommitted");
-    expect(html).toContain("committed in the window");
+    expect(html).toContain("Committed in the window");
   });
 
   test("in-log entries are not in table and are counted in appear in both", () => {
@@ -117,7 +117,53 @@ describe("GitView", () => {
     });
     const html = renderToStaticMarkup(<GitView data={data} />);
     expect(html).toContain('<th scope="col">Path</th>');
-    expect(html).toContain('<th scope="col">Where</th>');
     expect(html).toContain('<th scope="col">Status</th>');
+  });
+
+  test("not-in-log splits into two sections grouped by top-level directory", () => {
+    const data = makeGit({
+      uncommitted: [
+        { path: "README", status: "M", inLog: false },
+        { path: "src/a.ts", status: "M", inLog: false },
+        { path: "src/b.ts", status: "A", inLog: false },
+        { path: "src/logged.ts", status: "M", inLog: true },
+      ],
+      committed: [{ path: "pkg/c.ts", status: "A", inLog: false }],
+    });
+    const html = renderToStaticMarkup(<GitView data={data} />);
+    expect(html).toContain("Changed in git but not in the log (4)");
+    expect(html).toContain("Uncommitted (3)");
+    expect(html).toContain("Committed in the window (1)");
+    expect(html).not.toContain("Uncommitted (0)");
+    expect(html.indexOf("Uncommitted (3)")).toBeLessThan(html.indexOf("Committed in the window (1)"));
+    expect(html).toContain("src/ — 2 files");
+    expect(html).toContain("(root)/ — 1 file");
+    expect(html).toContain("pkg/ — 1 file");
+    expect(html.indexOf("src/ — 2 files")).toBeLessThan(html.indexOf("(root)/ — 1 file"));
+    expect(html).not.toContain("logged.ts");
+    expect(html).not.toContain("<th scope=\"col\">Where</th>");
+  });
+
+  test("an empty not-in-log section is omitted", () => {
+    const html = renderToStaticMarkup(
+      <GitView data={makeGit({ committed: [{ path: "pkg/c.ts", status: "A", inLog: false }] })} />,
+    );
+    expect(html).toContain("Committed in the window (1)");
+    expect(html).not.toContain("Uncommitted (");
+    expect(html).toContain("Changed in git but not in the log (1)");
+  });
+
+  test("groups are open at 20 rows and closed above that", async () => {
+    const files = (n: number, dir: string) =>
+      Array.from({ length: n }, (_, i) => ({ path: `${dir}/f${i}.txt`, status: "M", inLog: false }));
+    const openView = await mount(<GitView data={makeGit({ uncommitted: [...files(10, "src"), ...files(10, "pkg")] })} />);
+    const openDetails = [...openView.querySelectorAll("details")];
+    expect(openDetails).toHaveLength(2);
+    expect(openDetails.every((d) => (d as HTMLDetailsElement).open)).toBe(true);
+
+    const closedView = await mount(<GitView data={makeGit({ uncommitted: [...files(11, "src"), ...files(10, "pkg")] })} />);
+    const closedDetails = [...closedView.querySelectorAll("details")];
+    expect(closedDetails).toHaveLength(2);
+    expect(closedDetails.every((d) => (d as HTMLDetailsElement).open)).toBe(false);
   });
 });

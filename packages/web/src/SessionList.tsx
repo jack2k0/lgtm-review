@@ -46,53 +46,55 @@ export function SessionList({ data, show = "all", worktree }: { data: SessionsRe
       {rows.length === 0 ? (
         <p className="empty">{show === "attention" ? "No sessions need attention." : "No sessions in this worktree."}</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Session</th>
-              <th scope="col">Branch</th>
-              {multi ? <th scope="col">Worktree</th> : null}
-              <th scope="col">Started</th>
-              <th scope="col" className="num">Prompts</th>
-              <th scope="col">Statuses</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((s) => {
-              const k = sessionAttention(s);
-              return (
-                <tr key={s.id}>
-                  <td className="title">
-                    <a href={routeHref({ kind: "session", id: s.id })}>{s.title || s.id}</a>
-                    {s.archived ? (
-                      <>
-                        {" "}
-                        <span className="badge muted" title="Original log deleted by Claude Code; read from the lgtm-review archive">
-                          archived
-                        </span>
-                      </>
-                    ) : null}
-                    {s.warningCount > 0 ? <span className="muted"> ({plural(s.warningCount, "warning")})</span> : null}
-                  </td>
-                  <td className="mono">{s.branch || "—"}</td>
-                  {multi ? <td className="mono">{worktreeName(s.worktree ?? ".")}</td> : null}
-                  <td className="nowrap">{formatStarted(s.startedAt)}</td>
-                  <td className="num">
-                    {s.promptCount}{s.inheritedCount > 0 ? ` + ${s.inheritedCount} inherited` : ""}
-                  </td>
-                  <td>
-                    <span className="counts">
-                      {statusCountItems(s.statusCounts).map((c) => (
-                        <StatusDot key={c.status} status={c.status} count={c.count} />
-                      ))}
-                    </span>
-                    {k > 0 ? <span className="marker">{needText(k, "prompt")}</span> : null}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Session</th>
+                <th scope="col">Branch</th>
+                {multi ? <th scope="col">Worktree</th> : null}
+                <th scope="col">Started</th>
+                <th scope="col" className="num">Prompts</th>
+                <th scope="col">Statuses</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((s) => {
+                const k = sessionAttention(s);
+                return (
+                  <tr key={s.id}>
+                    <td className="title">
+                      <a href={routeHref({ kind: "session", id: s.id })}>{s.title || s.id}</a>
+                      {s.archived ? (
+                        <>
+                          {" "}
+                          <span className="badge muted" title="Original log deleted by Claude Code; read from the lgtm-review archive">
+                            archived
+                          </span>
+                        </>
+                      ) : null}
+                      {s.warningCount > 0 ? <span className="muted"> ({plural(s.warningCount, "warning")})</span> : null}
+                    </td>
+                    <td className="mono">{s.branch || "—"}</td>
+                    {multi ? <td className="mono">{worktreeName(s.worktree ?? ".")}</td> : null}
+                    <td className="nowrap">{formatStarted(s.startedAt)}</td>
+                    <td className="num">
+                      {s.promptCount}{s.inheritedCount > 0 ? ` + ${s.inheritedCount} inherited` : ""}
+                    </td>
+                    <td>
+                      <span className="counts">
+                        {statusCountItems(s.statusCounts).map((c) => (
+                          <StatusDot key={c.status} status={c.status} count={c.count} />
+                        ))}
+                      </span>
+                      {k > 0 ? <span className="marker">{needText(k, "prompt")}</span> : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   );

@@ -56,6 +56,11 @@ describe.each([["light", light], ["dark", dark]] as const)("%s theme contrast", 
   });
 });
 
+test("table-scroll scrolls wide tables and keeps a readable min width", () => {
+  expect(css).toMatch(/\.table-scroll\s*\{[^}]*overflow-x:\s*auto/);
+  expect(css).toMatch(/\.table-scroll table\s*\{[^}]*min-width:\s*640px/);
+});
+
 test("dark theme overrides every light color token", () => {
   for (const k of Object.keys(vars(darkBlock))) expect(light[k]).toBeDefined();
   expect(Object.keys(vars(darkBlock)).sort()).toEqual(Object.keys(light).sort());

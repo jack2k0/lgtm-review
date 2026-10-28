@@ -11,8 +11,21 @@ import { PromptTable } from "./PromptTable";
 import { SessionList } from "./SessionList";
 import { StepsView } from "./StepsView";
 import { sessionStore } from "./token";
-import type { Show } from "./triage";
+import { escapeToList, type Show } from "./triage";
 import { lastListHref, parseRoute, routeHref, setLastListRoute, type Route } from "./viewmodel";
+
+/** Escape leaves this route for `href`, with the same field/modifier guard as the session page. */
+function useEscapeTo(href: string): void {
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (!escapeToList(e)) return;
+      e.preventDefault();
+      window.location.hash = href;
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [href]);
+}
 
 function Status<T>({ res, back, backLabel = "← Back to steps", children }: { res: Load<T>; back?: string; backLabel?: string; children: (data: T) => React.ReactNode }) {
   const link = back ? <p><a href={back}>{backLabel}</a></p> : null;
@@ -41,6 +54,7 @@ function SessionView({ token, id, show }: { token: string | null; id: string; sh
 }
 
 function StepsRoute({ token, id, index }: { token: string | null; id: string; index: number }) {
+  useEscapeTo(routeHref({ kind: "session", id }));
   const res = useLive<PromptDetail>((e, s) => fetchPromptDetail(token, id, index, e, s), `p:${id}:${index}`);
   return (
     <Status res={res} back={routeHref({ kind: "session", id })} backLabel="← Back to session">
@@ -51,15 +65,8 @@ function StepsRoute({ token, id, index }: { token: string | null; id: string; in
 
 function DiffRoute({ token, id, index, path }: { token: string | null; id: string; index: number; path: string }) {
   const res = useLive<FileDiff>((e, s) => fetchFileDiff(token, id, index, path, e, s), `d:${id}:${index}:${path}`);
-  // Escape goes back to the steps of this prompt.
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-      window.location.hash = routeHref({ kind: "steps", id, index });
-    };
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
-  }, [id, index]);
+  // Escape goes back to the steps of this prompt (not while typing in a field).
+  useEscapeTo(routeHref({ kind: "steps", id, index }));
   return (
     <Status res={res} back={routeHref({ kind: "steps", id, index })}>
       {(d) => <DiffView sessionId={id} index={index} diff={d} />}
@@ -68,6 +75,7 @@ function DiffRoute({ token, id, index, path }: { token: string | null; id: strin
 }
 
 function MapRoute({ token, id, index }: { token: string | null; id: string; index: number | null }) {
+  useEscapeTo(routeHref({ kind: "session", id }));
   const res = useLive<ImportMapResponse>((e, s) => fetchImportMap(token, id, index, e, s), `m:${id}:${index ?? "all"}`);
   return <Status res={res} back={routeHref({ kind: "session", id })} backLabel="← Back to session">{(d) => <MapView sessionId={id} map={d} />}</Status>;
 }
@@ -89,6 +97,7 @@ function PlayRoute({ token, id, index, beat }: { token: string | null; id: strin
 }
 
 function GitRoute({ token, id }: { token: string | null; id: string }) {
+  useEscapeTo(routeHref({ kind: "session", id }));
   const [tick, setTick] = useState(0);
   const [res, setRes] = useState<Load<GitCrosscheckResponse>>({ state: "loading" });
   useEffect(() => {
