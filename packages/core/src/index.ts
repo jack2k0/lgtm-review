@@ -40,6 +40,7 @@ export {
   PlayResponse,
   GitFileEntry,
   GitCrosscheckResponse,
+  LlmTitlesResponse,
 } from "./schema.js";
 export { makeHeadline } from "./timing.js";
 export { computeHints, recommend, isTestPath, sensitiveMatch, isManifestPath, isConfigPath, publicSurfaceKind } from "./hints.js";
@@ -54,6 +55,8 @@ export type { SubagentTranscript, SubagentCollector, SubagentCollectorOptions, T
 export type { Event, ToolUseEvent, ToolResultEvent, TextEvent, PromptEvent, BoundaryEvent } from "./parse.js";
 export { redact, isEnvFilePath } from "./redact.js";
 export type { RedactOptions, RedactResult } from "./redact.js";
+export { TITLE_PROMPT_VERSION, TITLE_SYSTEM_PROMPT, condenseForTitle, sanitizeTitle, titleRequestBody } from "./llm-input.js";
+export type { TitleRequestBody } from "./llm-input.js";
 export { inheritedSource, markInherited, ownershipRanks } from "./inherit.js";
 export {
   extractImports,

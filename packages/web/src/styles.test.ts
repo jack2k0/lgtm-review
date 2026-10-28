@@ -61,6 +61,12 @@ test("table-scroll scrolls wide tables and keeps a readable min width", () => {
   expect(css).toMatch(/\.table-scroll table\s*\{[^}]*min-width:\s*640px/);
 });
 
+test("generated title label is smaller than body text and uses the muted color", () => {
+  expect(css).toMatch(/\.gen-label\s*\{[^}]*font-size:\s*11px/);
+  expect(css).toMatch(/\.gen-label\s*\{[^}]*color:\s*var\(--muted\)/);
+  expect(css).toMatch(/\.titles-error\s*\{/);
+});
+
 test("dark theme overrides every light color token", () => {
   for (const k of Object.keys(vars(darkBlock))) expect(light[k]).toBeDefined();
   expect(Object.keys(vars(darkBlock)).sort()).toEqual(Object.keys(light).sort());

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { ApiError, fetchFileDiff, fetchImportMap, fetchPromptDetail, fetchSession, fetchSessions } from "./api";
+import { ApiError, fetchFileDiff, fetchImportMap, fetchPromptDetail, fetchSession, fetchSessions, fetchTitles } from "./api";
 
 const TOKEN = "t".repeat(32);
 const listBody = { dir: "/x", sessions: [] };
@@ -117,5 +117,20 @@ describe("conditional client", () => {
       "api/sessions/s/map?prompt=3",
     ]);
     expect(calls.map((c) => c.headers["If-None-Match"])).toEqual(['"1"', '"2"', '"3"', '"4"', '"5"']);
+  });
+
+  test("titles: URL, token, no If-None-Match unless a validator is passed, schema checked", async () => {
+    const body = { enabled: false, titles: {}, pending: 0, error: null };
+    const calls = mockFetch(() => json(body));
+    expect(await fetchTitles(TOKEN, "a b", null)).toEqual({ kind: "ok", data: body, etag: null });
+    expect(calls[0]!.url).toBe("api/sessions/a%20b/titles");
+    expect(calls[0]!.headers).toEqual({ "X-Lgtm-Token": TOKEN });
+    expect(calls[0]!.init.cache).toBe("no-store");
+    expect(calls[0]!.init.credentials).toBe("omit");
+    const again = mockFetch(() => json(body, 200, { ETag: '"t1"' }));
+    expect(await fetchTitles(TOKEN, "s", '"t1"')).toEqual({ kind: "ok", data: body, etag: '"t1"' });
+    expect(again[0]!.headers["If-None-Match"]).toBe('"t1"');
+    mockFetch(() => json({ enabled: false }));
+    await expect(fetchTitles(TOKEN, "s", null)).rejects.toMatchObject({ kind: "invalid" });
   });
 });

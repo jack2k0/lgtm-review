@@ -40,7 +40,7 @@ The user runs `lgtm-review --llm-url http://127.0.0.1:11434 --llm-model qwen3:4b
 ```gate
 allow: ^packages/core/src/(schema|index|llm-input)(\.test)?\.ts$
 allow: ^packages/cli/src/(cli|api|server|llm)(\.[a-z-]+)?(\.test)?\.ts$
-allow: ^packages/web/src/(api|PromptTable|styles|titles)(\.[a-z-]+)?(\.test)?\.(ts|tsx|css)$
+allow: ^packages/web/src/(App|api|PromptTable|styles|titles)(\.[a-z-]+)?(\.test)?\.(ts|tsx|css)$
 allow: ^packages/web/src/[a-z.-]*\.test\.tsx?$
 allow: ^README\.md$
 allow: ^packages/cli/README\.md$
@@ -58,7 +58,7 @@ Files: `packages/core/src/schema.ts`, `packages/core/src/index.ts`, `packages/co
 - `llm-input.ts` (no `node:` import): `TITLE_PROMPT_VERSION` (string const), `TITLE_SYSTEM_PROMPT`, `condenseForTitle(prompt: PromptAnalysis, detail: PromptDetail | null, root?: string): string`, `sanitizeTitle(raw: string): string | null`, `titleRequestBody(model: string, input: string): object`.
 - Tests: secrets in prompt text/step titles/file paths are redacted (reuse patterns from `redact.test.ts`, e.g. an `sk-ant-` key and a bearer token); caps (25 steps, 20 files, 2000 chars); deterministic output for the same input; `sanitizeTitle` cases (think block, quotes, `Title:` prefix, markdown, multi-line, control chars, >120 chars cut at a word, empty -> null).
 - Done: `pnpm check` green; gate exit 0/2.
-- [ ] Phase 1 done
+- [x] Phase 1 done
 
 ## Phase 2: CLI (flags, client, cache, route)
 
@@ -73,7 +73,9 @@ Files: `packages/cli/src/llm.ts`, `packages/cli/src/llm.test.ts`, `cli.ts`, `api
   - `--summary`, `--export` and `--list --json` output on a fixture is byte-identical with and without a titler present (titler spy never called).
   - CLI arg errors: only one of the two flags; with `--summary`; non-loopback URL.
 - Done: `pnpm check` green; gate exit 0/2.
-- [ ] Phase 2 done
+- [x] Phase 2 done
+- [x] Phase 2a done
+- [x] Phase 2b done
 
 ## Phase 3: web + docs
 
@@ -82,7 +84,7 @@ Files: `packages/web/src/api.ts`, `PromptTable.tsx`, `styles.css`, `titles.ts` (
 - Tests: enabled:false renders nothing and schedules no poll; titles render with the `generated` label; pending>0 polls again, 0 stops; error line; text is rendered as text (a title containing `<b>` shows literally).
 - README: "Local LLM titles (optional)" section: flags, loopback-only rule, what is sent (condensed + redacted: prompt text, step titles, file paths), where the cache lives, that summary/export never contain titles, example for Ollama / llama.cpp / LM Studio.
 - Done: `pnpm check` green; gate exit 0/2; roadmap S-08 status updated.
-- [ ] Phase 3 done
+- [x] Phase 3 done
 
 ## Amendments after plan review (binding; they override the sections above where they differ)
 

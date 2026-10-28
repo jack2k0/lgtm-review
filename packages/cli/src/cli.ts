@@ -19,6 +19,7 @@ import type { Analysis, RepoScripts, SessionAnalysis } from "@lgtm/core";
 import { runExport } from "./export.js";
 import { formatText, sortSessions } from "./format.js";
 import { formatSummary } from "./summary.js";
+import { createTitler, defaultTitleCacheDir, parseLlmUrl, resolveTitleCacheDir } from "./llm.js";
 import { createLauncher, openBrowser, type Launcher } from "./open.js";
 import { startServer } from "./server.js";
 
@@ -57,9 +58,10 @@ function unsafeArchiveDir(archiveDir: string, projectsDir: string, repoDirs: rea
 
 const HELP = `lgtm-review ${VERSION}
 
-Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>] [--no-worktrees]
+Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>] [--no-worktrees] [--llm-url <url> --llm-model <name> [--llm-cache-dir <dir>]]
 
 Without --archive/--list/--json/--summary, starts a local web UI on 127.0.0.1 and prints its URL.
+--llm-url and --llm-model are server mode only (both or neither): http on the loopback interface, no default model.
 
   --dir <path>           repository to inspect (default: current directory)
   --projects-dir <path>  Claude Code projects dir (default: ~/.claude/projects)
@@ -77,15 +79,34 @@ Without --archive/--list/--json/--summary, starts a local web UI on 127.0.0.1 an
   --no-worktrees         only the sessions of --dir, not of the repository's other git worktrees
   --no-open              do not open the browser
   --port <n>             port for the UI (default: a free port)
+  --llm-url <url>        local model server (http, loopback only: 127.0.0.0/8, ::1 or localhost); needs --llm-model
+  --llm-model <name>     model name on that server (no default)
+  --llm-cache-dir <dir>  title cache (default: ~/.lgtm-review/cache/titles); only with --llm-url
   --version              print the version
   --help                 print this help
 `;
 
-async function serve(dir: string, projectsDir: string, roots: SessionRoot[], port: number, noOpen: boolean): Promise<number> {
+async function serve(
+  dir: string,
+  projectsDir: string,
+  roots: SessionRoot[],
+  port: number,
+  noOpen: boolean,
+  llm?: { endpoint: URL; model: string; cacheDir: string },
+): Promise<number> {
   const webRoot = join(dirname(fileURLToPath(import.meta.url)), "web");
+  const titler = llm === undefined ? undefined : createTitler({ endpoint: llm.endpoint, model: llm.model, cacheDir: llm.cacheDir });
   let running;
   try {
-    running = await startServer({ dir, projectsDir, archiveDir: roots[0]!.archiveDir ?? undefined, roots, webRoot, port });
+    running = await startServer({
+      dir,
+      projectsDir,
+      archiveDir: roots[0]!.archiveDir ?? undefined,
+      roots,
+      webRoot,
+      port,
+      ...(titler !== undefined ? { llm: titler } : {}),
+    });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EADDRINUSE") console.error(`lgtm-review: port ${port} is already in use`);
@@ -94,6 +115,9 @@ async function serve(dir: string, projectsDir: string, roots: SessionRoot[], por
   }
   process.stdout.write(`${running.url}\n`);
   console.error("lgtm-review: serving on 127.0.0.1 only; press Ctrl+C to stop");
+  if (llm !== undefined) {
+    console.error(`LLM titles: condensed, redacted prompt actions go to ${llm.endpoint.href} (model ${llm.model}); cache ${llm.cacheDir}`);
+  }
   let launcher: Launcher | undefined;
   let timer: NodeJS.Timeout | undefined;
   const cleanup = () => {
@@ -115,7 +139,7 @@ async function serve(dir: string, projectsDir: string, roots: SessionRoot[], por
   return new Promise<number>((done) => {
     const stop = () => {
       cleanup();
-      void running.close().then(() => done(0));
+      void Promise.all([running.close(), titler?.stop() ?? Promise.resolve()]).then(() => done(0));
     };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
@@ -188,6 +212,9 @@ async function main(): Promise<number> {
         "no-open": { type: "boolean" },
         "no-worktrees": { type: "boolean" },
         port: { type: "string" },
+        "llm-url": { type: "string" },
+        "llm-model": { type: "string" },
+        "llm-cache-dir": { type: "string" },
         version: { type: "boolean" },
         help: { type: "boolean" },
       },
@@ -271,12 +298,56 @@ async function main(): Promise<number> {
     return 1;
   }
 
+  const llmUrl = values["llm-url"];
+  const llmModel = values["llm-model"];
+  const llmCacheFlag = values["llm-cache-dir"];
+  if (llmCacheFlag !== undefined && llmUrl === undefined) {
+    console.error("lgtm-review: --llm-cache-dir only works with --llm-url");
+    return 1;
+  }
+  if ((llmUrl === undefined) !== (llmModel === undefined)) {
+    console.error("lgtm-review: --llm-url and --llm-model must be given together");
+    return 1;
+  }
+  if (llmModel !== undefined && (llmModel.trim() === "" || /[\r\n]/.test(llmModel))) {
+    console.error("lgtm-review: --llm-model needs a model name");
+    return 1;
+  }
+  if (llmCacheFlag === "") {
+    console.error("lgtm-review: --llm-cache-dir needs a directory path");
+    return 1;
+  }
+  if (llmUrl !== undefined && (values.list || values.json || values.summary || exporting || archiving)) {
+    console.error("lgtm-review: --llm-url cannot be combined with --list, --json, --summary, --export or --archive");
+    return 1;
+  }
+
+  let llmEndpoint: URL | undefined;
+  if (llmUrl !== undefined) {
+    const parsed = parseLlmUrl(llmUrl);
+    if (parsed instanceof Error) {
+      console.error(`lgtm-review: ${parsed.message}`);
+      return 1;
+    }
+    llmEndpoint = parsed;
+  }
+
   const dir = resolve(values.dir ?? process.cwd());
   const projectsDir = values["projects-dir"] ?? defaultProjectsDir();
   const archiveRoot = values["archive-dir"] ?? defaultArchiveRoot(process.env);
   const roots = await sessionRoots(dir, projectsDir, archiveRoot, { worktrees: values["no-worktrees"] !== true });
   const projectDir = roots[0]!.projectDir;
   const archiveDir = roots[0]!.archiveDir!;
+
+  let llm: { endpoint: URL; model: string; cacheDir: string } | undefined;
+  if (llmEndpoint !== undefined) {
+    const resolved = resolveTitleCacheDir(llmCacheFlag ?? defaultTitleCacheDir(), projectsDir, archiveRoot, roots.map((r) => r.dir));
+    if ("error" in resolved) {
+      console.error(`lgtm-review: ${resolved.error}; choose another --llm-cache-dir`);
+      return 1;
+    }
+    llm = { endpoint: llmEndpoint, model: llmModel!, cacheDir: resolved.dir };
+  }
 
   if (archiving) {
     for (const root of roots) {
@@ -321,7 +392,7 @@ async function main(): Promise<number> {
       titles: values["no-titles"] !== true,
     });
   }
-  if (!values.list && !values.json && !values.summary) return serve(dir, projectsDir, roots, port, values["no-open"] === true);
+  if (!values.list && !values.json && !values.summary) return serve(dir, projectsDir, roots, port, values["no-open"] === true, llm);
 
   const discoveryWarnings: string[] = [];
   let files: SessionFile[];
