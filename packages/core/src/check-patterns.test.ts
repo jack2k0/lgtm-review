@@ -585,3 +585,11 @@ describe("status-accuracy-7 stripHeredocs forms", () => {
     expect(stripHeredocs("cat <<-EOF\n  EOF\n\tEOF\npnpm check")).toBe("cat <<-EOF\npnpm check");
   });
 });
+
+describe("status-accuracy-8 stripHeredocs delimiter words", () => {
+  test("a delimiter with - . + digits is the whole word", () => {
+    expect(stripHeredocs("cat <<END-1\nbody\nEND-1\npnpm check")).toBe("cat <<END-1\npnpm check");
+    expect(stripHeredocs("cat <<E.x\nbody\nE.x\npnpm check")).toBe("cat <<E.x\npnpm check");
+    expect(stripHeredocs("cat <<E'-'1\nbody\nE-1\npnpm check")).toBe("cat <<E'-'1\npnpm check");
+  });
+});

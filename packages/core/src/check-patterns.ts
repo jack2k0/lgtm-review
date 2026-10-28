@@ -56,8 +56,74 @@ export interface Segment {
   closes: number;
 }
 
-/** Heredoc start: group 1 is `-` (tabs may indent the delimiter), 2-4 a quoted delimiter (`'x'`, `"x"`, `\x`), 5 a bare one. */
-export const HEREDOC_START_RE = /(?<!<)<<(-?)\s*(?:'([^']+)'|"([^"]+)"|\\([A-Za-z_]\w*)|([A-Za-z_]\w*))/;
+/** A heredoc start on one line: `dash` for `<<-`, `delim` after quote removal, `quoted` when any quoting char was present (literal body). */
+export interface HeredocStart {
+  delim: string;
+  quoted: boolean;
+  dash: boolean;
+}
+
+/**
+ * First heredoc start in a line. The delimiter is the whole shell word up to an unquoted metacharacter
+ * (space, tab, `;`, `&`, `|`, `<`, `>`, `(`, `)`), with quote removal: `E'-'1` is `E-1`.
+ * An unterminated quote or an empty word is not a heredoc start.
+ */
+export function parseHeredocStart(line: string): HeredocStart | null {
+  const re = /(?<!<)<<(-?)/g;
+  for (let m = re.exec(line); m !== null; m = re.exec(line)) {
+    let i = m.index + m[0].length;
+    while (i < line.length && /\s/.test(line[i] as string)) i++;
+    let delim = "";
+    let quoted = false;
+    let ok = true;
+    let any = false;
+    while (i < line.length && ok) {
+      const c = line[i] as string;
+      if (/[\s;&|<>()]/.test(c)) break;
+      any = true;
+      if (c === "'") {
+        const end = line.indexOf("'", i + 1);
+        if (end < 0) ok = false;
+        else {
+          delim += line.slice(i + 1, end);
+          i = end + 1;
+          quoted = true;
+        }
+      } else if (c === '"') {
+        i++;
+        let closed = false;
+        while (i < line.length) {
+          const d = line[i] as string;
+          if (d === '"') {
+            closed = true;
+            i++;
+            break;
+          }
+          if (d === "\\" && i + 1 < line.length && /[$`"\\]/.test(line[i + 1] as string)) i++;
+          delim += line[i];
+          i++;
+        }
+        if (!closed) ok = false;
+        quoted = true;
+      } else if (c === "\\") {
+        if (i + 1 >= line.length) ok = false;
+        else {
+          delim += line[i + 1];
+          i += 2;
+          quoted = true;
+        }
+      } else if (c === "$" && (line[i + 1] === "'" || line[i + 1] === '"')) {
+        // `$'E'` / `$"E"`: the `$` is dropped and the rest is quoted.
+        i++;
+      } else {
+        delim += c;
+        i++;
+      }
+    }
+    if (ok && any && (delim !== "" || quoted)) return { delim, quoted, dash: m[1] === "-" };
+  }
+  return null;
+}
 
 /** Whether a heredoc line ends the body: exactly the delimiter; `<<-` also allows leading tabs. */
 export function heredocEnds(line: string, delim: string, dash: boolean): boolean {
@@ -77,10 +143,10 @@ export function stripHeredocs(cmd: string): string {
       continue;
     }
     out.push(line);
-    const m = HEREDOC_START_RE.exec(line);
+    const m = parseHeredocStart(line);
     if (m) {
-      delim = m[2] ?? m[3] ?? m[4] ?? m[5] ?? null;
-      dash = m[1] === "-";
+      delim = m.delim;
+      dash = m.dash;
     }
   }
   return out.join("\n");

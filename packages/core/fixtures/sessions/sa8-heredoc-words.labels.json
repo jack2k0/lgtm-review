@@ -1,0 +1,29 @@
+{
+  "fixture": "sa8-heredoc-words",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "<<'E-1' is a quoted delimiter containing '-': the body is literal, so the sed -i in it never runs."
+    },
+    {
+      "index": 1,
+      "expectedStatus": "unchecked",
+      "expectedRecommendation": "read-flagged",
+      "expectedHints": [
+        "unchecked-edit:src/b.ts"
+      ],
+      "note": "<<END-1 closes on END-1 (the whole word), so the later sed -i writes src/b.ts. No check follows."
+    },
+    {
+      "index": 2,
+      "expectedStatus": "no-changes",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "<<E'-'1 is the delimiter E-1 after quote removal and is quoted: literal body, no write."
+    }
+  ]
+}
