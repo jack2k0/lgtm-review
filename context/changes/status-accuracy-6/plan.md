@@ -24,6 +24,6 @@ schema: no
 - Tests failing on main: `cat <<EOF` newline `$(sed -i s/a/b/ src/a.ts)` newline `EOF` -> `src/a.ts`; same with backticks; `cat <<'EOF'` with the same body -> no edit (literal); `cat > a.md <<'EOF'` newline `don't` newline `EOF` newline `echo $(sed -i x src/a.ts)` -> `src/a.ts`; `echo $(case x in x) sed -i x src/a.ts;; esac)` -> opaque; heredoc python `import posix; posix.execv(...)` -> opaque; `import json as j` -> non-opaque; `__import__('os')` -> opaque; `open('docs/a.md','w')` with `import json` -> non-opaque doc edit.
 - Never change an existing expectation; if one conflicts, stop and report. One fixture `sa6-heredoc-gaps` (labels from the rules).
 - Done: `pnpm check` green; gate exit 0/2.
-- [ ] Phase 1 done
+- [x] Phase 1 done
 
 ## Phase 2 (orchestrator): real-log audit PRE/POST, counts only.
