@@ -74,6 +74,7 @@ Files: `packages/cli/src/llm.ts`, `packages/cli/src/llm.test.ts`, `cli.ts`, `api
   - CLI arg errors: only one of the two flags; with `--summary`; non-loopback URL.
 - Done: `pnpm check` green; gate exit 0/2.
 - [ ] Phase 2 done
+- [x] Phase 2a done
 
 ## Phase 3: web + docs
 
