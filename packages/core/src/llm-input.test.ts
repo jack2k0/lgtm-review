@@ -242,6 +242,13 @@ describe("sanitizeTitle", () => {
     expect(sanitizeTitle("Shipped the parser\n<think more")).toBeNull();
   });
 
+  test("a mid-line mention of the tag is a title; a lone closing tag drops the reasoning before it", () => {
+    expect(sanitizeTitle("Fix <think> tag parsing")).toBe("Fix <think> tag parsing");
+    expect(sanitizeTitle("reasoning here\n</think>\nReal title")).toBe("Real title");
+    expect(sanitizeTitle("a</think>b</think>\nLast")).toBe("Last");
+    expect(sanitizeTitle("only reasoning</think>")).toBeNull();
+  });
+
   test("strips surrounding quotes", () => {
     expect(sanitizeTitle('"Shipped the parser"')).toBe("Shipped the parser");
     expect(sanitizeTitle("'Shipped the parser'")).toBe("Shipped the parser");

@@ -231,14 +231,17 @@ function lineStartsWithThink(s: string): boolean {
 }
 
 /**
- * One title from a model reply: drop closed `<think>` blocks. An opening `<think>` tag with no closing tag,
- * or any line that still starts with `<think` after stripping, is not a title (null). Otherwise keep the
+ * One title from a model reply: drop closed `<think>` blocks and anything before a lone `</think>`. A line that
+ * still starts with `<think` (an unterminated block) makes the reply not a title (null); a mid-line mention is kept. Otherwise keep the
  * first non-empty line, strip quotes, a leading `Title:` / `#` / `*` / `-`, markdown emphasis and backticks,
  * collapse whitespace, drop control characters, and cut to 120 characters on a word boundary. Empty becomes null.
  */
 export function sanitizeTitle(raw: string): string | null {
-  const withoutClosed = raw.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "");
-  if (/<think\b[^>]*>/i.test(withoutClosed) || lineStartsWithThink(withoutClosed)) return null;
+  let withoutClosed = raw.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "");
+  // A closing tag with no opener (some chat templates put the opener in the prompt): the reasoning precedes it.
+  const lastClose = withoutClosed.toLowerCase().lastIndexOf("</think>");
+  if (lastClose >= 0) withoutClosed = withoutClosed.slice(lastClose + "</think>".length);
+  if (lineStartsWithThink(withoutClosed)) return null;
   const line = firstNonEmptyLine(withoutClosed);
   if (line === null) return null;
   let t = line;
