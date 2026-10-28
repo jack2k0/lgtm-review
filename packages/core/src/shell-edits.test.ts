@@ -1183,4 +1183,16 @@ describe("status-accuracy-7 heredoc forms", () => {
     expect(classifyShellMutation(`cat <<E.x\nbody\nE.x\n${sed}`).edits.map((e) => e.file)).toEqual(["src/a.ts"]);
     expect(classifyShellMutation(`cat <<"a b"\nbody\na b\n${sed}`).edits.map((e) => e.file)).toEqual(["src/a.ts"]);
   });
+
+  test("sa8 review: an arithmetic << is a shift, not a heredoc", () => {
+    for (const arith of ["x=$((1<<2))", "(( x = 1 << 2 ))", "(( x <<= 2 ))", 'let "x = 1 << 2"', "y=$[1<<2]"]) {
+      const r = classifyShellMutation(`${arith}\nsed -i s/a/b/ src/a.ts`);
+      expect(r.edits.map((e) => e.file), arith).toEqual(["src/a.ts"]);
+    }
+  });
+
+  test("sa8 review: << in a comment is not a heredoc", () => {
+    const r = classifyShellMutation("echo hi # cat <<EOF\nsed -i s/a/b/ src/a.ts");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
 });

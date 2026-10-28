@@ -63,6 +63,29 @@ export interface HeredocStart {
   dash: boolean;
 }
 
+/** Whether the text before a `<<` puts it in a comment or in arithmetic (`$((..))`, `((..))`, `$[..]`, `let`), where it is a shift. */
+function inCommentOrArithmetic(before: string): boolean {
+  let quote: string | null = null;
+  let cmdStart = 0;
+  for (let i = 0; i < before.length; i++) {
+    const c = before[i] as string;
+    if (quote !== null) {
+      if (c === "\\" && quote === '"') i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "\\") i++;
+    else if (c === "'" || c === '"') quote = c;
+    else if (c === "#" && (i === 0 || /[\s;&|()]/.test(before[i - 1] as string))) return true;
+    else if (/[;&|\n]/.test(c)) cmdStart = i + 1;
+  }
+  const cmd = before.slice(cmdStart);
+  const unclosed = (open: string, close: string): boolean => cmd.lastIndexOf(open) > cmd.lastIndexOf(close);
+  if (unclosed("$((", "))") || unclosed("$[", "]")) return true;
+  if (/^\s*\(\(/.test(cmd) && !cmd.includes("))")) return true;
+  return /(?:^|[(\s])let\s/.test(cmd) && /^\s*(?:\w+=\S*\s+)*let\s/.test(cmd);
+}
+
 /**
  * First heredoc start in a line. The delimiter is the whole shell word up to an unquoted metacharacter
  * (space, tab, `;`, `&`, `|`, `<`, `>`, `(`, `)`), with quote removal: `E'-'1` is `E-1`.
@@ -71,6 +94,9 @@ export interface HeredocStart {
 export function parseHeredocStart(line: string): HeredocStart | null {
   const re = /(?<!<)<<(-?)/g;
   for (let m = re.exec(line); m !== null; m = re.exec(line)) {
+    if (line[m.index + 2] === "=") continue;
+    const before = line.slice(0, m.index);
+    if (inCommentOrArithmetic(before)) continue;
     let i = m.index + m[0].length;
     while (i < line.length && /\s/.test(line[i] as string)) i++;
     let delim = "";
