@@ -1138,3 +1138,26 @@ describe("status-accuracy-6 H1-H4", () => {
     expect(m.edits.map((e) => e.file)).toEqual(["docs/a.md"]);
   });
 });
+
+describe("status-accuracy-7 heredoc forms", () => {
+  const sub = "sed -i s/a/b/ src/a.ts";
+  test.each<[string, string, string[]]>([
+    ["D1 backslash delimiter is literal", `cat <<\\EOF\n$(${sub})\nEOF`, []],
+    ["D1 backslash delimiter, quote in body does not hide a later command", `cat <<\\EOF\ndon't\nEOF\necho $(${sub})`, ["src/a.ts"]],
+    ["D3 indented delimiter does not end a plain heredoc", `cat <<EOF\n  EOF\n$(${sub})\nEOF`, ["src/a.ts"]],
+    ["D3 space-padded delimiter does not end a plain heredoc", `cat <<EOF\nEOF \n$(${sub})\nEOF`, ["src/a.ts"]],
+    ["D3 dash heredoc ends on a tab-indented delimiter", `cat <<-EOF\n\tEOF\necho $(${sub})`, ["src/a.ts"]],
+    ["D3 dash heredoc does not end on a space-indented delimiter", `cat <<-EOF\n  EOF\n$(${sub})\nEOF`, ["src/a.ts"]],
+  ])("%s", (_n, cmd, expected) => {
+    expect(files(cmd), cmd).toEqual(expected);
+  });
+
+  test("D2 a heredoc nested in a substitution of an unquoted heredoc body is opaque", () => {
+    const m = classifyShellMutation("cat <<EOF\n$(cat <<X\nhi\nX\n)\nEOF");
+    expect(m.opaque).toBe(true);
+  });
+
+  test("D3 a heredoc that never closes is opaque", () => {
+    expect(classifyShellMutation(`cat <<EOF\n  EOF\n$(${sub})`).opaque).toBe(true);
+  });
+});

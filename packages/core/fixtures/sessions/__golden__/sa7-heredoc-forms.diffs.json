@@ -1,0 +1,16 @@
+{
+  "1:/home/user/project/src/a.ts": {
+    "path": "/home/user/project/src/a.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "2:/home/user/project/src/b.ts": {
+    "path": "/home/user/project/src/b.ts",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  }
+}

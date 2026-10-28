@@ -25,4 +25,4 @@ schema: no
 - Tests failing on main: `cat <<\EOF` body with `$(sed -i x src/a.ts)` -> no edit; `cat <<\EOF` newline `don't` newline `EOF` newline `echo $(sed -i x src/a.ts)` -> `src/a.ts`; `<<EOF` body containing `$(cat <<X ... X)` -> opaque; `cat <<EOF` with an indented `  EOF` line then `$(sed -i x src/a.ts)` line then `EOF` -> `src/a.ts` (body, not command; indented line does not end it); likewise `<<EOF` with `$(sed -i x src/a.ts)` after a space-padded `EOF ` -> still body; `<<-EOF` with tab-indented `EOF` ends it.
 - Never change an existing expectation; if one conflicts, stop and report. One fixture `sa7-heredoc-forms` (labels from the rules).
 - Done: `pnpm check` green; gate exit 0/2.
-- [ ] Phase 1 done
+- [x] Phase 1 done

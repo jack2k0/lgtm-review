@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { checkScope, classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
+import { checkScope, classifyCommand, findMaskedFailure, stripHeredocs, type RepoScripts } from "./check-patterns.js";
 
 const repo: RepoScripts = { packageScripts: ["verify"], makeTargets: ["ci"], scriptFiles: ["tools/run-all.sh"] };
 
@@ -571,5 +571,17 @@ describe("checkScope", () => {
   ];
   test.each(rows)("%s", (cmd, expected) => {
     expect(checkScope(cmd)).toEqual(expected);
+  });
+});
+
+describe("status-accuracy-7 stripHeredocs forms", () => {
+  test("backslash delimiter is recognised", () => {
+    expect(stripHeredocs("cat <<\\EOF\nbody\nEOF\npnpm check")).toBe("cat <<\\EOF\npnpm check");
+  });
+  test("plain delimiter must match exactly", () => {
+    expect(stripHeredocs("cat <<EOF\n  EOF\nEOF \nEOF\npnpm check")).toBe("cat <<EOF\npnpm check");
+  });
+  test("dash delimiter allows leading tabs only", () => {
+    expect(stripHeredocs("cat <<-EOF\n  EOF\n\tEOF\npnpm check")).toBe("cat <<-EOF\npnpm check");
   });
 });

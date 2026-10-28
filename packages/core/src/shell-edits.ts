@@ -10,6 +10,8 @@ import {
   normalizeFirstToken,
   splitSegments,
   stripHeredocs,
+  HEREDOC_START_RE,
+  heredocEnds,
   stripPrefixes,
   type RepoScripts,
   type Segment,
@@ -630,16 +632,17 @@ function heredocBodies(cmd: string): string[] {
   return heredocParts(cmd).map((h) => h.body);
 }
 
-/** Heredocs with their bodies and whether the delimiter was quoted (a quoted body is literal). */
-function heredocParts(cmd: string): { body: string; quoted: boolean }[] {
-  const out: { body: string; quoted: boolean }[] = [];
+/** Heredocs with their bodies, whether the delimiter was quoted (a quoted body is literal) and whether it was closed. */
+function heredocParts(cmd: string): { body: string; quoted: boolean; closed: boolean }[] {
+  const out: { body: string; quoted: boolean; closed: boolean }[] = [];
   let delim: string | null = null;
   let quoted = false;
+  let dash = false;
   let body: string[] = [];
   for (const line of cmd.split("\n")) {
     if (delim !== null) {
-      if (line.trim() === delim) {
-        out.push({ body: body.join("\n"), quoted });
+      if (heredocEnds(line, delim, dash)) {
+        out.push({ body: body.join("\n"), quoted, closed: true });
         delim = null;
         body = [];
       } else body.push(line);
@@ -647,15 +650,14 @@ function heredocParts(cmd: string): { body: string; quoted: boolean }[] {
     }
     const m = HEREDOC_START_RE.exec(line);
     if (m) {
-      delim = m[1] ?? m[2] ?? m[3] ?? null;
-      quoted = m[3] === undefined;
+      delim = m[2] ?? m[3] ?? m[4] ?? m[5] ?? null;
+      quoted = m[5] === undefined;
+      dash = m[1] === "-";
     }
   }
-  if (delim !== null) out.push({ body: body.join("\n"), quoted });
+  if (delim !== null) out.push({ body: body.join("\n"), quoted, closed: false });
   return out;
 }
-
-const HEREDOC_START_RE = /(?<!<)<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_]\w*))/;
 
 const ASSIGN_RE = /^(?:export\s+)?([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|]+)(?=\s|$)\s*/;
 
@@ -2007,9 +2009,13 @@ export function classifyShellMutation(
     // H1: an unquoted heredoc body is expanded by bash; quotes in it are literal.
     if (command.includes("<<")) {
       for (const h of heredocParts(command)) {
+        // D3: a heredoc never closed (strict delimiter match) swallows the rest: fail closed.
+        if (!h.closed) opaque = true;
         if (h.quoted) continue;
         const inner = substitutionBodies(h.body, true);
         if (inner.unsure) nests.unsure = true;
+        // D2: a heredoc nested in a substitution of a heredoc body is not followed: fail closed.
+        if (inner.bodies.some((b) => b.includes("<<"))) opaque = true;
         nests.bodies.push(...inner.bodies);
       }
     }

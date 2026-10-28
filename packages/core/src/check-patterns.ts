@@ -56,18 +56,30 @@ export interface Segment {
   closes: number;
 }
 
+/** Heredoc start: group 1 is `-` (tabs may indent the delimiter), 2-4 a quoted delimiter (`'x'`, `"x"`, `\x`), 5 a bare one. */
+export const HEREDOC_START_RE = /(?<!<)<<(-?)\s*(?:'([^']+)'|"([^"]+)"|\\([A-Za-z_]\w*)|([A-Za-z_]\w*))/;
+
+/** Whether a heredoc line ends the body: exactly the delimiter; `<<-` also allows leading tabs. */
+export function heredocEnds(line: string, delim: string, dash: boolean): boolean {
+  return (dash ? line.replace(/^\t+/, "") : line) === delim;
+}
+
 export function stripHeredocs(cmd: string): string {
   if (!cmd.includes("<<")) return cmd;
   const out: string[] = [];
   let delim: string | null = null;
+  let dash = false;
   for (const line of cmd.split("\n")) {
     if (delim !== null) {
-      if (line.trim() === delim) delim = null;
+      if (heredocEnds(line, delim, dash)) delim = null;
       continue;
     }
     out.push(line);
-    const m = /(?<!<)<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_]\w*))/.exec(line);
-    if (m) delim = m[1] ?? m[2] ?? m[3] ?? null;
+    const m = HEREDOC_START_RE.exec(line);
+    if (m) {
+      delim = m[2] ?? m[3] ?? m[4] ?? m[5] ?? null;
+      dash = m[1] === "-";
+    }
   }
   return out.join("\n");
 }
