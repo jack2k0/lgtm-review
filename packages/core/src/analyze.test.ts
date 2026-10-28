@@ -1418,3 +1418,18 @@ describe("review round 1 status", () => {
     expect(p.files.map((f) => f.path)).toEqual(["/home/user/project/src/a.ts"]);
   });
 });
+
+describe("C18: documentation after an untrusted absolute cd", () => {
+  const heredoc = (name: string) => `cd /abs/notes; python3 - <<'EOF'\nopen('${name}','w').write('x')\nEOF`;
+
+  test("a doc write after the check stays checked, a code write is unchecked", () => {
+    const checked = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bash("b2", heredoc("plan.md"))]);
+    expect(checked).toMatchObject({
+      status: "checked",
+      reason: "pnpm test passed after last code edit; 1 documentation edit after it (shell edits may be incomplete)",
+    });
+    expect(checked.files.map((f) => f.path)).toContain("/abs/notes/plan.md");
+    const unchecked = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bash("b2", heredoc("a.ts"))]);
+    expect(unchecked.status).toBe("unchecked");
+  });
+});

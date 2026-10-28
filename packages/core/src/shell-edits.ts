@@ -1025,12 +1025,16 @@ function nextDir(words: Word[], dir: Dir): Dir {
 /**
  * Where a relative target is read from. An absolute `cd` is baked into `file` (callers read `file`).
  * `baseDir: ""` is the session cwd, so an earlier relative target still resolves when a later `cd` ran.
+ * `docDir` is an untrusted literal absolute `cd` (C18): only a documentation name is placed there.
  */
-function placeFile(file: string, dir: Dir, sawCd: boolean): { file: string; baseDir?: string } {
+function placeFile(file: string, dir: Dir, sawCd: boolean, docDir: string | null): { file: string; baseDir?: string } {
   if (file === SHELL_EDIT_FILE || file.startsWith("~")) return { file };
   if (file.startsWith("/")) return { file: normalizePath(file) };
   const rel = canonicalizeEditPath(file);
-  if (dir.k === "unknown") return { file: SHELL_EDIT_FILE };
+  if (dir.k === "unknown") {
+    if (docDir !== null && isDocPath(rel)) return { file: normalizePath(`${docDir}/${rel}`) };
+    return { file: SHELL_EDIT_FILE };
+  }
   if (dir.k === "abs") return { file: normalizePath(`${dir.path}/${file}`) };
   if (dir.k === "rel") return { file: rel, baseDir: dir.path };
   return sawCd ? { file: rel, baseDir: "" } : { file: rel };
@@ -1603,15 +1607,18 @@ export function classifyShellMutation(
     let dir: Dir = { k: "session" };
     let sawCd = false;
     // Untrusted `cd` / `pushd` / `popd` outside a subshell leaves the directory unknown.
-    // A grouping `( … )` saves `dir` and `sticky` and puts them back at the closing `)`.
+    // A grouping `( … )` saves `dir`, `sticky`, and `docDir` and puts them back at the closing `)`.
     let sticky = false;
+    // Literal absolute `cd` / `pushd` ended by `;` or a newline (C18). Documentation is placed
+    // there; every other relative target stays unresolved. Cleared by any other directory change.
+    let docDir: string | null = null;
     let compound = 0;
     let funcDepth = 0;
     let funcBraces = 0;
     // `NODE_OPTIONS` / `PYTHONPATH` from an earlier segment of this command.
     let loaderEnv = false;
     const poisoned = new Set<string>();
-    const dirStack: { dir: Dir; sticky: boolean }[] = [];
+    const dirStack: { dir: Dir; sticky: boolean; docDir: string | null }[] = [];
     const groupingOpen: boolean[] = [];
     segs.forEach((seg, i) => {
       poisonTempNamesInSegment(seg.text, vars, poisoned);
@@ -1623,7 +1630,7 @@ export function classifyShellMutation(
       const seenParens = unquotedParens(seg.text);
       const restoredText = seg.text + ")".repeat(Math.max(0, seg.closes - seenParens.closes));
       const groups = consumeGroupingParens(restoredText, groupingOpen);
-      for (let n = 0; n < groups.opens; n++) dirStack.push({ dir, sticky });
+      for (let n = 0; n < groups.opens; n++) dirStack.push({ dir, sticky, docDir });
       // The heredoc fed to this segment's stdin: its own, or the one that opened the pipeline it belongs to.
       const own = HEREDOC_START_RE.test(seg.text) ? heredocs++ : null;
       if (!prevPipe) pipeHeredoc = null;
@@ -1641,6 +1648,8 @@ export function classifyShellMutation(
       // A hider (`eval`, `source`, `command`, …) makes this segment's own relative targets unresolved too.
       const placeDir: Dir = hides ? { k: "unknown" } : dir;
       const placeSaw = hides || sawCd;
+      // A hider's own targets are unresolved. A redirect on this segment runs before its `cd`.
+      const placeDoc = hides ? null : docDir;
       // `if cd` is nested via the opener even though `compound` increments after this decision.
       const opener = commandHead(expanded);
       const nested =
@@ -1662,11 +1671,13 @@ export function classifyShellMutation(
         hasCd = true;
         dir = { k: "unknown" };
         sawCd = true;
+        docDir = null;
       } else if (trustedCd) {
         hasCd = true;
         const next = nextDir(subWords, dir);
         dir = next;
         sawCd = true;
+        docDir = null;
         // A known directory is trustworthy again. An unknown target (`cd -`, `cd ~`) poisons without sticking,
         // so a subshell can still restore the directory outside it.
         if (next.k !== "unknown") sticky = false;
@@ -1676,6 +1687,17 @@ export function classifyShellMutation(
         dir = { k: "unknown" };
         sawCd = true;
         sticky = true;
+        // `;` / newline to a literal absolute directory still places documentation (C18). The operand is
+        // read before substitution, so `$S/…` and `$(…)` do not. A relative operand does not either.
+        const softAbs =
+          (head === "cd" || head === "pushd") &&
+          !otherDir &&
+          !nested &&
+          !hides &&
+          !prevPipe &&
+          (seg.op === ";" || seg.op === "\n");
+        const placed = softAbs ? nextDir(words, { k: "unknown" }) : { k: "unknown" as const };
+        docDir = placed.k === "abs" ? placed.path : null;
       }
       const gateBlocked = loaderEnv || segmentGateBlocked(expanded);
       if (assignsLoader(expanded)) loaderEnv = true;
@@ -1692,7 +1714,7 @@ export function classifyShellMutation(
           plainIdx.push(i);
         }
         for (const f of m.files) {
-          const placed = placeFile(f.file, placeDir, placeSaw);
+          const placed = placeFile(f.file, placeDir, placeSaw, placeDoc);
           const kind = f.kind ?? "M";
           const key = `${m.gitOp ? "g" : "e"}\u0000${kind}\u0000${placed.file}\u0000${placed.baseDir ?? ""}`;
           if (seen.has(key)) continue;
@@ -1713,6 +1735,7 @@ export function classifyShellMutation(
         if (frame) {
           dir = frame.dir;
           sticky = frame.sticky;
+          docDir = frame.docDir;
         }
       }
       if (COMPOUND_INC.has(opener)) compound++;

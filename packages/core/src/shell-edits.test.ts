@@ -956,3 +956,26 @@ describe("C17: python -c withdrawn, cd only on && / || exit, exact gate, temp cl
     expect(classifyShellMutation("node scripts/check.mjs").opaque).toBe(true);
   });
 });
+
+describe("C18: an untrusted absolute cd resolves documentation only", () => {
+  const py = (dir: string, name: string) => `cd ${dir}; python3 - <<'EOF'\nopen('${name}','w').write('x')\nEOF`;
+
+  test.each<[string, string[]]>([
+    [py("/abs/other", "a.md"), ["/abs/other/a.md"]],
+    [py("/abs/other", "a.ts"), [SHELL_EDIT_FILE]],
+    ["cd /abs/repo; cat >> plan.md", ["/abs/repo/plan.md"]],
+    ["cd $S/wt; sed -i x f.md", [SHELL_EDIT_FILE]],
+    ["cd /abs/other\ncat >> a.md", ["/abs/other/a.md"]],
+    ["pushd /abs/other; cat >> a.md", ["/abs/other/a.md"]],
+    ["cd /abs/other | cat; cat >> a.md", [SHELL_EDIT_FILE]],
+    ["cd /abs/other || true; cat >> a.md", [SHELL_EDIT_FILE]],
+    ["cd /abs/other & cat >> a.md", [SHELL_EDIT_FILE]],
+    ["if cd /abs/other; then cat >> a.md; fi", [SHELL_EDIT_FILE]],
+    ["(cd /abs/other); cat >> plan.md", ["plan.md"]],
+    ["(cd /abs/other; cat >> plan.md)", ["/abs/other/plan.md"]],
+    ["cd /abs/other; sed -i x a.ts", [SHELL_EDIT_FILE]],
+    ["cd $(pwd)/notes; cat >> a.md", [SHELL_EDIT_FILE]],
+  ])("%s", (cmd, expected) => {
+    expect(files(cmd)).toEqual(expected);
+  });
+});
