@@ -5,7 +5,15 @@
  * Pure string logic on the command, regex/linear, never throws.
  */
 import { isDocPath } from "./hints.js";
-import { matchSegment, normalizeFirstToken, splitSegments, stripHeredocs, stripPrefixes, type RepoScripts } from "./check-patterns.js";
+import {
+  matchSegment,
+  normalizeFirstToken,
+  splitSegments,
+  stripHeredocs,
+  stripPrefixes,
+  type RepoScripts,
+  type Segment,
+} from "./check-patterns.js";
 
 /** File name used when the target of a shell edit cannot be read off the command. */
 export const SHELL_EDIT_FILE = "(shell edit)";
@@ -1022,6 +1030,79 @@ function nextDir(words: Word[], dir: Dir): Dir {
   return concreteDir(ops[0] as Word, dir);
 }
 
+/** Literal absolute `cd` / `pushd` operand, before `$` substitution. Anything else is null. */
+function literalAbsPath(words: Word[]): string | null {
+  const placed = nextDir(words, { k: "unknown" });
+  return placed.k === "abs" ? placed.path : null;
+}
+
+/** Operator that closed a segment, at the grouping and compound depth it actually sits at. */
+interface ListMark {
+  afterParen: number;
+  afterCompound: number;
+  op: string;
+}
+
+function groupingDepth(stack: readonly boolean[]): number {
+  let n = 0;
+  for (const open of stack) if (open) n++;
+  return n;
+}
+
+function restoredSegment(seg: Segment): string {
+  const seen = unquotedParens(seg.text);
+  return seg.text + ")".repeat(Math.max(0, seg.closes - seen.closes));
+}
+
+/**
+ * A `||` earlier in this and-or list, at the same grouping and compound depth.
+ * Nested `(…)` / `if` bodies are a different list: an outer `||` does not count.
+ */
+function precededByOr(history: readonly ListMark[], baseParen: number, baseCompound: number): boolean {
+  for (let j = history.length - 1; j >= 0; j--) {
+    const prev = history[j] as ListMark;
+    if (prev.afterParen === baseParen && prev.afterCompound === baseCompound) {
+      if (prev.op === "||") return true;
+      if (prev.op === "&&") continue;
+      return false;
+    }
+    if (prev.afterParen < baseParen || prev.afterCompound < baseCompound) return false;
+  }
+  return false;
+}
+
+/**
+ * The and-or list that starts at `index` is backgrounded (`&` terminates it).
+ * `&&` and `||` stay in the list. `;`, a newline, `|`, `&`, and a closing keyword end it.
+ * Operators inside a compound command or a deeper subshell do not end the outer list.
+ */
+function listEndsWithAmp(
+  segs: Segment[],
+  index: number,
+  stackAfter: readonly boolean[],
+  opParen: number,
+  opCompound: number,
+  baseParen: number,
+  baseCompound: number,
+  currentOp: string,
+): boolean {
+  const connector = (op: string): boolean => op === "&&" || op === "||";
+  if (opParen === baseParen && opCompound === baseCompound && !connector(currentOp)) return currentOp === "&";
+  const stack = stackAfter.slice();
+  let compound = opCompound;
+  for (let j = index + 1; j < segs.length; j++) {
+    const seg = segs[j] as Segment;
+    consumeGroupingParens(restoredSegment(seg), stack);
+    const head = commandHead(seg.text);
+    if (COMPOUND_INC.has(head)) compound++;
+    else if (COMPOUND_DEC.has(head)) compound = Math.max(0, compound - 1);
+    const afterParen = groupingDepth(stack);
+    if (afterParen === baseParen && compound === baseCompound && !connector(seg.op)) return seg.op === "&";
+    if (afterParen < baseParen || compound < baseCompound) return false;
+  }
+  return false;
+}
+
 /**
  * Where a relative target is read from. An absolute `cd` is baked into `file` (callers read `file`).
  * `baseDir: ""` is the session cwd, so an earlier relative target still resolves when a later `cd` ran.
@@ -1607,18 +1688,32 @@ export function classifyShellMutation(
     let dir: Dir = { k: "session" };
     let sawCd = false;
     // Untrusted `cd` / `pushd` / `popd` outside a subshell leaves the directory unknown.
-    // A grouping `( … )` saves `dir`, `sticky`, and `docDir` and puts them back at the closing `)`.
+    // A grouping `( … )` saves the directory state and puts it back at the closing `)`.
     let sticky = false;
-    // Literal absolute `cd` / `pushd` ended by `;` or a newline (C18). Documentation is placed
-    // there; every other relative target stays unresolved. Cleared by any other directory change.
+    // Literal absolute `cd` / `pushd` that does not resolve code (C18, or a C19 chain that has ended).
+    // Documentation is placed there; every other relative target stays unresolved.
     let docDir: string | null = null;
+    // C19: code resolves only while this `cd &&` chain is still open, at `chainParen` / `chainCompound`.
+    let chainCode = false;
+    let chainDoc: string | null = null;
+    let chainParen = 0;
+    let chainCompound = 0;
     let compound = 0;
     let funcDepth = 0;
     let funcBraces = 0;
     // `NODE_OPTIONS` / `PYTHONPATH` from an earlier segment of this command.
     let loaderEnv = false;
     const poisoned = new Set<string>();
-    const dirStack: { dir: Dir; sticky: boolean; docDir: string | null }[] = [];
+    const dirStack: {
+      dir: Dir;
+      sticky: boolean;
+      docDir: string | null;
+      chainCode: boolean;
+      chainDoc: string | null;
+      chainParen: number;
+      chainCompound: number;
+    }[] = [];
+    const listMarks: ListMark[] = [];
     const groupingOpen: boolean[] = [];
     segs.forEach((seg, i) => {
       poisonTempNamesInSegment(seg.text, vars, poisoned);
@@ -1630,7 +1725,9 @@ export function classifyShellMutation(
       const seenParens = unquotedParens(seg.text);
       const restoredText = seg.text + ")".repeat(Math.max(0, seg.closes - seenParens.closes));
       const groups = consumeGroupingParens(restoredText, groupingOpen);
-      for (let n = 0; n < groups.opens; n++) dirStack.push({ dir, sticky, docDir });
+      for (let n = 0; n < groups.opens; n++) {
+        dirStack.push({ dir, sticky, docDir, chainCode, chainDoc, chainParen, chainCompound });
+      }
       // The heredoc fed to this segment's stdin: its own, or the one that opened the pipeline it belongs to.
       const own = HEREDOC_START_RE.test(seg.text) ? heredocs++ : null;
       if (!prevPipe) pipeHeredoc = null;
@@ -1657,36 +1754,76 @@ export function classifyShellMutation(
       const headIsDir = head === "cd" || head === "pushd" || head === "popd";
       const otherDir = bareDirWordCount(expanded) - (headIsDir ? 1 : 0) > 0 || aliasDefinesDirChange(expanded);
       const nextHead = commandHead(segs[i + 1]?.text ?? "");
-      // Tracked only when this `cd` / `pushd` is the command word, top-level, and followed by `&&` or `|| exit` / `|| return`.
-      const trustedCd =
-        (head === "cd" || head === "pushd") &&
-        !otherDir &&
-        !nested &&
-        !hides &&
-        !prevPipe &&
-        seg.op !== "|" &&
-        seg.op !== "&" &&
-        (seg.op === "&&" || (seg.op === "||" && (nextHead === "exit" || nextHead === "return")));
+      // Code follows a top-level `cd` / `pushd` only inside its `&&` chain (C19), or for the rest of the
+      // command after `|| exit` / `|| return`. A `||` before the cd, or a list that ends in `&`, does neither.
+      const dirHead = (head === "cd" || head === "pushd") && !otherDir && !nested && !hides && !prevPipe;
+      const baseParen = dirStack.length;
+      const baseCompound = compound;
+      let skippedByOr = false;
+      let backgrounded = false;
+      if (dirHead && (seg.op === "&&" || seg.op === "||")) {
+        skippedByOr = precededByOr(listMarks, baseParen, baseCompound);
+        let opCompound = compound;
+        if (COMPOUND_INC.has(opener)) opCompound++;
+        else if (COMPOUND_DEC.has(opener)) opCompound = Math.max(0, opCompound - 1);
+        backgrounded = listEndsWithAmp(
+          segs,
+          i,
+          groupingOpen,
+          groupingDepth(groupingOpen),
+          opCompound,
+          baseParen,
+          baseCompound,
+          seg.op,
+        );
+      }
+      const exitGuard =
+        dirHead && seg.op === "||" && (nextHead === "exit" || nextHead === "return") && !skippedByOr && !backgrounded;
+      const andChain = dirHead && seg.op === "&&" && !skippedByOr && !backgrounded;
       if (hides) {
         hasCd = true;
         dir = { k: "unknown" };
         sawCd = true;
         docDir = null;
-      } else if (trustedCd) {
+        chainCode = false;
+      } else if (exitGuard) {
+        // `cd || exit` / `cd || return`: a failed cd does not reach the rest of the command.
         hasCd = true;
         const next = nextDir(subWords, dir);
         dir = next;
         sawCd = true;
         docDir = null;
+        chainCode = false;
+        if (next.k !== "unknown") sticky = false;
+      } else if (andChain) {
+        hasCd = true;
+        const next = nextDir(subWords, dir);
+        dir = next;
+        sawCd = true;
+        docDir = null;
+        chainCode = true;
+        chainDoc = literalAbsPath(words);
+        chainParen = baseParen;
+        chainCompound = baseCompound;
         // A known directory is trustworthy again. An unknown target (`cd -`, `cd ~`) poisons without sticking,
         // so a subshell can still restore the directory outside it.
         if (next.k !== "unknown") sticky = false;
+      } else if (dirHead && seg.op === "&&") {
+        // `true || cd && …`, or `cd && … &`. The cd may not have run in this shell. Code stays unresolved;
+        // a literal absolute operand still places documentation (C18).
+        hasCd = true;
+        dir = { k: "unknown" };
+        sawCd = true;
+        sticky = true;
+        chainCode = false;
+        docDir = literalAbsPath(words);
       } else if (head === "popd" || headIsDir || otherDir) {
         // Any other `cd` / `pushd` / `popd` (`;`, newline, pipeline, `&`, `||`, compound, function, `$(…)`, alias).
         hasCd = true;
         dir = { k: "unknown" };
         sawCd = true;
         sticky = true;
+        chainCode = false;
         // `;` / newline to a literal absolute directory still places documentation (C18). The operand is
         // read before substitution, so `$S/…` and `$(…)` do not. A relative operand does not either.
         const softAbs =
@@ -1736,6 +1873,10 @@ export function classifyShellMutation(
           dir = frame.dir;
           sticky = frame.sticky;
           docDir = frame.docDir;
+          chainCode = frame.chainCode;
+          chainDoc = frame.chainDoc;
+          chainParen = frame.chainParen;
+          chainCompound = frame.chainCompound;
         }
       }
       if (COMPOUND_INC.has(opener)) compound++;
@@ -1749,6 +1890,16 @@ export function classifyShellMutation(
           funcBraces = 0;
         }
       }
+      // The segment was placed with the chain directory. A terminator at the chain's own depth
+      // (`;`, newline, `|`, `||`, `&`, end) drops code resolution. A literal absolute cd keeps docs.
+      if (chainCode && dirStack.length === chainParen && compound === chainCompound && seg.op !== "&&") {
+        dir = { k: "unknown" };
+        docDir = chainDoc;
+        sawCd = true;
+        sticky = true;
+        chainCode = false;
+      }
+      listMarks.push({ afterParen: dirStack.length, afterCompound: compound, op: seg.op });
     });
     // A relative edit from before the first `cd` still belongs to the session cwd.
     if (hasCd) {
