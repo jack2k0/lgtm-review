@@ -29,6 +29,7 @@ Reguły: `AGENTS.md` (wszyscy agenci), `REVIEW.md` (tiery, uwagi, rejestr, maks.
 Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-lite (live-refresh, FR-011) S-06 (html-export z redakcją, FR-008) i S-11 (status-accuracy, audyt realnych logów: status 97.1% bez subagentów) zmergowane (+ S-12 subagent-prompts, + S-13 fork-dedupe 2026-10-23): F-01, S-01, S-02, S-03 zmergowane lokalnie na main i zarchiwizowane (2026-10-23). Czeka na właściciela: nazwa/trademark, kredyt autora pomysłu, publikacja npm; PRD v2 dodaje FR-009/010 (zrobione w S-05). + S-14 bg-checks (zmergowane, audyt realnych logów zrobiony) + S-09 python-map (2026-10-23). Brak kolejnych slice'ów bez decyzji produktowych. Zaparkowane: S-04 import map, S-07 Play the change, S-08 LLM, S-10 demo page (wymagają decyzji produktowych/rozszerzenia PRD). Procedura: plan Opus -> plan-review agy -> impl Sonnet -> weryfikacja Opus.
 
 ## Decyzje właściciela (2026-10-28)
+- Push 2 (wieczór): tylko do 6b0bc81 (gate-pipes + status-accuracy-5); status-accuracy-6 i dalej lokalnie do osobnej decyzji. R3: zostaje ostrożna reguła dla komend git (koszt ~6 wierszy przyjęty); skryptów scratchpadu NIE luzować.
 - Push zatwierdzony; wykonany 24fe44e..a5a3573.
 - Q1 (worktree w $S/wt-*): zostaje scratch / no-changes. Q2 (późne zdarzenia subagenta): zostają przy prompcie wywołującym. Q3 (`cd X && a; b`): PEŁNA OSTROŻNOŚĆ — nie zakładać udanego cd poza łańcuchem && (przywrócić C19, koszt ~9 pkt B). Q4 (celowo czerwony probe): zostaje failing.
 
