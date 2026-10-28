@@ -27,3 +27,8 @@ schema: no
 - [x] Phase 1 done
 
 ## Phase 2 (orchestrator): real-log audit PRE/POST, counts only.
+
+## Correction after review
+- H2 needed no change: main already scans substitutions on the command with heredoc bodies stripped; ledger row 5 of status-accuracy-5 (Opus) was a false finding. The H2 and H4-dunder tests are kept as regression guards (they pass on main by design).
+- Phase 2 audit: 0 status changes on the 158 real-log rows, 0 regressions (PRE = POST: B 84.8%).
+- [x] Phase 2 done
