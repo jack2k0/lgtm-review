@@ -32,3 +32,17 @@ Remaining 3 mismatching rows (3 prompts, no fork copies):
 - tool `checked`, truth `no-changes`: an opaque writer in a merge command where the logged writes are documentation, scratch and git only. Same judgement as the first.
 
 Target >= 97% (PRD, C11): A 97.4% rows / 97.0% unique, B 98.1% / 97.9%: met.
+
+## Final (after review rounds, C16-C19b), 2026-10-28
+
+New truth (phase 4), same log set (158 B rows), counts only. PRE = main, POST = branch 811e4c7.
+
+| Build | A status (unique) | B status (unique) | C status |
+|---|---|---|---|
+| PRE (main) | 85.3% (86.1%) | 86.1% (86.7%) | 88.1% |
+| POST | 96.6% (96.0%) | 97.5% (97.2%) | 100.0% |
+
+PRE->POST: 18 prompts fixed, 0 regressions (no prompt matched with PRE and not with POST). Status transitions: unchecked->no-changes 10, checked->no-changes 5, unchecked->checked 2 (truth checked), unchecked->checked 1 (truth no-changes, opaque python -c blocks the git split), unchecked->failing 1 (truth failing), unchecked->failing 1 (red mutation probe, by design).
+Cost of the fail-closed narrowing (C16-C19b) against the optimistic phase-4 build: B 98.1% -> 97.5% (python -c relaxation withdrawn). C19 as first written (cd trusted only inside its && chain) measured 88.6% with 3 regressions and was narrowed to the deterministic cases (C19b).
+PRD target >= 97%: met for B (97.5%); A 96.6% (unique 96.0%) is 0.4 points short.
+Accepted risk (owner question): in `cd X && a; b`, `b` is resolved under X; if the cd failed, `b` ran in the old directory.
