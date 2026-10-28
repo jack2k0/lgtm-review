@@ -46,7 +46,8 @@ Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-li
 - Uwagi do F-01: create-turbo stawia przykład Next.js, wymienić na core/cli/web; fixture'y w packages/core albo w turbo inputs; LICENSE+README w packages/cli; smoke test `pnpm pack` + npx w `pnpm check`; schemat Story eksportowany bez importów node:.
 
 ## Aktywne slice'y / worktree
-brak
+- llm-titles (S-08): `../lgtm-review-llm-titles`, faza 1 (core) zrobiona przez Groka, faza 2a w toku (Grok). Plan-review: OpenCode (A1-A9) + Grok (B1-B8).
+- status-accuracy-4: `../lgtm-review-status-accuracy-4`, faza 1 w toku (Grok high). Rozstrzygnięcie Sonnet (24 niezgodności, 18 naprawialnych bez regresji), plan-review OpenCode (C1-C11). Faza 4 (truth.py) tylko subagent Claude (prawdziwe logi).
 - v0.3 (2026-10-25): roadmapa i PRD v3 przygotowane przez Opusa (max); S-16..S-21 zaimplementowane przez Haiku/Sonnet/OpenCode (DeepSeek)/Agy (Gemini), zweryfikowane i zmergowane przez Opusa, zarchiwizowane. zod 3 -> 4.6.6 (audit). Czeka na właściciela: S-08 (O-1..O-3 w PRD), widok w przeglądarce S-17/S-19/S-21, ponowny audyt ground truth (>= 97% niezmierzone), push.
 - S-09 walidacja na wdAir (subagent Sonnet, read-only): ekstraktor+resolver vs Python ast 2908/2908 krawędzi, 0 FP/0 FN; luka: zagnieżdżone projekty (vendor/letsfg) -> fix py-roots (OpenCode pQ, 6528775, zmergowany, zweryfikowany: 21/21 importów letsfg rozwiązanych).
 
@@ -77,6 +78,8 @@ brak
 - 2026-10-27 (cd. 2): kolejne przeglądy read-only. --summary (Agy): bez uwag. Discovery (Agy): nazwa katalogu projektu jak w Claude Code 2.1.311 (`[^a-zA-Z0-9]`->`-`, >200 znaków z hashem; repo z `_`/spacją/unicode miały 0 sesji), realpath repo, pomijanie dotfile'i i pustych plików — merge 3e02847, 4f14132 (Medium). Mapa (OpenCode): fingerprint obejmuje pyproject/setup/manage.py, liniowe numery linii, paths z rozszerzanego tsconfig — daa474c (Medium). Play (Agy): fałszywe 'now imports' przy przeformatowaniu, obcięcie kroków w /play, Play bez plików w --dir — High, recenzja Opus + Sonnet. Czytanie logów (Agy): 0 wystąpień formatów na real logs, odłożone. OpenCode: zgubił kontekst raz (pytanie blokowało prompt; Esc przez `herdr pane send-keys`), limit do 28.10 01:00. Nie wypchnięte.
 
 - 2026-10-27 (cd. 3): archiwum (Agy, 8 uwag: 7 przyjętych, 3 odrzucona — brak archiwów pod starą nazwą, narzędzie nieopublikowane, właściciel bez archiwum): czytana jest dłuższa kopia (archiwum vs uszkodzony żywy log), archiwa dla nazw >200 znaków, tylko pliki agent-*.jsonl/meta.json, pominięcia jak w discovery, realpath wszystkich worktree. High, recenzja Opus + Sonnet. Nie wypchnięte.
+
+- 2026-10-28: zmergowane bom-strip (2351ae0, High, Grok; Opus + Haiku; 0/201 logów z BOM) i ui-nav (ea80367, Medium, Grok; OpenCode). Uwaga: podczas audytu Claude Code skasował stare sesje (5 -> 3 projekty) — warto uruchamiać `--archive`. Nie wypchnięte.
 
 ## Bramki
 - Npm publish: czeka na decyzję właściciela.
