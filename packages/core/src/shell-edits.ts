@@ -145,29 +145,54 @@ function parseWords(s: string): { words: Word[]; redirects: Redirect[] } {
 
 /** `$S`, `$TMPDIR`, `$SCRATCH…` and the same names braced. The rest of the path, if any, follows a slash. */
 const TEMP_PREFIX_RE = /^(\$\{?(?:TMPDIR|TMP|TEMP|S|SCRATCH\w*)\}?)(?:\/(.*))?$/;
+const TEMP_NAME_RE = /^(?:TMPDIR|TMP|TEMP|S|SCRATCH\w*)$/;
 
 const IGNORED_PATH_RES: RegExp[] = [
   /^\/dev\//,
   /^\/(?:private\/)?(?:var\/)?tmp(?:\/|$)/,
   /(?:^|\/)\.cache(?:\/|$)/,
-  /(?:^|\/)scratch[^/]*(?:\/|$)/,
+  // `scratch*` is a directory component only (`scratch/a.ts`). `src/scratchpad.ts` is code (C17).
+  /(?:^|\/)scratch[^/]*\//,
   /(?:^|\/)[^/]*\.(?:log|out|err)$/,
   /(?:^|\/)(?:log|out|output|err|stdout|stderr)$/,
 ];
 
+/** `//` collapses before the climb test, so `$S//../a.ts` is the same climb as `$S/../a.ts` (C17). */
+function collapseSlashes(p: string): string {
+  return p.replace(/\/{2,}/g, "/");
+}
+
+function tempPrefixName(prefix: string): string | null {
+  const m = /^\$\{?([A-Za-z_]\w*)\}?$/.exec(prefix);
+  return m ? (m[1] as string) : null;
+}
+
 /**
  * A temp-variable path stays scratch while the remainder is under the variable.
- * `..` that normalises above the variable (`$S/../../src/a.ts`) is `climb`: unresolved, and a code edit (C16).
+ * `..` that normalises above the variable (`$S/../../src/a.ts`, `$S//../a.ts`) is `climb`: unresolved, a code edit.
+ * A temp name this command assigns away from a temp root, or uses as a `for` / `read` variable, is `climb` too (C17).
  * Ending exactly on the variable (`$S/foo/..`) is still scratch.
  */
-function tempPrefixKind(p: string): "scratch" | "climb" | null {
-  const m = TEMP_PREFIX_RE.exec(p);
+function tempPrefixKind(p: string, poisoned?: ReadonlySet<string>): "scratch" | "climb" | null {
+  const m = TEMP_PREFIX_RE.exec(collapseSlashes(p));
   if (!m) return null;
+  const name = tempPrefixName(m[1] as string);
+  if (name !== null && poisoned?.has(name)) return "climb";
   const rest = m[2];
   if (rest === undefined || rest === "") return "scratch";
   const norm = normalizePath(rest);
   if (norm === ".." || norm.startsWith("../")) return "climb";
   return "scratch";
+}
+
+/**
+ * A non-literal path (`$`, glob, backtick) with a real `..` segment climbs out of whatever prefix it has (C17).
+ * `$S/..a` and `$S/.../a` do not: `..` must be its own segment.
+ */
+function nonLiteralClimb(p: string): boolean {
+  const collapsed = collapseSlashes(p);
+  if (!/[$`*?]/.test(collapsed)) return false;
+  return /(?:^|\/)\.\.(?:\/|$)/.test(collapsed);
 }
 
 /**
@@ -181,12 +206,19 @@ function pathForIgnore(p: string): string {
 }
 
 /** Scratch, cache and log-capture targets are not edits of the work tree. A temp path that climbs out is. */
-function isIgnoredPath(p: string): boolean {
-  const temp = tempPrefixKind(p);
+function isIgnoredPath(p: string, poisoned?: ReadonlySet<string>): boolean {
+  if (nonLiteralClimb(p)) return false;
+  const temp = tempPrefixKind(p, poisoned);
   if (temp === "climb") return false;
   if (temp === "scratch") return true;
   const n = pathForIgnore(p);
   return IGNORED_PATH_RES.some((re) => re.test(n));
+}
+
+/** A literal path under a temp root, scratch directory, cache or log. A value with `$` / a glob is not. */
+function isTempRootValue(value: string | null): boolean {
+  if (value === null || /[$`*?]/.test(value)) return false;
+  return IGNORED_PATH_RES.some((re) => re.test(pathForIgnore(value)));
 }
 
 /** Collapse `.` / `..` in a stored relative edit (`scratch/../src/a.ts` -> `src/a.ts`). Other paths stay as written. */
@@ -207,11 +239,13 @@ function isOption(w: Word): boolean {
 }
 
 /** Files of a segment from its operands; `SHELL_EDIT_FILE` when any operand is dynamic or none is left. */
-function operandFiles(ops: Word[]): string[] {
-  const live = ops.filter((w) => !isIgnoredPath(w.text));
+function operandFiles(ops: Word[], poisoned?: ReadonlySet<string>): string[] {
+  const live = ops.filter((w) => !isIgnoredPath(w.text, poisoned));
   if (live.length === 0 && ops.length > 0) return [];
-  // A temp prefix that climbed out, or any dynamic operand, is an unresolved code edit.
-  if (live.length === 0 || live.some((w) => w.dynamic || tempPrefixKind(w.text) === "climb")) return [SHELL_EDIT_FILE];
+  // A temp prefix that climbed out, a non-literal `..`, or any dynamic operand, is an unresolved code edit.
+  if (live.length === 0 || live.some((w) => w.dynamic || tempPrefixKind(w.text, poisoned) === "climb" || nonLiteralClimb(w.text))) {
+    return [SHELL_EDIT_FILE];
+  }
   return live.map((w) => w.text);
 }
 
@@ -228,7 +262,7 @@ function gitSub(words: Word[]): { sub: string; args: Word[] } | null {
   return sub === undefined ? null : { sub, args: words.slice(i + 1) };
 }
 
-function sedFiles(args: Word[]): string[] | null {
+function sedFiles(args: Word[], poisoned?: ReadonlySet<string>): string[] | null {
   let inPlace = false;
   let hasScriptOpt = false;
   const ops: Word[] = [];
@@ -246,10 +280,10 @@ function sedFiles(args: Word[]): string[] | null {
   }
   if (!inPlace) return null;
   if (!hasScriptOpt) ops.shift(); // the first operand is the script
-  return operandFiles(ops);
+  return operandFiles(ops, poisoned);
 }
 
-function perlFiles(args: Word[]): string[] | null {
+function perlFiles(args: Word[], poisoned?: ReadonlySet<string>): string[] | null {
   let inPlace = false;
   let hasScript = false;
   const ops: Word[] = [];
@@ -269,11 +303,14 @@ function perlFiles(args: Word[]): string[] | null {
   }
   if (!inPlace) return null;
   if (!hasScript) ops.shift();
-  return operandFiles(ops);
+  return operandFiles(ops, poisoned);
 }
 
-function teeFiles(args: Word[]): string[] {
-  return operandFiles(args.filter((w) => !isOption(w)));
+function teeFiles(args: Word[], poisoned?: ReadonlySet<string>): string[] {
+  return operandFiles(
+    args.filter((w) => !isOption(w)),
+    poisoned,
+  );
 }
 
 const GIT_APPLY_READONLY = new Set(["--check", "--stat", "--numstat", "--summary"]);
@@ -521,8 +558,6 @@ interface SegMut {
   /** A history-moving git operation (`GIT_OPS`), as opposed to `git rm` / `git apply`. */
   history: boolean;
   files: MutFile[];
-  /** Parsed edits are present, but a per-file split would trust a `python -c` the allow-list rejects (C12). */
-  opaque?: boolean;
 }
 
 /** A command-line argument as a literal: itself, or `$VAR` / `"$VAR"` / `${VAR}` assigned a literal earlier; null otherwise. */
@@ -545,6 +580,15 @@ function substituteVars(w: Word, vars: ReadonlyMap<string, string>): Word {
   });
   if (unknown || /[$`*?[{()]/.test(text)) return w;
   return { text, dynamic: false };
+}
+
+/**
+ * A climbing temp path is left unsubstituted. Substituting `S=/home/user/src` would turn `$S/a.ts`
+ * into a real path; C17 wants that use unresolved (`(shell edit)`).
+ */
+function substituteKeepingClimb(w: Word, vars: ReadonlyMap<string, string>, poisoned: ReadonlySet<string>): Word {
+  if (nonLiteralClimb(w.text) || tempPrefixKind(w.text, poisoned) === "climb") return w;
+  return substituteVars(w, vars);
 }
 
 /** Bodies of the heredocs of a command, in order of their start. */
@@ -706,10 +750,10 @@ function writesOutputFile(head: string, words: Word[]): boolean {
  * A redirect that may write a file we do not see as an edit: any unknown target; for descriptors other than stdout
  * (`2> f`, `&> f`, `>& f`) also a known target that is neither scratch/log nor documentation.
  */
-function writesUnseen(r: Redirect): boolean {
+function writesUnseen(r: Redirect, poisoned?: ReadonlySet<string>): boolean {
   if (r.target === null) return true;
   // `$S/…`, `$TMPDIR/…`, logs and other scratch targets are not work-tree writes, even before `$S` is substituted.
-  if (isIgnoredPath(r.target.text)) return false;
+  if (isIgnoredPath(r.target.text, poisoned)) return false;
   if (isUnknownTarget(r.target)) return true;
   if (r.fd === "" || r.fd === "1") return false;
   return !isDocPath(r.target.text);
@@ -999,10 +1043,8 @@ function isFrozenInstall(words: Word[]): boolean {
   return (positional[0] === "install" || positional[0] === "i") && frozen;
 }
 
-const GATE_BASE_RE = /^(?:gate|check|verify|validate)[\w.-]*\.(?:mjs|cjs|js|py|ts)$/;
-
 /**
- * The word right after `node` / `python` / `python3` (C16). Any interpreter option means this is not a gate script.
+ * The word right after `node` (C17). Any interpreter option means this is not a gate script.
  * Later words are script arguments and are not examined.
  */
 function scriptOperand(words: Word[]): Word | null {
@@ -1012,15 +1054,13 @@ function scriptOperand(words: Word[]): Word | null {
 }
 
 /**
- * `node` / `python` whose first real operand is `scripts/(gate|check|verify|validate)…`.
- * A relative cwd must stay repo-relative (`scripts/…`). An absolute cwd counts only when that directory
- * is the session repo root, a directory under it, or a sibling worktree `<parent>/<basename>-<segment>` (C13).
- * Any other absolute directory, or an absolute script path, fails closed.
+ * Exactly `node scripts/gate.mjs` or `node ./scripts/gate.mjs` (C17). `cd scripts && node gate.mjs` resolves
+ * to the same path. An absolute cwd counts only when that directory is the session repo root, a directory
+ * under it, or a sibling worktree `<parent>/<basename>-<segment>` (C13), and the script is still `scripts/gate.mjs`.
+ * `check*` / `verify*` / `validate*` and python gate scripts are not GATEREAD. An absolute script path fails closed.
  */
 function isGateScript(words: Word[], dir: Dir, repoRoots: readonly string[]): boolean {
-  const head = words[0]?.text ?? "";
-  const kind = head === "node" ? "node" : /^python[\d.]*$/.test(head) ? "py" : null;
-  if (kind === null || dir.k === "unknown") return false;
+  if ((words[0]?.text ?? "") !== "node" || dir.k === "unknown") return false;
   const op = scriptOperand(words);
   if (op === null || op.dynamic || op.text.startsWith("/") || op.text.startsWith("~")) return false;
   if (dir.k === "abs") {
@@ -1028,19 +1068,13 @@ function isGateScript(words: Word[], dir: Dir, repoRoots: readonly string[]): bo
     return isScriptsGateFile(dir.path, op.text);
   }
   const joined = dir.k === "rel" ? `${dir.path}/${op.text}` : op.text;
-  const p = normalizePath(joined);
-  if (p.startsWith("/") || p.startsWith("..") || !p.startsWith("scripts/")) return false;
-  const base = p.slice(p.lastIndexOf("/") + 1);
-  return GATE_BASE_RE.test(base);
+  return normalizePath(joined) === "scripts/gate.mjs";
 }
 
-/** `<dir>/scripts/<gate|check|verify|validate name>`, not a file nested under `scripts/`. */
+/** `<dir>/scripts/gate.mjs`, not a file nested under `scripts/` and not another script name. */
 function isScriptsGateFile(dir: string, operand: string): boolean {
   const script = normalizePath(`${dir}/${operand}`);
-  const prefix = `${normalizePath(dir)}/scripts/`;
-  if (!script.startsWith(prefix)) return false;
-  const name = script.slice(prefix.length);
-  return name !== "" && !name.includes("/") && GATE_BASE_RE.test(name);
+  return script === `${normalizePath(dir)}/scripts/gate.mjs`;
 }
 
 /**
@@ -1074,244 +1108,291 @@ function asRepoRoots(repoRoot: string | readonly (string | null | undefined)[] |
   return out;
 }
 
-/** Drops the common leading indent, the way `textwrap.dedent` does, so a quoted `-c` body binds at column 0. */
-function dedent(src: string): string {
-  const lines = src.split("\n");
-  let min = Infinity;
-  for (const line of lines) {
-    if (line.trim() === "") continue;
-    const lead = /^[ \t]*/.exec(line);
-    min = Math.min(min, lead ? lead[0].length : 0);
-  }
-  if (!Number.isFinite(min) || min === 0) return src;
-  return lines.map((line) => (line.trim() === "" ? line : line.slice(min))).join("\n");
+const DIR_CMD = new Set(["cd", "pushd", "popd"]);
+const COMPOUND_INC = new Set(["if", "while", "until", "for", "case"]);
+const COMPOUND_OPEN = new Set(["if", "elif", "while", "until", "for", "case"]);
+const COMPOUND_DEC = new Set(["fi", "done", "esac"]);
+
+/** Command word after the same prefix strip the mutation scan uses. */
+function commandHead(segment: string): string {
+  const { words } = parseWords(normalizeFirstToken(stripPrefixes(segment)));
+  return words[0]?.text ?? "";
 }
 
-/** Comments and string contents blanked, so an escape or write API inside a literal is not one. Newlines stay. */
-function pyCode(src: string): string {
-  const stripped = stripPyComments(src);
-  let out = "";
+/** Body of `` `...` `` or `$(...)` starting at `i`, and the index just after it. */
+function readCommandNest(s: string, i: number): { body: string; next: number } {
+  if (s[i] === "`") {
+    const end = s.indexOf("`", i + 1);
+    if (end < 0) return { body: s.slice(i + 1), next: s.length };
+    return { body: s.slice(i + 1, end), next: end + 1 };
+  }
+  const end = closeParen(s, i + 1);
+  if (end < 0) return { body: s.slice(i + 2), next: s.length };
+  return { body: s.slice(i + 2, end), next: end + 1 };
+}
+
+/**
+ * Bare `cd` / `pushd` / `popd` words, including inside `$(...)` and backticks.
+ * Quoted text is skipped (a quoted `cd` does not run), except those nests, which do.
+ * `/tmp/cd` is one word, not a `cd`.
+ */
+function bareDirWordCount(s: string): number {
+  let count = 0;
   let i = 0;
-  while (i < stripped.length) {
-    const c = stripped[i] as string;
-    if (c !== '"' && c !== "'") {
-      out += c;
+  let quote: "'" | '"' | null = null;
+  while (i < s.length) {
+    const c = s[i] as string;
+    if (quote === "'") {
+      if (c === "'") quote = null;
       i++;
       continue;
     }
-    const triple = stripped.startsWith(c + c + c, i);
-    let j = i + (triple ? 3 : 1);
-    if (triple) {
-      const end = stripped.indexOf(c + c + c, j);
-      j = end < 0 ? stripped.length : end + 3;
-    } else {
-      while (j < stripped.length && stripped[j] !== c && stripped[j] !== "\n") j += stripped[j] === "\\" ? 2 : 1;
-      if (stripped[j] === c) j++;
+    if (quote === '"') {
+      if (c === "\\" && i + 1 < s.length) {
+        i += 2;
+        continue;
+      }
+      if (c === '"') {
+        quote = null;
+        i++;
+        continue;
+      }
+      if (c === "`" || (c === "$" && s[i + 1] === "(")) {
+        const nested = readCommandNest(s, i);
+        count += bareDirWordCount(nested.body);
+        i = nested.next;
+        continue;
+      }
+      i++;
+      continue;
     }
-    for (let k = i; k < j; k++) out += stripped[k] === "\n" ? "\n" : " ";
+    if (c === "\\") {
+      i += 2;
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      quote = c;
+      i++;
+      continue;
+    }
+    if (c === "`" || (c === "$" && s[i + 1] === "(")) {
+      const nested = readCommandNest(s, i);
+      count += bareDirWordCount(nested.body);
+      i = nested.next;
+      continue;
+    }
+    if (!/[\s|&;<>(){}]/.test(c)) {
+      const start = i;
+      while (i < s.length) {
+        const d = s[i] as string;
+        if (/[\s|&;<>(){}"'\\`]/.test(d)) break;
+        if (d === "$" && s[i + 1] === "(") break;
+        i++;
+      }
+      if (DIR_CMD.has(s.slice(start, i))) count++;
+      continue;
+    }
+    i++;
+  }
+  return count;
+}
+
+/** `f()` / `function f` starts a function. The body is not the current shell. */
+function startsFunction(segment: string): boolean {
+  const t = segment.trim().replace(/^[({!]+\s*/, "");
+  if (/^function\s+[A-Za-z_]\w*/.test(t)) return true;
+  return /^[A-Za-z_]\w*\s*\(\s*\)/.test(t);
+}
+
+/** An alias whose text names `cd` / `pushd` / `popd` (quotes included: the value is the definition). */
+function aliasDefinesDirChange(segment: string): boolean {
+  if (commandHead(segment) !== "alias") return false;
+  return /(^|[^A-Za-z0-9_])(cd|pushd|popd)(?![A-Za-z0-9_])/.test(segment);
+}
+
+function countBraces(segment: string): { open: number; close: number } {
+  let open = 0;
+  let close = 0;
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < segment.length; i++) {
+    const c = segment[i] as string;
+    if (quote !== null) {
+      if (c === "\\" && quote === '"') i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "\\") {
+      i++;
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      quote = c;
+      continue;
+    }
+    if (c === "{") open++;
+    else if (c === "}") close++;
+  }
+  return { open, close };
+}
+
+/**
+ * Temp names (`S`, `TMP`, `TMPDIR`, `TEMP`, `SCRATCH*`) this command assigns to something other than a
+ * temp root, or binds with `for` / `read`. Their `$NAME/…` paths are unresolved for the whole command (C17).
+ */
+function poisonedTempNames(segs: { text: string }[]): Set<string> {
+  const poisoned = new Set<string>();
+  const vars = new Map<string, string>();
+  for (const seg of segs) {
+    let s = seg.text.trim();
+    const exported = s.startsWith("export ");
+    const found: [string, string | null][] = [];
+    for (let guard = 0; guard < 10; guard++) {
+      const m = ASSIGN_RE.exec(s);
+      if (!m) break;
+      const name = m[1] as string;
+      const value = assignmentValue(m[2] as string, vars);
+      found.push([name, value]);
+      if (TEMP_NAME_RE.test(name) && !isTempRootValue(value)) poisoned.add(name);
+      s = s.slice(m[0].length);
+    }
+    if (s.trim() === "" || exported) {
+      for (const [name, v] of found) {
+        if (v === null) vars.delete(name);
+        else vars.set(name, v);
+      }
+    }
+    const { words } = parseWords(seg.text);
+    for (let i = 0; i < words.length; i++) {
+      const t = (words[i] as Word).text;
+      if (t === "for") {
+        const name = words[i + 1]?.text ?? "";
+        if (TEMP_NAME_RE.test(name)) poisoned.add(name);
+      } else if (t === "read") {
+        let j = i + 1;
+        while (j < words.length && /^-[A-Za-z]+$/.test((words[j] as Word).text)) j++;
+        while (j < words.length && TEMP_NAME_RE.test((words[j] as Word).text)) {
+          poisoned.add((words[j] as Word).text);
+          j++;
+        }
+      }
+    }
+  }
+  return poisoned;
+}
+
+/** `NODE_OPTIONS` / `PYTHONPATH` assigned in this segment (they stay in the environment for later segments). */
+function assignsLoader(raw: string): boolean {
+  let s = raw.trim();
+  for (let guard = 0; guard < 10; guard++) {
+    s = s.replace(/^[({!]+\s*/, "");
+    const name = /^(?:export\s+)?([A-Za-z_]\w*)=/.exec(s);
+    if (!name) return false;
+    if (name[1] === "NODE_OPTIONS" || name[1] === "PYTHONPATH") return true;
+    const full = /^(?:export\s+)?[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S*)\s*/.exec(s);
+    if (!full) return false;
+    s = s.slice(full[0].length);
+    if (s.trim() === "") return false;
+  }
+  return false;
+}
+
+function looseTokens(s: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < s.length) {
+    while (i < s.length && /\s/.test(s[i] as string)) i++;
+    if (i >= s.length) break;
+    const q = s[i];
+    if (q === "'" || q === '"') {
+      const end = s.indexOf(q, i + 1);
+      const stop = end < 0 ? s.length : end;
+      out.push(s.slice(i + 1, stop));
+      i = end < 0 ? s.length : end + 1;
+      continue;
+    }
+    let j = i;
+    while (j < s.length && !/\s/.test(s[j] as string)) j++;
+    out.push(s.slice(i, j));
     i = j;
   }
   return out;
 }
 
-/** Known `$VAR` / `${VAR}` inside a double-quoted `-c` source. Null when any reference is unknown or still dynamic. */
-function substPySource(w: Word, vars: ReadonlyMap<string, string>): string | null {
-  if (!w.dynamic) return w.text;
-  if (w.text.includes("`") || w.text.includes("$(")) return null;
-  let unknown = false;
-  const out = w.text.replace(VAR_REF_RE, (_all, braced: string | undefined, bare: string | undefined) => {
-    const v = vars.get((braced ?? bare) as string);
-    if (v === undefined) unknown = true;
-    return v ?? "";
-  });
-  if (unknown || out.includes("$") || out.includes("`")) return null;
-  return out;
-}
-
-type PyC = { kind: "safe" } | { kind: "opaque" } | { kind: "write"; files: string[]; opaque?: boolean };
-
-/** Positional or `mode=` argument of `open(…)`, or undefined for `open(path)` and keyword-only calls. */
-function openModeArg(args: string): string | undefined {
-  const parts = splitTop(args, ",").map((x) => x.trim());
-  const kw = parts.find((x) => /^mode\s*=/.test(x));
-  if (kw !== undefined) return kw.replace(/^mode\s*=\s*/, "").trim();
-  const second = parts[1];
-  if (second === undefined || /^\w+\s*=(?!=)/.test(second)) return undefined;
-  return second.trim();
-}
-
-function modeLiteral(mode: string): string | null {
-  const lit = /^(['"])([^'"\n]*)\1$/.exec(mode);
-  return lit ? (lit[2] as string) : null;
-}
-
-/** Names a `python -c` source may use, besides keywords and names it assigns (C16). */
-const PY_ALLOWED_IDENTS = new Set(
-  (
-    "print open len str int float bool list dict set tuple sorted min max sum range enumerate zip any all isinstance " +
-    "read write replace split rsplit join strip lstrip rstrip splitlines startswith endswith lower upper format encode decode " +
-    "get items keys values append extend count find json dumps loads re sub search match findall compile group math pi sqrt floor ceil"
-  ).split(" "),
-);
-
-const PY_KEYWORDS = new Set(
-  (
-    "False None True and as assert async await break class continue def del elif else except finally for from global if import in is " +
-    "lambda nonlocal not or pass raise return try while with yield match case"
-  ).split(" "),
-);
-
-/** The only import statements that stay non-opaque: `import json`, `import re`, `import math`. */
-const PY_IMPORT_OK = new Set(["json", "re", "math"]);
-
-/** Simple `name =` and `for name in` bindings, on code with strings blanked. */
-function assignedNames(blank: string): Set<string> {
-  const names = new Set<string>();
-  for (const m of blank.matchAll(/(?:^|[^A-Za-z0-9_.])([A-Za-z_]\w*)\s*=(?!=)/g)) names.add(m[1] as string);
-  for (const m of blank.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\b/g)) names.add(m[1] as string);
-  return names;
-}
-
-/**
- * Literal string bindings in effect before `at`. An indented binding poisons the name (it may not run).
- * Only a string literal, or a name already bound to one, counts. Concatenation does not.
- */
-function literalBindsAt(src: string, at: number): Map<string, string | null> {
-  const bound = new Map<string, string | null>();
-  for (const m of src.matchAll(PY_BIND_RE)) {
-    const name = m[1] as string;
-    const bindAt = (m.index ?? 0) + m[0].indexOf(name);
-    if (bindAt >= at) break;
-    const lineStart = src.lastIndexOf("\n", bindAt - 1) + 1;
-    const nested = (/^[ \t]*/.exec(src.slice(lineStart))?.[0] ?? "") !== "";
-    if (nested) {
-      bound.set(name, null);
-      continue;
-    }
-    const expr = (m[2] as string).trim();
-    const lit = /^(['"])([^'"\n]*)\1$/.exec(expr);
-    if (lit) bound.set(name, lit[2] as string);
-    else if (/^[A-Za-z_]\w*$/.test(expr) && bound.has(expr)) bound.set(name, bound.get(expr) ?? null);
-    else bound.set(name, null);
-  }
-  return bound;
-}
-
-/** A path argument that is a string literal or a name bound to one. */
-function literalPath(expr: string, bound: ReadonlyMap<string, string | null>): string | null {
-  const e = expr.trim();
-  const lit = /^(['"])([^'"\n]*)\1$/.exec(e);
-  if (lit) return lit[2] as string;
-  if (/^[A-Za-z_]\w*$/.test(e)) {
-    if (!bound.has(e)) return null;
-    return bound.get(e) ?? null;
-  }
-  return null;
-}
-
-/** Absent, or one of r/w/a/x plus optional t, b and +. */
-function pyModeAllowed(mode: string | undefined): boolean {
-  if (mode === undefined) return true;
-  const lit = modeLiteral(mode.trim());
-  if (lit === null) return false;
-  if (!/^[rwaxtb+]+$/.test(lit)) return false;
-  return [...lit].filter((c) => "rwax".includes(c)).length === 1;
-}
-
-/**
- * Every `open(` has a literal or locally-assigned literal path and a literal mode
- * (absent, "r", "rb", "w", "a", "x", with optional "t" / "b" / "+").
- */
-function pyOpensAllowed(stripped: string, blank: string): boolean {
-  for (const m of blank.matchAll(/\bopen\s*\(/g)) {
-    const at = m.index ?? 0;
-    const paren = at + m[0].length - 1;
-    const args = balancedArgs(stripped, paren);
-    if (args === null) return false;
-    const parts = splitTop(args, ",").map((x) => x.trim());
-    const path = parts[0] ?? "";
-    if (path === "" || /^\w+\s*=(?!=)/.test(path)) return false;
-    const bound = literalBindsAt(stripped, at);
-    if (literalPath(path, bound) === null) return false;
-    if (!pyModeAllowed(openModeArg(args))) return false;
-  }
-  return true;
-}
-
-/**
- * True when every identifier is a keyword, an allowed name, or a simple assignment / `for` target;
- * imports are only `import json` / `import re` / `import math`; attribute names are in the allowed set.
- * Strings and comments are ignored. Anything else is opaque (C16).
- */
-function pyAllow(src: string): boolean {
-  const blank = pyCode(src);
-  const stripped = stripPyComments(src);
-  if (/\bfrom\s+\S+\s+import\b/.test(blank)) return false;
-  for (const m of blank.matchAll(/\bimport\s+([^#;\n]*)/g)) {
-    if (!PY_IMPORT_OK.has((m[1] ?? "").trim())) return false;
-  }
-  for (const m of blank.matchAll(/\.(\s*)([A-Za-z_]\w*)/g)) {
-    if (!PY_ALLOWED_IDENTS.has(m[2] as string)) return false;
-  }
-  const assigned = assignedNames(blank);
-  for (const m of blank.matchAll(/\b[A-Za-z_]\w*\b/g)) {
-    const name = m[0];
-    if (PY_KEYWORDS.has(name) || PY_ALLOWED_IDENTS.has(name) || assigned.has(name)) continue;
+/** `env --chdir` / `env -C` before the command word (the value may be attached with `=` or be the next word). */
+function envChangesDir(tokens: string[]): boolean {
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i] as string;
+    if (t === "--chdir" || t.startsWith("--chdir=") || t === "-C" || t.startsWith("-C")) return true;
+    if (t.startsWith("-") || /^[A-Za-z_]\w*=/.test(t)) continue;
     return false;
   }
-  return pyOpensAllowed(stripped, blank);
+  return false;
+}
+
+/** `sudo --chdir` before the command word. */
+function sudoChangesDir(tokens: string[]): boolean {
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i] as string;
+    if (t === "--chdir" || t.startsWith("--chdir=")) return true;
+    if (t.startsWith("-") || /^[A-Za-z_]\w*=/.test(t)) continue;
+    return false;
+  }
+  return false;
 }
 
 /**
- * `python -c <src>` (optional `-u`/`-B`/`-I`/`-E`/`-s`/`-S`/`-O` before `-c`). Null when this is not `-c`:
- * a script, `-m`, `-` or a dash-less heredoc (`python3 <<EOF`) so the heredoc writer scan still runs.
- * `-c` with no source, or another positional after the source, is opaque.
- * The source is non-opaque only when `pyAllow` accepts it. A resolved write in that source is the edit.
- * Anything else is opaque and contributes no edit, the same as an unrecognised `python -c` on main.
+ * A loader in front of this segment: `NODE_OPTIONS=`, `PYTHONPATH=`, `env --chdir`, `env -C`, `sudo --chdir`.
+ * Other assignments (`FOO=1`, `S=/tmp`) do not block GATEREAD.
  */
-function classifyPyC(words: Word[], vars: ReadonlyMap<string, string>): PyC | null {
-  const head = words[0]?.text ?? "";
-  if (!/^python[\d.]*$/.test(head)) return null;
-  let sawC = false;
-  let src: Word | null = null;
-  let trailing = false;
-  for (let i = 1; i < words.length; i++) {
-    const t = (words[i] as Word).text;
-    if (!sawC) {
-      if (t === "-c") {
-        sawC = true;
-        src = (words[i + 1] as Word | undefined) ?? null;
-        if (src !== null) i++;
-        continue;
-      }
-      if (t === "-m" || t === "-" || !t.startsWith("-")) return null;
-      if (/^-[uBIEsSO]+$/.test(t)) continue;
-      if (t.startsWith("-")) continue;
-      return null;
+function segmentGateBlocked(raw: string): boolean {
+  let s = raw.trim();
+  for (let guard = 0; guard < 20; guard++) {
+    s = s.replace(/^[({!]+\s*/, "").replace(/^(?:do|then|else)\s+/, "");
+    const assign = /^(?:export\s+)?([A-Za-z_]\w*)=(?:"[^"]*"|'[^']*'|\S*)(\s*)$|^(?:export\s+)?([A-Za-z_]\w*)=(?:"[^"]*"|'[^']*'|\S*)\s+/.exec(s);
+    if (assign) {
+      const name = (assign[1] ?? assign[3]) as string;
+      if (name === "NODE_OPTIONS" || name === "PYTHONPATH") return true;
+      if (assign[1] !== undefined) return false;
+      s = s.slice(assign[0].length);
+      continue;
     }
-    if (t.startsWith("-") && t !== "-") continue;
-    trailing = true;
-    break;
+    if (/^env(?:\s|$)/.test(s)) {
+      const tokens = looseTokens(s.replace(/^env\s*/, ""));
+      if (envChangesDir(tokens)) return true;
+      const cmdAt = tokens.findIndex((t) => !t.startsWith("-") && !/^[A-Za-z_]\w*=/.test(t));
+      if (cmdAt < 0) return false;
+      s = tokens.slice(cmdAt).join(" ");
+      continue;
+    }
+    if (/^sudo(?:\s|$)/.test(s)) {
+      const tokens = looseTokens(s.replace(/^sudo\s*/, ""));
+      if (sudoChangesDir(tokens)) return true;
+      const cmdAt = tokens.findIndex((t) => !t.startsWith("-") && !/^[A-Za-z_]\w*=/.test(t));
+      if (cmdAt < 0) return false;
+      s = tokens.slice(cmdAt).join(" ");
+      continue;
+    }
+    return false;
   }
-  if (!sawC) return null;
-  if (src === null || trailing) return { kind: "opaque" };
-  const text = substPySource(src, vars);
-  if (text === null) return { kind: "opaque" };
-  const code = dedent(text);
-  if (!pyAllow(code)) return { kind: "opaque" };
-  const info = inspectPythonWrites(code, []);
-  if (info.unresolved) return { kind: "opaque" };
-  if (info.files.length > 0) return { kind: "write", files: info.files };
-  return { kind: "safe" };
+  return false;
 }
 
+
 /** Segments known not to write files (beyond what `segmentMutation` already reported). */
-function isKnownNonWriting(rawWords: Word[], redirects: Redirect[], dir: Dir, vars: ReadonlyMap<string, string>, repoRoots: readonly string[]): boolean {
-  const words = unwrapXargs(rawWords.map((w) => substituteVars(w, vars)));
+function isKnownNonWriting(
+  rawWords: Word[],
+  redirects: Redirect[],
+  dir: Dir,
+  vars: ReadonlyMap<string, string>,
+  repoRoots: readonly string[],
+  poisoned: ReadonlySet<string>,
+  gateBlocked: boolean,
+): boolean {
+  const words = unwrapXargs(rawWords.map((w) => substituteKeepingClimb(w, vars, poisoned)));
   const head = words[0]?.text;
   if (head === undefined) return redirects.length === 0;
   // A write redirect to an unknown target is a write we cannot see.
-  if (redirects.some(writesUnseen)) return false;
+  if (redirects.some((r) => writesUnseen(r, poisoned))) return false;
   if (/^[A-Za-z_]\w*=/.test(head)) return true;
   const git = gitSub(words);
   if (git !== null) {
@@ -1321,10 +1402,7 @@ function isKnownNonWriting(rawWords: Word[], redirects: Redirect[], dir: Dir, va
     if (git.sub === "config") return git.args.some((w) => w.text === "--get" || w.text === "--get-all" || w.text === "--list" || w.text === "-l");
     return false;
   }
-  if (isFrozenInstall(words) || isGateScript(words, dir, repoRoots)) return true;
-  const pyc = classifyPyC(words, vars);
-  if (pyc?.kind === "safe") return true;
-  if (pyc !== null) return false;
+  if (isFrozenInstall(words) || (!gateBlocked && isGateScript(words, dir, repoRoots))) return true;
   if (head === "sed" || head === "gsed") return isReadOnlySed(words);
   if (writesOutputFile(head, words)) return false;
   return SAFE_HEADS.has(head);
@@ -1348,15 +1426,15 @@ function segmentMutation(
   heredoc: string | null,
   heredocUnsure: boolean,
   vars: ReadonlyMap<string, string>,
+  poisoned: ReadonlySet<string>,
 ): SegMut | null {
-  const words = unwrapXargs(rawWords.map((w) => substituteVars(w, vars)));
-  for (const r of redirects) if (r.target !== null) r.target = substituteVars(r.target, vars);
+  const words = unwrapXargs(rawWords.map((w) => substituteKeepingClimb(w, vars, poisoned)));
+  for (const r of redirects) if (r.target !== null) r.target = substituteKeepingClimb(r.target, vars, poisoned);
   const head = words[0]?.text ?? "";
   const files: MutFile[] = [];
   let gitOp = false;
   let history = false;
   let mutating = false;
-  let segmentOpaque = false;
 
   const git = gitSub(words);
   if (git !== null) {
@@ -1364,7 +1442,7 @@ function segmentMutation(
       const hasCached = git.args.some((w) => w.text === "--cached");
       if (!hasCached) {
         const ops = git.args.filter((w) => !isOption(w));
-        const targets = operandFiles(ops);
+        const targets = operandFiles(ops, poisoned);
         if (targets.length > 0) {
           gitOp = true;
           mutating = true;
@@ -1383,15 +1461,15 @@ function segmentMutation(
           const dest = ops[ops.length - 1]!;
           const sources = ops.slice(0, ops.length - 1);
           for (const src of sources) {
-            for (const f of operandFiles([src])) {
+            for (const f of operandFiles([src], poisoned)) {
               files.push({ file: f, kind: "D" });
             }
           }
-          for (const f of operandFiles([dest])) {
+          for (const f of operandFiles([dest], poisoned)) {
             files.push({ file: f, kind: "A" });
           }
         } else if (ops.length === 1) {
-          for (const f of operandFiles(ops)) {
+          for (const f of operandFiles(ops, poisoned)) {
             files.push({ file: f, kind: "A" });
           }
         } else {
@@ -1403,51 +1481,45 @@ function segmentMutation(
       files.push({ file: SHELL_EDIT_FILE, kind: "M" });
     }
   } else if (head === "sed" || head === "gsed") {
-    const f = sedFiles(words.slice(1));
+    const f = sedFiles(words.slice(1), poisoned);
     if (f !== null) {
       mutating = f.length > 0;
       files.push(...f.map((file) => ({ file, kind: "M" as const })));
     }
   } else if (head === "perl") {
-    const f = perlFiles(words.slice(1));
+    const f = perlFiles(words.slice(1), poisoned);
     if (f !== null) {
       mutating = f.length > 0;
       files.push(...f.map((file) => ({ file, kind: "M" as const })));
     }
   } else if (head === "tee" && !pipedFromCheck) {
-    const f = teeFiles(words.slice(1));
+    const f = teeFiles(words.slice(1), poisoned);
     mutating = f.length > 0;
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
-  } else if (/^python[\d.]*$/.test(head)) {
-    const pyc = classifyPyC(words, vars);
-    if (pyc?.kind === "write") {
-      mutating = true;
-      if (pyc.opaque) segmentOpaque = true;
-      files.push(...pyc.files.map((file) => ({ file, kind: "M" as const })));
-    } else if (pyc === null && (heredoc !== null || heredocUnsure)) {
-      const dash = words.findIndex((w) => w.text === "-");
-      const argv = dash < 0 ? [] : words.slice(dash + 1).map((w) => shellArg(w, vars));
-      const f = heredoc === null ? [SHELL_EDIT_FILE] : pythonWrites(heredoc, argv);
-      mutating = f.length > 0;
-      files.push(...f.map((file) => ({ file, kind: "M" as const })));
-    }
+  } else if (/^python[\d.]*$/.test(head) && (heredoc !== null || heredocUnsure)) {
+    // `python -c` is not scanned (C17: same as main). A heredoc, including a dash-less one, still is.
+    const dash = words.findIndex((w) => w.text === "-");
+    const argv = dash < 0 ? [] : words.slice(dash + 1).map((w) => shellArg(w, vars));
+    const f = heredoc === null ? [SHELL_EDIT_FILE] : pythonWrites(heredoc, argv);
+    mutating = f.length > 0;
+    files.push(...f.map((file) => ({ file, kind: "M" as const })));
   }
 
   // `cmd > file` / `cmd >> file`; a check's own redirects capture its log, not an edit.
   if (!isCheck) {
     for (const r of redirects) {
       if ((r.fd !== "" && r.fd !== "1") || r.target === null) continue;
-      if (tempPrefixKind(r.target.text) === "climb") {
+      if (tempPrefixKind(r.target.text, poisoned) === "climb" || nonLiteralClimb(r.target.text)) {
         mutating = true;
         files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
         continue;
       }
-      if (isUnknownTarget(r.target) || isIgnoredPath(r.target.text)) continue;
+      if (isUnknownTarget(r.target) || isIgnoredPath(r.target.text, poisoned)) continue;
       mutating = true;
       files.push({ file: r.target.text, kind: "M" as const });
     }
   }
-  return mutating ? { gitOp, history, files, ...(segmentOpaque ? { opaque: true } : {}) } : null;
+  return mutating ? { gitOp, history, files } : null;
 }
 
 /** Normalizes `.`/`..` segments of a path without touching the file system. */
@@ -1520,6 +1592,14 @@ export function classifyShellMutation(
     let truncated = false;
     let dir: Dir = { k: "session" };
     let sawCd = false;
+    // An untrusted `cd` / `pushd` / `popd` sticks: leaving a subshell does not bring the old directory back.
+    let sticky = false;
+    let compound = 0;
+    let funcDepth = 0;
+    let funcBraces = 0;
+    // `NODE_OPTIONS` / `PYTHONPATH` from an earlier segment of this command.
+    let loaderEnv = false;
+    const poisoned = poisonedTempNames(segs);
     const dirStack: Dir[] = [];
     segs.forEach((seg, i) => {
       collectAssignments(seg.text, vars);
@@ -1550,23 +1630,46 @@ export function classifyShellMutation(
       // A hider (`eval`, `source`, `command`, …) makes this segment's own relative targets unresolved too.
       const placeDir: Dir = hides ? { k: "unknown" } : dir;
       const placeSaw = hides || sawCd;
+      // `if cd` is nested via the opener even though `compound` increments after this decision.
+      const opener = commandHead(expanded);
+      const nested =
+        compound > 0 || funcDepth > 0 || COMPOUND_OPEN.has(opener) || startsFunction(expanded) || dirStack.length > 1;
+      const headIsDir = head === "cd" || head === "pushd" || head === "popd";
+      const otherDir = bareDirWordCount(expanded) - (headIsDir ? 1 : 0) > 0 || aliasDefinesDirChange(expanded);
+      const nextHead = commandHead(segs[i + 1]?.text ?? "");
+      // Tracked only when this `cd` / `pushd` is the command word, top-level, and followed by `&&` or `|| exit` / `|| return`.
+      const trustedCd =
+        (head === "cd" || head === "pushd") &&
+        !otherDir &&
+        !nested &&
+        !hides &&
+        !prevPipe &&
+        seg.op !== "|" &&
+        seg.op !== "&" &&
+        (seg.op === "&&" || (seg.op === "||" && (nextHead === "exit" || nextHead === "return")));
       if (hides) {
         hasCd = true;
         dir = { k: "unknown" };
         sawCd = true;
-      } else if (head === "cd" || head === "pushd") {
+      } else if (trustedCd) {
         hasCd = true;
-        dir = nextDir(subWords, dir);
+        const next = nextDir(subWords, dir);
+        dir = next;
         sawCd = true;
-      } else if (head === "popd") {
-        // No stack to restore: an unknown directory change from here on (fail closed).
+        // A known directory is trustworthy again. An unknown target (`cd -`, `cd ~`) poisons without sticking,
+        // so a subshell can still restore the directory outside it.
+        if (next.k !== "unknown") sticky = false;
+      } else if (head === "popd" || headIsDir || otherDir) {
+        // Any other `cd` / `pushd` / `popd` (`;`, newline, pipeline, `&`, `||`, compound, function, `$(…)`, alias).
         hasCd = true;
         dir = { k: "unknown" };
         sawCd = true;
+        sticky = true;
       }
-      const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, heredoc, unsure, vars);
-      if (m?.opaque) opaque = true;
-      if (m === null && !isCheck && !isKnownNonWriting(words, redirects, placeDir, vars, repoRoots)) opaque = true;
+      const gateBlocked = loaderEnv || segmentGateBlocked(expanded);
+      if (assignsLoader(expanded)) loaderEnv = true;
+      const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, heredoc, unsure, vars, poisoned);
+      if (m === null && !isCheck && !isKnownNonWriting(words, redirects, placeDir, vars, repoRoots, poisoned, gateBlocked)) opaque = true;
       prevCheck = isCheck;
       prevPipe = seg.op === "|";
       if (isCheck) checkIdx.push(i);
@@ -1594,7 +1697,21 @@ export function classifyShellMutation(
           );
         }
       }
-      for (let n = 0; n < groupCloses; n++) dir = dirStack.pop() ?? { k: "session" };
+      for (let n = 0; n < groupCloses; n++) {
+        const restored = dirStack.pop() ?? { k: "session" };
+        dir = sticky ? { k: "unknown" } : restored;
+      }
+      if (COMPOUND_INC.has(opener)) compound++;
+      else if (COMPOUND_DEC.has(opener)) compound = Math.max(0, compound - 1);
+      if (startsFunction(expanded)) funcDepth++;
+      if (funcDepth > 0) {
+        const braces = countBraces(expanded);
+        funcBraces += braces.open - braces.close;
+        if (funcBraces <= 0) {
+          funcDepth = Math.max(0, funcDepth - 1);
+          funcBraces = 0;
+        }
+      }
     });
     // A relative edit from before the first `cd` still belongs to the session cwd.
     if (hasCd) {
@@ -1603,8 +1720,8 @@ export function classifyShellMutation(
         e.baseDir = "";
       }
     }
-    // No parsed edit used to drop `opaque`. Keep it: a rejected `python -c` (`vars(sys)`, …) stays opaque
-    // with no edit, and `cd /tmp/other && node scripts/gate.mjs` stays opaque (C13).
+    // No parsed edit used to drop `opaque`. Keep it: `python -c` stays opaque with no edit (as on main),
+    // and `cd /tmp/other && node scripts/gate.mjs` stays opaque (C13).
     if (!anyMutating) return opaque ? { ...NONE, hasCd, opaque: true } : NONE;
     let order: ShellMutation["order"] = "unknown";
     if (checkIdx.length > 0 && plainIdx.length > 0) {
