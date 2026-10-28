@@ -371,15 +371,44 @@ function receiverOf(prefix: string): string | null {
   return /\w+$/.exec(t)?.[0] ?? null;
 }
 
+interface PyWriteSite {
+  at: number;
+  expr: string | null;
+  /** Identifier starts that belong to this write once its path resolves (`open`, a chained `.write`). */
+  tokens: number[];
+  /** Start of `open(`, so a wrapping `dump(` can be tied to a resolved open. */
+  openAt: number | null;
+  /** Body slice whose forbidden names belong to this write once it resolves (the args, or the receiver). */
+  span: { abs: number; text: string } | null;
+}
+
+interface PyWriteInfo {
+  files: string[];
+  /** Starts of identifiers that are part of a write whose path resolved (scratch included). */
+  owned: Set<number>;
+  /** A parsed `open` / `write_text` whose path did not resolve. */
+  unresolved: boolean;
+  /** A parsed write whose path resolved, including one later dropped as scratch. */
+  resolved: boolean;
+}
+
 /**
  * Files written by the Python code of one heredoc (`open(path, 'w')`, `.write_text(`). A path resolves when it is a
  * string literal, `sys.argv[N]` (of `python3 - args`), a name bound to such a value by an assignment above the
  * write (the binding in effect at the write counts), or a concatenation / `Path` / `os.path.join` of those.
  */
 function pythonWrites(raw: string, argv: (string | null)[]): string[] {
+  return inspectPythonWrites(raw, argv).files;
+}
+
+/** Same file list as `pythonWrites`, plus which identifier occurrences sit on a resolved write (C12). */
+function inspectPythonWrites(raw: string, argv: (string | null)[]): PyWriteInfo {
   const body = stripPyComments(raw);
   const out: string[] = [];
   let unknown = false;
+  let resolved = false;
+  const owned = new Set<number>();
+  const resolvedOpens: number[] = [];
   const binds: { at: number; name: string; expr: string; nested: boolean }[] = [];
   for (const m of body.matchAll(PY_BIND_RE)) {
     const name = m[1] as string;
@@ -389,13 +418,14 @@ function pythonWrites(raw: string, argv: (string | null)[]): string[] {
     const nested = (/^[ \t]*/.exec(body.slice(lineStart))?.[0] ?? "") !== "";
     binds.push({ at, name, expr: m[2] as string, nested });
   }
-  const writes: { at: number; expr: string | null }[] = [];
+  const writes: PyWriteSite[] = [];
   for (const m of body.matchAll(PY_OPEN_CALL_RE)) {
     const at = m.index ?? 0;
-    const args = balancedArgs(body, at + m[0].length - 1);
+    const paren = at + m[0].length - 1;
+    const args = balancedArgs(body, paren);
     if (args === null) {
       // Cannot tell what is written: stay conservative.
-      writes.push({ at, expr: null });
+      writes.push({ at, expr: null, tokens: [], openAt: null, span: null });
       continue;
     }
     const parts = splitTop(args, ",").map((x) => x.trim());
@@ -404,11 +434,20 @@ function pythonWrites(raw: string, argv: (string | null)[]): string[] {
     if (mode === undefined) continue; // open(path): read
     const lit = /^(['"])([^'"\n]*)\1$/.exec(mode);
     if (lit && !/[wax+]/.test(lit[2] as string)) continue; // a literal read mode
-    writes.push({ at, expr: lit ? (parts[0] ?? null) : null }); // a non-literal mode might write
+    const after = paren + 1 + args.length + 1;
+    const tokens = [at];
+    const chained = /^\s*\.\s*write\b/.exec(body.slice(after));
+    if (chained) tokens.push(after + chained[0].lastIndexOf("write"));
+    writes.push({ at, expr: lit ? (parts[0] ?? null) : null, tokens, openAt: at, span: { abs: paren + 1, text: args } });
   }
   for (const m of body.matchAll(PY_WRITE_RE)) {
     const at = m.index ?? 0;
-    writes.push({ at, expr: receiverOf(body.slice(Math.max(0, at - 300), at)) });
+    const prefixStart = Math.max(0, at - 300);
+    const prefix = body.slice(prefixStart, at);
+    const recv = receiverOf(prefix);
+    const trimmed = prefix.trimEnd();
+    const span = recv !== null && trimmed.endsWith(recv) ? { abs: prefixStart + trimmed.length - recv.length, text: recv } : null;
+    writes.push({ at, expr: recv, tokens: [], openAt: null, span });
   }
   writes.sort((x, y) => x.at - y.at);
   const bound = new Map<string, string | null>();
@@ -420,14 +459,33 @@ function pythonWrites(raw: string, argv: (string | null)[]): string[] {
     }
     const v = w.expr === null ? null : pyValue(w.expr, bound, argv);
     if (v === null || v === "") unknown = true;
-    else if (!isIgnoredPath(v)) out.push(v);
+    else {
+      resolved = true;
+      if (!isIgnoredPath(v)) out.push(v);
+      for (const t of w.tokens) owned.add(t);
+      if (w.openAt !== null) resolvedOpens.push(w.openAt);
+      if (w.span !== null) {
+        for (const id of forbiddenIdents(w.span.text)) owned.add(w.span.abs + id.index);
+      }
+    }
     if (out.length >= FILES_MAX) {
       unknown = true; // cut: more writes may follow
       break;
     }
   }
   if (unknown) out.push(SHELL_EDIT_FILE);
-  return out;
+  // `json.dump(..., open(...))`: `dump` belongs to the open when that open resolved.
+  if (resolvedOpens.length > 0) {
+    for (const m of body.matchAll(/\bdump\s*\(/g)) {
+      const paren = (m.index ?? 0) + m[0].length - 1;
+      const args = balancedArgs(body, paren);
+      if (args === null) continue;
+      const begin = paren + 1;
+      const end = begin + args.length;
+      if (resolvedOpens.some((openAt) => openAt >= begin && openAt < end)) owned.add(m.index ?? 0);
+    }
+  }
+  return { files: out, owned, unresolved: unknown, resolved };
 }
 
 interface MutFile {
@@ -440,6 +498,8 @@ interface SegMut {
   /** A history-moving git operation (`GIT_OPS`), as opposed to `git rm` / `git apply`. */
   history: boolean;
   files: MutFile[];
+  /** Parsed edits are present, but a per-file split would trust a `python -c` the allow-list rejects (C12). */
+  opaque?: boolean;
 }
 
 /** A command-line argument as a literal: itself, or `$VAR` / `"$VAR"` / `${VAR}` assigned a literal earlier; null otherwise. */
@@ -910,6 +970,57 @@ function hasExtraWrite(src: string): boolean {
   return /Path\s*\([^)]*\)\s*\.\s*(?:replace|rename)\s*\(/.test(s);
 }
 
+/** Modules a `python -c` source may import and still be non-writing (C12). Anything else is opaque. */
+const PY_ALLOW_IMPORTS = new Set([
+  "json", "sys", "re", "math", "datetime", "time", "collections", "itertools", "functools", "textwrap", "pprint",
+  "statistics", "random", "string", "decimal", "fractions", "operator", "typing", "enum", "dataclasses", "uuid",
+  "hashlib", "base64", "platform",
+]);
+
+/**
+ * Names that keep a `python -c` source from being non-writing (C12). Word match, so `write_text` is not `write`
+ * and `dumps` is not `dump`. Matched on code with strings and comments blanked.
+ */
+const PY_FORBIDDEN_RE =
+  /\b(?:__import__|__builtins__|makedirs|getattr|globals|compile|replace|rename|unlink|remove|rmdir|symlink|truncate|system|popen|spawn|write|mkdir|open|Path|exec|eval|copy|move|touch|dump|chmod)\b/g;
+
+function forbiddenIdents(src: string): { index: number }[] {
+  const s = pyCode(src);
+  PY_FORBIDDEN_RE.lastIndex = 0;
+  return [...s.matchAll(PY_FORBIDDEN_RE)].map((m) => ({ index: m.index ?? 0 }));
+}
+
+/** Top-level module is on the allow-list. A relative import, or a name we cannot read, is not. */
+function moduleAllowed(name: string): boolean {
+  if (name === "" || name.startsWith(".")) return false;
+  const root = name.split(".")[0] ?? "";
+  return PY_ALLOW_IMPORTS.has(root);
+}
+
+/**
+ * Every `import` / `from ... import` names an allow-listed module (C12). An alias does not hide the module
+ * (`import os as o` is still `os`). An unreadable clause is rejected. Strings and comments are ignored.
+ */
+function pyImportsAllowed(src: string): boolean {
+  const s = pyCode(src);
+  let ok = true;
+  const withoutFrom = s.replace(/\bfrom\s+(\S+)\s+import\b/g, (all, mod: string) => {
+    if (!moduleAllowed(mod)) ok = false;
+    return " ".repeat(all.length);
+  });
+  if (!ok) return false;
+  // Stop at `;` so `import json; print(...)` is not one clause. A later `import` is its own match.
+  for (const m of withoutFrom.matchAll(/\bimport\s+([^#;\n]*)/g)) {
+    const raw = m[1] ?? "";
+    if (raw.includes("\\") || raw.trim() === "") return false;
+    for (const part of raw.split(",")) {
+      const mod = (part.trim().split(/\s+as\s+/)[0] ?? "").trim().split(/\s+/)[0] ?? "";
+      if (!moduleAllowed(mod)) return false;
+    }
+  }
+  return true;
+}
+
 /** Known `$VAR` / `${VAR}` inside a double-quoted `-c` source. Null when any reference is unknown or still dynamic. */
 function substPySource(w: Word, vars: ReadonlyMap<string, string>): string | null {
   if (!w.dynamic) return w.text;
@@ -924,11 +1035,13 @@ function substPySource(w: Word, vars: ReadonlyMap<string, string>): string | nul
   return out;
 }
 
-type PyC = { kind: "safe" } | { kind: "opaque" } | { kind: "write"; files: string[] };
+type PyC = { kind: "safe" } | { kind: "opaque" } | { kind: "write"; files: string[]; opaque?: boolean };
 
 /**
  * `python -c <src>` (optional `-u`/`-B`/`-I`/`-E`/`-s`/`-S`/`-O` before `-c`). Null when this is not `-c`
- * (a script operand or `-` for a heredoc). Escape wins over a parsed write (fail closed).
+ * (a script operand or `-` for a heredoc). An escape (C1) drops a parsed write. Otherwise C12: non-writing only
+ * when every import is allow-listed and no forbidden name occurs; a resolved write stays, and is non-opaque
+ * only when those same conditions hold and every forbidden name belongs to that write.
  */
 function classifyPyC(words: Word[], vars: ReadonlyMap<string, string>): PyC | null {
   const head = words[0]?.text ?? "";
@@ -950,11 +1063,27 @@ function classifyPyC(words: Word[], vars: ReadonlyMap<string, string>): PyC | nu
   if (text === null) return { kind: "opaque" };
   const code = dedent(text);
   if (hasEscape(code)) return { kind: "opaque" };
-  const writes = pythonWrites(code, []);
+  const info = inspectPythonWrites(code, []);
   const extra = hasExtraWrite(code);
-  if (writes.length === 0 && !extra) return { kind: "safe" };
-  const files = writes.length > 0 ? [...writes] : [SHELL_EDIT_FILE];
-  if (extra && !files.includes(SHELL_EDIT_FILE)) files.push(SHELL_EDIT_FILE);
+  const importsOk = pyImportsAllowed(code);
+  const forbidden = forbiddenIdents(code);
+  const allow = importsOk && forbidden.every((id) => info.owned.has(id.index));
+  // A path we resolved, and no write we failed to resolve and no extra API.
+  if (info.resolved && !info.unresolved && !extra) {
+    if (info.files.length === 0) return allow ? { kind: "safe" } : { kind: "opaque" };
+    return allow ? { kind: "write", files: info.files } : { kind: "write", files: info.files, opaque: true };
+  }
+  // No write API at all: the allow-list is the only way to stay non-writing.
+  if (!info.resolved && !info.unresolved && !extra) {
+    if (importsOk && forbidden.length === 0) return { kind: "safe" };
+    return { kind: "opaque" };
+  }
+  const files = info.files.length > 0 ? [...info.files] : [SHELL_EDIT_FILE];
+  if ((extra || info.unresolved) && !files.includes(SHELL_EDIT_FILE)) files.push(SHELL_EDIT_FILE);
+  // Alias / disallowed import on an open or write_text we could not resolve: keep the shell edit, refuse a split.
+  // A bare extra API (`Path.unlink`) stays a shell edit and is not opaque (existing expectation).
+  if (info.unresolved && !importsOk) return { kind: "write", files, opaque: true };
+  if (info.resolved && !allow) return { kind: "write", files, opaque: true };
   return { kind: "write", files };
 }
 
@@ -1009,6 +1138,7 @@ function segmentMutation(
   let gitOp = false;
   let history = false;
   let mutating = false;
+  let segmentOpaque = false;
 
   const git = gitSub(words);
   if (git !== null) {
@@ -1074,6 +1204,7 @@ function segmentMutation(
     const pyc = classifyPyC(words, vars);
     if (pyc?.kind === "write") {
       mutating = true;
+      if (pyc.opaque) segmentOpaque = true;
       files.push(...pyc.files.map((file) => ({ file, kind: "M" as const })));
     } else if (pyc === null && (heredoc !== null || heredocUnsure)) {
       const dash = words.findIndex((w) => w.text === "-");
@@ -1093,7 +1224,7 @@ function segmentMutation(
       files.push({ file: r.target.text, kind: "M" as const });
     }
   }
-  return mutating ? { gitOp, history, files } : null;
+  return mutating ? { gitOp, history, files, ...(segmentOpaque ? { opaque: true } : {}) } : null;
 }
 
 /** Normalizes `.`/`..` segments of a path without touching the file system. */
@@ -1200,6 +1331,7 @@ export function classifyShellMutation(command: string, repo?: RepoScripts): Shel
         sawCd = true;
       }
       const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, heredoc, unsure, vars);
+      if (m?.opaque) opaque = true;
       if (m === null && !isCheck && !isKnownNonWriting(words, redirects, placeDir, vars)) opaque = true;
       prevCheck = isCheck;
       prevPipe = seg.op === "|";

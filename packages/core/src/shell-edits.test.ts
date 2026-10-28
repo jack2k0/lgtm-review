@@ -402,9 +402,10 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     "python3 -uBI scripts/validate_all.py",
     "cd scripts && node gate.mjs",
     "python3 -c \"print(1)\"",
-    "python3 -c \"import os; print(os.path.join('a', 'b'))\"",
-    "python3 -c \"import os; print(os.getcwd())\"",
+    "python3 -c \"open('/tmp/x','w').write('x')\"",
     "python3 -c \"print('exec(')\"",
+    "python3 -c \"print('import os')\"",
+    "python3 -c \"print(1)  # import os; open('a.ts','w')\"",
   ])("safe: %s", (seg) => {
     expect(classifyShellMutation(mixed(seg)).opaque).toBe(false);
   });
@@ -423,6 +424,22 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     "python3 -c \"from shutil import copy\"",
     "python3 -c \"import os; os.rename('a.ts', 'b.ts')\"",
     "python3 -c \"$SRC\"",
+    // C12: `import os` is off the allow-list, including a read of os.path / os.getcwd (overrides C1).
+    "python3 -c \"import os; print(os.path.join('a', 'b'))\"",
+    "python3 -c \"import os; print(os.getcwd())\"",
+    "python3 -c \"import os; print(os.environ.get('X'))\"",
+    "python3 -c \"from os import path; print(path.join('a', 'b'))\"",
+    "python3 -c \"import os.path\"",
+    "python3 -c \"import json, os\"",
+    "python3 -c \"import io; print(1)\"",
+    "python3 -c \"import os as o; o.system('sed -i s/x/y/ src/a.ts')\"",
+    "python3 -c \"import os as o; o.rename('a.ts', 'b.ts')\"",
+    "python3 -c \"getattr(x, 'system')('true')\"",
+    "python3 -c \"print('ab'.replace('a', 'b'))\"",
+    "python3 -c \"json.dump(d, f)\"",
+    "python3 -c \"print(open('a.ts', 'r').read())\"",
+    "python3 -c \"import platform; print(platform.system())\"",
+    "python3 -c 'from pathlib import Path as P; (P(\"a\")/\"b\").write_text(\"x\")'",
   ])("kept opaque: %s", (seg) => {
     expect(classifyShellMutation(mixed(seg)).opaque).toBe(true);
   });
@@ -448,6 +465,54 @@ describe("classifyShellMutation: env slots, frozen install, gate scripts, python
     const mixedEscape = classifyShellMutation(mixed("python3 -c \"open('src/a.ts','w').write('x'); exec('1')\""));
     expect(mixedEscape.opaque).toBe(true);
     expect(mixedEscape.edits.map((e) => e.file)).not.toContain("src/a.ts");
+  });
+
+  test("C12: python -c is non-writing only on the import allow-list", () => {
+    const ok = (seg: string) => classifyShellMutation(mixed(seg));
+    const dumps = ok("python3 -c \"import json; print(json.dumps({}))\"");
+    expect(dumps.opaque).toBe(false);
+    expect(dumps.edits.map((e) => e.file)).toEqual(["plan.md"]);
+    const aliased = ok("python3 -c \"import json as j; print(j.dumps({}))\"");
+    expect(aliased.opaque).toBe(false);
+    const hashed = ok("python3 -c \"import hashlib; print(hashlib.sha256(b'x').hexdigest())\"");
+    expect(hashed.opaque).toBe(false);
+    const machine = ok("python3 -c \"import platform; print(platform.machine())\"");
+    expect(machine.opaque).toBe(false);
+    expect(files("python3 -c \"print(1)\"")).toEqual([]);
+    expect(files("python3 -c \"import json; print(json.dumps({}))\"")).toEqual([]);
+    expect(files("python3 -c \"open('/tmp/x','w').write('x')\"")).toEqual([]);
+    const chained = classifyShellMutation("python3 -c \"open('src/a.ts','w').write('x')\"");
+    expect(chained.opaque).toBe(false);
+    expect(chained.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+    const pathOnly = classifyShellMutation("python3 -c \"Path('notes.md').write_text('x')\"");
+    expect(pathOnly.opaque).toBe(false);
+    expect(pathOnly.edits.map((e) => e.file)).toEqual(["notes.md"]);
+
+    const dumped = classifyShellMutation("python3 -c \"json.dump(d, open('x.json','w'))\"");
+    expect(dumped.opaque).toBe(false);
+    expect(dumped.edits.map((e) => e.file)).toEqual(["x.json"]);
+    const dumpedMixed = ok("python3 -c \"json.dump(d, open('x.json','w'))\"");
+    expect(dumpedMixed.opaque).toBe(false);
+    expect(dumpedMixed.edits.map((e) => e.file)).toContain("x.json");
+
+    // A resolved write stays, but a disallowed import makes the command opaque.
+    const pathWrite = ok("python3 -c \"from pathlib import Path; Path('a.ts').write_text('x')\"");
+    expect(pathWrite.opaque).toBe(true);
+    expect(pathWrite.edits.map((e) => e.file)).toContain("a.ts");
+
+    // Alias hides the path: unresolved write, still a code edit, and opaque.
+    const alias = "python3 -c 'from pathlib import Path as P; (P(\"a\")/\"b\").write_text(\"x\")'";
+    const aliasOnly = classifyShellMutation(alias);
+    expect(aliasOnly.opaque).toBe(true);
+    expect(aliasOnly.edits.map((e) => e.file)).toEqual([SHELL_EDIT_FILE]);
+    expect(ok(alias).opaque).toBe(true);
+    expect(ok(alias).edits.map((e) => e.file)).not.toContain("a/b");
+
+    // Heredocs stay on the old writer scan (C12 does not apply the allow-list there).
+    const heredoc = "python3 - <<'EOF'\nfrom pathlib import Path as P\n(P('a')/'b').write_text('x')\nEOF";
+    expect(files(heredoc)).toEqual([SHELL_EDIT_FILE]);
+    expect(classifyShellMutation(heredoc).opaque).toBe(false);
+    expect(classifyShellMutation(mixed(heredoc)).opaque).toBe(false);
   });
 
   test("a gate script is not opaque and its redirect still writes", () => {
