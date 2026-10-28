@@ -30,3 +30,4 @@ schema: no
 - [x] Phase 1 done (R1-R4)
 
 ## Phase 2 (orchestrator): real-log audit PRE/POST, counts only; any regression adjudicated by a Claude subagent.
+- [x] Phase 2 done (reviews/audit.md)
