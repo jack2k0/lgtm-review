@@ -40,7 +40,7 @@ The user runs `lgtm-review --llm-url http://127.0.0.1:11434 --llm-model qwen3:4b
 ```gate
 allow: ^packages/core/src/(schema|index|llm-input)(\.test)?\.ts$
 allow: ^packages/cli/src/(cli|api|server|llm)(\.[a-z-]+)?(\.test)?\.ts$
-allow: ^packages/web/src/(api|PromptTable|styles|titles)(\.[a-z-]+)?(\.test)?\.(ts|tsx|css)$
+allow: ^packages/web/src/(App|api|PromptTable|styles|titles)(\.[a-z-]+)?(\.test)?\.(ts|tsx|css)$
 allow: ^packages/web/src/[a-z.-]*\.test\.tsx?$
 allow: ^README\.md$
 allow: ^packages/cli/README\.md$
