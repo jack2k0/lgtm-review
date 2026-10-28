@@ -729,7 +729,7 @@ const SAFE_HEADS = new Set(
   (
     "cd pushd popd echo printf ls cat true false : test [ [[ sleep export set unset pwd " +
     // read-only text and system tools
-    "tail head grep egrep fgrep rg cut wc tr sort uniq diff cmp jq column nl basename dirname realpath readlink stat file du df date which type whoami hostname -v -V " +
+    "tail head grep egrep fgrep rg cut wc tr sort uniq diff cmp jq column nl basename dirname realpath readlink stat file du df date seq which type whoami hostname -v -V " +
     // shell keywords and grouping
     "for do done if then else elif fi while until case esac break continue exit return { } ( ) " +
     // creates directories only; terminal control
