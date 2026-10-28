@@ -269,7 +269,7 @@ describe("scripts/gate.mjs", () => {
     expect(ok.out).toMatch(/2 finding\(s\): 1 fixed, 0 rejected, 1 deferred/);
   });
 
-  test("--merge: pipes inside backticks or \\| stay in the cell; the verdict is read from the end; a short row is malformed", () => {
+  test("--merge: pipes inside backticks or \\| stay in the cell; a long row is unanswered, a short row is malformed", () => {
     const d = repo({}, { "scripts/x.mjs": "1\n" });
     const H = "| # | Tag | file:line | Finding | Reviewer | Cross-check | Verdict | Evidence |\n|---|---|---|---|---|---|---|---|\n";
     const run = (row: string) => {
@@ -280,7 +280,13 @@ describe("scripts/gate.mjs", () => {
     const pass = /PASS review: a; 1 finding\(s\): 1 fixed, 0 rejected, 0 deferred/;
     expect(run("| 1 | Nit | a.ts:1 | see `||` | a | ok | fixed | test |").out).toMatch(pass);
     expect(run("| 1 | Nit | a.ts:1 | a \\| b | a | ok | fixed | test |").out).toMatch(pass);
-    expect(run("| 1 | Nit | a.ts:1 | a || b | a | ok | fixed | test |").out).toMatch(pass);
+    const extra = run("| 1 | Nit | a.ts:1 | a || b | a | ok | fixed | test |");
+    expect(extra.code).toBe(1);
+    expect(extra.out).toMatch(/:5: verdict ""/);
+    // An empty verdict with an unescaped pipe after it must never read the Evidence text as the verdict.
+    const shifted = run("| 1 | Nit | a.ts:1 | desc | a | ok | | fixed (abc) | gate |");
+    expect(shifted.code).toBe(1);
+    expect(shifted.out).not.toMatch(/PASS review/);
     const short = run("| 1 | Nit | a.ts:1 | only | five |");
     expect(short.code).toBe(1);
     expect(short.out).toMatch(/FAIL review: 1 malformed ledger row/);

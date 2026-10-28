@@ -125,8 +125,7 @@ function splitCells(line) {
  * Parse a findings ledger: reviewer names, and one { line, verdict } per table row. Fails closed (verdict "" =
  * unanswered): a row in a table without a Verdict column, a header not followed by a separator row (so a row
  * after a blank line is not taken as a header). A `|` inside backticks or written as `\|` is not a separator.
- * The Verdict cell is the same distance from the end of the row as in the header, so extra separators in the
- * Finding text cannot shift it. A row with fewer cells than its header is malformed (never verdict "").
+ * A row with fewer cells than its header is malformed; a row with more cells is unanswered (verdict "").
  * Only a bare name or @handle counts as a reviewer (not `<a>`).
  */
 export function parseLedger(text) {
@@ -158,8 +157,10 @@ export function parseLedger(text) {
       head.col = -1;
     }
     if (SEP(cells)) return;
+    // A short row is malformed; a long row (an unescaped pipe somewhere) is unanswered: reading by position could
+    // take Evidence text as the verdict (fail open).
     if (head.col >= 0 && cells.length < head.cells.length) return void rows.push({ line: i + 1, verdict: "", malformed: true });
-    const cell = head.col < 0 ? "" : cells[cells.length - (head.cells.length - head.col)];
+    const cell = head.col < 0 || cells.length !== head.cells.length ? "" : cells[head.col];
     rows.push({ line: i + 1, verdict: word(cell) });
   });
   endTable();
