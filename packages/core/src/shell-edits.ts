@@ -10,7 +10,6 @@ import {
   normalizeFirstToken,
   splitSegments,
   stripHeredocs,
-  parseHeredocStart,
   parseHeredocStarts,
   heredocEnds,
   stripPrefixes,

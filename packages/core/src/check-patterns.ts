@@ -155,11 +155,6 @@ export function parseHeredocStarts(line: string): HeredocStart[] {
   return starts;
 }
 
-/** First heredoc start in a line, or null. */
-export function parseHeredocStart(line: string): HeredocStart | null {
-  return parseHeredocStarts(line)[0] ?? null;
-}
-
 /** Whether a heredoc line ends the body: exactly the delimiter; `<<-` also allows leading tabs. */
 export function heredocEnds(line: string, delim: string, dash: boolean): boolean {
   // A CRLF log line closes on `EOF\r` like bash does with a carriage return in the delimiter word.
