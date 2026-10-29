@@ -754,7 +754,7 @@ function expandEnvSlots(seg: string, vars: ReadonlyMap<string, string>): string 
 
 const SAFE_HEADS = new Set(
   (
-    "cd pushd popd echo printf ls cat true false : test [ [[ sleep export set unset pwd EOF " +
+    "cd pushd popd echo printf ls cat true false : test [ [[ sleep export set unset pwd " +
     // read-only text and system tools
     "tail head grep egrep fgrep rg cut wc tr sort uniq diff cmp jq column nl basename dirname realpath readlink stat file du df date seq which type whoami hostname -v -V " +
     // shell keywords and grouping

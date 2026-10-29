@@ -1215,11 +1215,12 @@ describe("status-accuracy-7 heredoc forms", () => {
     expect(r.opaque).toBe(true);
   });
 
-  test("sa10: grep \"<<EOF\" does not start a heredoc; subsequent edit is found and not opaque", () => {
+  test("sa10: grep \"<<EOF\" does not start a heredoc; subsequent edit is found", () => {
+    // `EOF a` is an unknown command after the fix, so the command stays opaque (fail closed).
     const cmd = 'grep "<<EOF" "a b"\nsed -i s/a/b/ src/a.ts\nEOF a';
     const r = classifyShellMutation(cmd);
     expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
-    expect(r.opaque).toBe(false);
+    expect(r.opaque).toBe(true);
   });
 
   test("sa10: python3 -c \"print(1 << 2)\" does not hide subsequent shell edit", () => {
