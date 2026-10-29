@@ -1,6 +1,8 @@
 # Review findings: status-accuracy-9
 
-reviewers: haiku, sonnet (opencode out of free quota)
+reviewers: haiku, sonnet
+
+OpenCode was out of free quota; sonnet is the fallback second reviewer.
 
 | # | Tag | file:line | Finding | Reviewer | Cross-check | Verdict | Evidence |
 |---|-----|-----------|---------|----------|-------------|---------|----------|
