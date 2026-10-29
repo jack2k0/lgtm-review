@@ -1328,4 +1328,8 @@ describe("status-accuracy-7 heredoc forms", () => {
     const r3 = classifyShellMutation("cat <<E$'A'\nbody\nEA\nsed -i s/a/b/ src/a.ts");
     expect(r3.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
   });
+
+  test("sa11 review: `! (( x > 1 ))` has no redirect target", () => {
+    expect(classifyShellMutation("! (( x > 1 ))").edits).toEqual([]);
+  });
 });

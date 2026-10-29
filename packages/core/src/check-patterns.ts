@@ -162,7 +162,8 @@ export function scanBracketPairEnd(input: string, start: number): number {
 
 /** Whether the command text preceding `((` is in command-start position (start of input, subshell/brace, or control keywords). */
 export function isArithmeticCommandStart(cur: string): boolean {
-  return /^(?:[\s({]|(?:if|then|else|elif|while|until|do|time|!)\b)*$/.test(cur);
+  // `!` is not a word character, so it cannot take `\b`.
+  return /^(?:[\s({!]|(?:if|then|else|elif|while|until|do|time)\b)*$/.test(cur);
 }
 
 /**
@@ -689,10 +690,11 @@ export function stripPrefixes(seg: string): string {
       s = wrapped.trimStart();
       changed = true;
     }
+    // A closed `((...))` arithmetic command is not a `(` subshell prefix (also after `!` was stripped).
+    const arithmetic = (): boolean => s.startsWith("((") && checkArithmeticOpener(s, 0, true) !== null;
+    if (arithmetic()) break;
     for (const re of PREFIXES) {
-      if (s.startsWith("((") && checkArithmeticOpener(s, 0, true) !== null) {
-        if (re.source.includes("(")) continue;
-      }
+      if (arithmetic()) break;
       const m = re.exec(s);
       if (m && m[0].length > 0) {
         s = s.slice(m[0].length).trimStart();
