@@ -48,3 +48,12 @@ schema: no
   - R5: `echo "$((echo ok) ; sed -i s/a/b/ src/a.ts)"` detects edit of `src/a.ts`.
 - One fixture `sa11-arith-forms` with goldens.
 - Differential verification: edit-diff and hd-diff across 3 seeds x 3000 cases.
+  - edit-diff (N=3000):
+    - seed 77: branch-loss 0, both-miss 1, branch-gain 0
+    - seed 101: branch-loss 0, both-miss 0, branch-gain 0
+    - seed 2024: branch-loss 0, both-miss 0, branch-gain 1
+  - hd-diff (N=3000):
+    - seed 5: cases 2466, branch-wrong 2, main-wrong 4, branch-only-wrong 0
+    - seed 77: cases 2471, branch-wrong 1, main-wrong 1, branch-only-wrong 0
+    - seed 2024: cases 2451, branch-wrong 2, main-wrong 2, branch-only-wrong 0
+

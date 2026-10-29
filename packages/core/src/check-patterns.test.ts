@@ -657,4 +657,31 @@ describe("status-accuracy-10 quote- and arithmetic-aware heredoc starts", () => 
     ]);
     expect(parseHeredocStarts("echo \\\\\\<<E")).toEqual([]);
   });
+
+  test("sa11 R1: ( (( and { (( start arithmetic when closed by ))", () => {
+    expect(parseHeredocStarts("( (( 1 << 2 )) ); cat <<E")).toEqual([
+      { delim: "E", quoted: false, dash: false },
+    ]);
+    expect(parseHeredocStarts("{ (( 1 << 2 )); }; cat <<E")).toEqual([
+      { delim: "E", quoted: false, dash: false },
+    ]);
+    expect(parseHeredocStarts("if false; then :; else (( 1 << 2 )); fi; cat <<E")).toEqual([
+      { delim: "E", quoted: false, dash: false },
+    ]);
+    expect(parseHeredocStarts("for x in 1; do (( 1 << 2 )); done; cat <<E")).toEqual([
+      { delim: "E", quoted: false, dash: false },
+    ]);
+  });
+
+  test("sa11 R2: $'...' in heredoc delimiter honours backslash escapes", () => {
+    expect(parseHeredocStarts("cat <<E$'a\\'b'")).toEqual([
+      { delim: "Ea'b", quoted: true, dash: false },
+    ]);
+  });
+
+  test("sa11 R4: stripHeredocs handles arithmetic spanning newline", () => {
+    expect(stripHeredocs("echo $((\n1 << 2)) ; cat <<E\nZZB1\nE\necho ZZB2")).toBe(
+      "echo $((\n1 << 2)) ; cat <<E\necho ZZB2",
+    );
+  });
 });

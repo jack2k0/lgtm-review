@@ -1283,4 +1283,26 @@ describe("status-accuracy-7 heredoc forms", () => {
     const r = classifyShellMutation("echo a\\\\\\ #b; sed -i s/a/b/ src/a.ts");
     expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
   });
+
+  test("sa11 R1: ( (( fallback when unclosed finds edit", () => {
+    const r = classifyShellMutation("( ((echo ok) ; sed -i s/a/b/ src/a.ts) )");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
+
+  test("sa11 R3: if (( x > 1 )) does not produce edit target 1", () => {
+    const r = classifyShellMutation("if (( x > 1 )); then sed -i s/a/b/ src/f.ts; fi");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/f.ts"]);
+  });
+
+  test("sa11 R4: arithmetic spanning newline does not swallow following edit", () => {
+    const r = classifyShellMutation("echo $((\n1 << 2)) ; cat <<E\nZZB1\nE\nsed -i s/a/b/ src/a.ts");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
+
+  test("sa11 R5: quoted substitutions find edits", () => {
+    const r1 = classifyShellMutation('echo "$((echo ok) ; sed -i s/a/b/ src/a.ts)"');
+    expect(r1.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+    const r2 = classifyShellMutation('echo "$(echo ok ; sed -i s/a/b/ src/a.ts)"');
+    expect(r2.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
 });
