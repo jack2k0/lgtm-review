@@ -538,6 +538,36 @@ function isOnlyRedirects(s: string): boolean {
   return true;
 }
 
+function trimTrailingCompoundBraces(text: string): string {
+  let s = text;
+  while (s.endsWith("}")) {
+    let depth = 0;
+    let inSingle = false;
+    let inDouble = false;
+    for (let i = 0; i < s.length - 1; i++) {
+      const ch = s[i] as string;
+      if (ch === "'" && !inDouble) inSingle = !inSingle;
+      else if (ch === '"' && !inSingle) inDouble = !inDouble;
+      else if (!inSingle) {
+        if (ch === "$" && s[i + 1] === "{") {
+          depth++;
+          i++;
+        } else if (ch === "}" && depth > 0) {
+          depth--;
+        }
+      }
+    }
+    if (depth > 0) break;
+    const before = s.slice(0, -1);
+    if (before === "" || /\s$/.test(before) || /;\s*$/.test(before)) {
+      s = before.trimEnd();
+    } else {
+      break;
+    }
+  }
+  return s;
+}
+
 /** Quote-aware split on `&&`, `||`, `|`, `;`, `&` and newlines. */
 export function splitSegments(cmd: string): Segment[] {
   const segs: Segment[] = [];
@@ -597,7 +627,7 @@ export function splitSegments(cmd: string): Segment[] {
         }
       }
     }
-    text = text.replace(/\s*\}+$/, "");
+    text = trimTrailingCompoundBraces(text);
     if (text === "") {
       // An operator after an empty segment (e.g. "a;\n") keeps the earlier operator.
       // A segment that held only closing parens still closes the preceding subshell.

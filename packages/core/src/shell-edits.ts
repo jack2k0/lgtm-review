@@ -200,6 +200,20 @@ const IGNORED_PATH_RES: RegExp[] = [
   /(?:^|\/)(?:log|out|output|err|stdout|stderr)$/,
 ];
 
+const CHECK_LOG_RES: RegExp[] = [
+  /(?:^|\/)(?:results|result|output|out|report|check|test|gate|err|error)[^/]*\.(?:txt|json|xml|html|tap)$/i,
+];
+
+function isCheckLogTarget(
+  target: string,
+  poisoned?: ReadonlySet<string>,
+  tempVars?: ReadonlySet<string>,
+): boolean {
+  if (isIgnoredPath(target, poisoned, tempVars)) return true;
+  const n = pathForIgnore(target);
+  return CHECK_LOG_RES.some((re) => re.test(n));
+}
+
 /** `//` collapses before the climb test, so `$S//../a.ts` is the same climb as `$S/../a.ts` (C17). */
 function collapseSlashes(p: string): string {
   return p.replace(/\/{2,}/g, "/");
@@ -1620,6 +1634,19 @@ function poisonTempNamesInSegment(
   const { words } = parseWords(text);
   for (let i = 0; i < words.length; i++) {
     const t = (words[i] as Word).text;
+    const defMatch = /^\$\{([A-Za-z_]\w*)(?::=|=)(.*)\}$/.exec(t);
+    if (defMatch) {
+      const name = defMatch[1] as string;
+      const raw = defMatch[2] as string;
+      const value = assignmentValue(raw, vars);
+      if (isMktempValue(raw)) {
+        tempVars.add(name);
+      } else if (isTempRootValue(value)) {
+        tempVars.add(name);
+      } else if (tempVars.has(name) || KNOWN_SCRATCH_ENV_NAMES.has(name)) {
+        if (!isTempRootValue(value)) poisoned.add(name);
+      }
+    }
     if (t === "for") {
       const name = words[i + 1]?.text ?? "";
       if (KNOWN_SCRATCH_ENV_NAMES.has(name) || tempVars.has(name)) poisoned.add(name);
@@ -1850,10 +1877,16 @@ function segmentMutation(
       mutating = f.length > 0;
       files.push(...f.map((file) => ({ file, kind: "M" as const })));
     }
-  } else if (head === "tee" && !pipedFromCheck) {
-    const f = teeFiles(words.slice(1), poisoned, tempVars);
-    mutating = f.length > 0;
-    files.push(...f.map((file) => ({ file, kind: "M" as const })));
+  } else if (head === "tee") {
+    if (!pipedFromCheck) {
+      const f = teeFiles(words.slice(1), poisoned, tempVars);
+      mutating = f.length > 0;
+      files.push(...f.map((file) => ({ file, kind: "M" as const })));
+    } else {
+      const f = teeFiles(words.slice(1), poisoned, tempVars).filter((p) => !isCheckLogTarget(p, poisoned, tempVars));
+      mutating = f.length > 0;
+      files.push(...f.map((file) => ({ file, kind: "M" as const })));
+    }
   } else if (/^python[\d.]*$/.test(head) && (heredoc !== null || heredocUnsure)) {
     // `python -c` is not scanned (C17: same as main). A heredoc, including a dash-less one, still is.
     const dash = words.findIndex((w) => w.text === "-");
@@ -1866,32 +1899,37 @@ function segmentMutation(
 
   let targetOpaque = false;
   // `cmd > file` / `cmd >> file`; a check's own redirects capture its log, not an edit.
-  if (!isCheck) {
-    for (const r of redirects) {
-      if (r.target === null) continue;
-      if (r.op === ">&" && isUnknownTarget(r.target)) {
-        targetOpaque = true;
-        continue;
-      }
-      if (tempPrefixKind(r.target.text, poisoned, tempVars) === "climb" || nonLiteralClimb(r.target.text)) {
-        mutating = true;
-        files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
-        continue;
-      }
-      if (isIgnoredPath(r.target.text, poisoned, tempVars)) continue;
-      if (r.target.text.startsWith("(") || r.target.text.startsWith(">(")) continue;
-      if (isUnknownTarget(r.target)) {
-        mutating = true;
-        targetOpaque = true;
-        files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
-        continue;
-      }
-      mutating = true;
-      files.push({ file: r.target.text, kind: "M" as const });
+  for (const r of redirects) {
+    if (r.target === null) continue;
+    if (r.op === ">&" && isUnknownTarget(r.target)) {
+      targetOpaque = true;
+      continue;
     }
+    if (tempPrefixKind(r.target.text, poisoned, tempVars) === "climb" || nonLiteralClimb(r.target.text)) {
+      mutating = true;
+      files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
+      continue;
+    }
+    if (isCheck && isCheckLogTarget(r.target.text, poisoned, tempVars)) continue;
+    if (isIgnoredPath(r.target.text, poisoned, tempVars)) continue;
+    if (r.target.text.startsWith("(") || r.target.text.startsWith(">(")) continue;
+    if (isUnknownTarget(r.target)) {
+      mutating = true;
+      targetOpaque = true;
+      files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
+      continue;
+    }
+    mutating = true;
+    files.push({ file: r.target.text, kind: "M" as const });
   }
   const fdOpaque = redirects.some(
-    (r) => r.fd !== "" && r.fd !== "1" && r.target !== null && !isIgnoredPath(r.target.text, poisoned, tempVars) && !isDocPath(r.target.text),
+    (r) =>
+      r.fd !== "" &&
+      r.fd !== "1" &&
+      r.target !== null &&
+      !(isCheck && isCheckLogTarget(r.target.text, poisoned, tempVars)) &&
+      !isIgnoredPath(r.target.text, poisoned, tempVars) &&
+      !isDocPath(r.target.text),
   );
   return mutating ? { gitOp, history, files, ...(surface || targetOpaque || fdOpaque ? { opaque: true } : {}) } : null;
 }

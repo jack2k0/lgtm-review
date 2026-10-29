@@ -1462,4 +1462,30 @@ describe("status-accuracy-7 heredoc forms", () => {
     expect(files("declare T=$(mktemp); declare T=src; echo > $T/a.ts")).toEqual([SHELL_EDIT_FILE]);
     expect(files("T=$(mktemp); local T=src; echo > $T/a.ts")).toEqual([SHELL_EDIT_FILE]);
   });
+
+  test("sa13 review F1: := / = standalone word poisons temp name when value is non-temp", () => {
+    expect(files(": ${TMPDIR:=src}; echo > $TMPDIR/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files(": ${TMPDIR=src}; echo > $TMPDIR/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files(": ${TMPDIR:=/tmp/work}; echo > $TMPDIR/a.ts")).toEqual([]);
+    expect(files(": ${TMPDIR:=$(mktemp -d)}; echo > $TMPDIR/a.ts")).toEqual([]);
+    expect(files("echo ${S:=src}; echo > $S/a.ts")).toEqual([SHELL_EDIT_FILE]);
+  });
+
+  test("sa13 review F2: check redirects exempt only for log-like targets", () => {
+    // Code file targets stay edits with or without grouping
+    expect(files("{ pnpm check; } > src/out.ts")).toEqual(["src/out.ts"]);
+    expect(files("(pnpm check) > src/out.ts")).toEqual(["src/out.ts"]);
+    expect(files("pnpm check > src/out.ts")).toEqual(["src/out.ts"]);
+    expect(files("{ npm run check; } > src/out.ts")).toEqual(["src/out.ts"]);
+    expect(files("pnpm test > src/out.ts")).toEqual(["src/out.ts"]);
+
+    // Log-like targets are exempt
+    expect(files("(pnpm check) 2>&1 > results.txt")).toEqual([]);
+    expect(files("pnpm test > t.log 2>&1")).toEqual([]);
+    expect(files("(pnpm test) > results.txt")).toEqual([]);
+    expect(files("pnpm check > /dev/null")).toEqual([]);
+    expect(files("pnpm check > /dev/stderr")).toEqual([]);
+    expect(files("pnpm test > results.json 2>&1")).toEqual([]);
+    expect(files("pnpm test > out.json && echo done > done.json")).toEqual(["done.json"]);
+  });
 });

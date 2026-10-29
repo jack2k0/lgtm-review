@@ -91,3 +91,20 @@ Harness `/tmp/claude-1000/-home-jack-git-lgtm-review/10357ea4-a50e-4f11-a874-ba1
 ## Round notes: Owner addition (CI timeout fix)
 - Owner instruction: CI run 40911943046 on main 41878d0 failed because `packages/cli/src/api.test.ts` test 'every fixture prompt validates against PromptDetail and matches the analysis' timed out (5010ms > 5000ms default) on the GitHub runner.
 - Raised that single test's timeout to 20000 ms via the test's timeout argument in a separate commit; no expectation or code changes.
+
+## Review fixes
+
+Haiku review findings addressed:
+1. **F1: Standalone `${NAME:=value}` / `${NAME=value}` parameter expansion poisoning**:
+   - In `poisonTempNamesInSegment`, scanned parsed words for standalone `${NAME:=value}` and `${NAME=value}` forms (e.g. `: ${TMPDIR:=src}`). If `value` is not a temp root or allowed `mktemp`, the name is added to `poisoned`.
+   - In `splitSegments`, replaced blanket `text.replace(/\s*\}+$/, "")` with `trimTrailingCompoundBraces` so that trailing `}` belonging to parameter expansions (`${...}`) is not stripped, preserving parameter expansions at segment ends.
+2. **F2: Check redirect exemption restricted to log-like targets**:
+   - Check redirects (`> file`, `>> file`) and `tee` piped from checks are exempt ONLY when the target is log-like (`isCheckLogTarget`: matches `isIgnoredPath`, or check log naming conventions such as `results.txt`, `results.json`, `out.json`, `report.xml`, etc.).
+   - Code files and other non-log targets redirected from a check (`{ pnpm check; } > src/out.ts`, `(pnpm check) > src/out.ts`, `pnpm check > src/out.ts`) remain mutating edits (`["src/out.ts"]`).
+3. **Nits 3-5**:
+   - Confirmed by owner to remain as designed (`$S` remains a recognized scratch name).
+4. **Differential Generator (`edit-diff-sa13.mjs`)**:
+   - Copied `edit-diff-sa12.mjs` to `/tmp/claude-1000/-home-jack-git-lgtm-review/10357ea4-a50e-4f11-a874-ba1192382417/scratchpad/sa13-diff/edit-diff-sa13.mjs` and added check commands (`pnpm`, `npm test`, `vitest`, `turbo`, with and without compound groups and redirects to log and code files).
+   - Re-run with 2 fresh seeds x 3000 against main:
+     - SEED=4242 N=3000: cases 3000, branch-loss 0, both-miss 0, branch-gain 4, branch-only-new-edits 32
+     - SEED=90817 N=3000: cases 3000, branch-loss 0, both-miss 0, branch-gain 13, branch-only-new-edits 31
