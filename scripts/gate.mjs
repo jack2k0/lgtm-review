@@ -171,6 +171,7 @@ const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 2
 
 const EACH_CALL_RE = /\b(test|it|describe)(?:\s*\.\s*[a-zA-Z0-9_$]+)*\s*\.\s*each(?:\s*<[^;{}()]*>)?\s*$/;
 const EACH_TAGGED_RE = /\b(test|it|describe)(?:\s*\.\s*[a-zA-Z0-9_$]+)*\s*\.\s*each\s*$/;
+const TEST_BLOCK_RE = /(?:^|[^\w$.])(?:test|it)(?:\s*\.\s*(?:only|skip|concurrent|todo))?\s*$/;
 
 function peekNextNonWs(content, idx) {
   let p = idx;
@@ -197,9 +198,132 @@ function peekNextNonWs(content, idx) {
   return { char: null, pos: p };
 }
 
+function skipEscape(content, pos, curLine) {
+  if (content[pos] === "\\") {
+    if (content[pos + 1] === "\r" && content[pos + 2] === "\n") {
+      return { pos: pos + 3, curLine: curLine + 1 };
+    }
+    if (content[pos + 1] === "\n" || content[pos + 1] === "\r") {
+      return { pos: pos + 2, curLine: curLine + 1 };
+    }
+    return { pos: pos + 2, curLine };
+  }
+  return { pos: pos + 1, curLine };
+}
+
+function extractStringAt(content, pos) {
+  const quote = content[pos];
+  if (quote !== "'" && quote !== '"' && quote !== "`") return null;
+  let p = pos + 1;
+  const len = content.length;
+  let s = "";
+  while (p < len) {
+    if (content[p] === "\\") {
+      s += content[p + 1];
+      p += 2;
+      continue;
+    }
+    if (content[p] === quote) {
+      return { text: s, endPos: p + 1 };
+    }
+    s += content[p];
+    p++;
+  }
+  return null;
+}
+
+function resolveArrayVar(content, varName) {
+  const re = new RegExp(`\\b(?:const|let|var)\\s+${varName}\\b`, "g");
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    let pos = m.index + m[0].length;
+    while (pos < content.length && /\s/.test(content[pos])) pos++;
+    if (content[pos] === ":") {
+      pos++;
+      let depthParen = 0, depthBracket = 0, depthAngle = 0, depthBrace = 0;
+      while (pos < content.length) {
+        const c = content[pos];
+        if (c === "(") depthParen++;
+        else if (c === ")") depthParen--;
+        else if (c === "[") depthBracket++;
+        else if (c === "]") depthBracket--;
+        else if (c === "<") depthAngle++;
+        else if (c === ">" && depthAngle > 0) depthAngle--;
+        else if (c === "{") depthBrace++;
+        else if (c === "}") depthBrace--;
+        else if (c === "=" && content[pos + 1] !== ">" && depthParen === 0 && depthBracket === 0 && depthAngle === 0 && depthBrace === 0) {
+          pos++;
+          break;
+        }
+        pos++;
+      }
+    } else if (content[pos] === "=") {
+      pos++;
+    } else {
+      continue;
+    }
+    const peek = peekNextNonWs(content, pos);
+    if (peek.char === "[") {
+      let bracketPos = peek.pos + 1;
+      let depth = 1;
+      let line = 1;
+      for (let i = 0; i < peek.pos; i++) if (content[i] === "\n") line++;
+      const startLine = line;
+      while (bracketPos < content.length && depth > 0) {
+        const c = content[bracketPos];
+        if (c === "\n") { line++; bracketPos++; continue; }
+        if (c === "\\") {
+          const esc = skipEscape(content, bracketPos, line);
+          bracketPos = esc.pos;
+          line = esc.curLine;
+          continue;
+        }
+        if (c === "'" || c === '"' || c === "`") {
+          const quote = c;
+          bracketPos++;
+          while (bracketPos < content.length && content[bracketPos] !== quote) {
+            if (content[bracketPos] === "\\") {
+              const esc = skipEscape(content, bracketPos, line);
+              bracketPos = esc.pos;
+              line = esc.curLine;
+            } else {
+              if (content[bracketPos] === "\n") line++;
+              bracketPos++;
+            }
+          }
+          if (bracketPos < content.length) bracketPos++;
+          continue;
+        }
+        if (c === "/" && content[bracketPos + 1] === "/") {
+          bracketPos += 2;
+          while (bracketPos < content.length && content[bracketPos] !== "\n") bracketPos++;
+          continue;
+        }
+        if (c === "/" && content[bracketPos + 1] === "*") {
+          bracketPos += 2;
+          while (bracketPos < content.length && !(content[bracketPos] === "*" && content[bracketPos + 1] === "/")) {
+            if (content[bracketPos] === "\n") line++;
+            bracketPos++;
+          }
+          bracketPos += 2;
+          continue;
+        }
+        if (c === "[") depth++;
+        else if (c === "]") depth--;
+        bracketPos++;
+      }
+      if (depth === 0) {
+        return { startLine, endLine: line };
+      }
+    }
+  }
+  return null;
+}
+
 /** Find line numbers (1-based) belonging to parameter tables of test.each / it.each / describe.each. */
 export function findTableLines(content) {
   const lines = new Set();
+  const units = new Map();
   let unsure = false;
 
   let pos = 0;
@@ -210,6 +334,14 @@ export function findTableLines(content) {
   const templateStack = [];
   let codeBuffer = "";
   let nextArrayIsTable = false;
+
+  const titleCounts = new Map();
+  function allocUnit(prefix, title) {
+    const key = `${prefix}:${title}`;
+    const idx = titleCounts.get(key) || 0;
+    titleCounts.set(key, idx + 1);
+    return `${key}#${idx}`;
+  }
 
   while (pos < len) {
     const ch = content[pos];
@@ -223,7 +355,9 @@ export function findTableLines(content) {
     // Inside template literal (not inside an expression ${...})
     if (templateStack.length > 0 && bracketStack.length === templateStack[templateStack.length - 1].braceDepth) {
       if (ch === "\\") {
-        pos += 2;
+        const esc = skipEscape(content, pos, curLine);
+        pos = esc.pos;
+        curLine = esc.curLine;
         continue;
       }
       if (ch === "`") {
@@ -267,8 +401,11 @@ export function findTableLines(content) {
       const quote = ch;
       pos++;
       while (pos < len && content[pos] !== quote) {
-        if (content[pos] === "\\") pos += 2;
-        else {
+        if (content[pos] === "\\") {
+          const esc = skipEscape(content, pos, curLine);
+          pos = esc.pos;
+          curLine = esc.curLine;
+        } else {
           if (content[pos] === "\n") curLine++;
           pos++;
         }
@@ -292,12 +429,13 @@ export function findTableLines(content) {
         while (pos < len) {
           if (content[pos] === "\n") curLine++;
           if (content[pos] === "\\") {
-            pos += 2;
+            const esc = skipEscape(content, pos, curLine);
+            pos = esc.pos;
+            curLine = esc.curLine;
             continue;
           }
           if (content[pos] === "`" && tmplDepth === 0) {
             closed = true;
-            for (let l = tableStartLine; l <= curLine; l++) lines.add(l);
             pos++;
             break;
           }
@@ -316,6 +454,18 @@ export function findTableLines(content) {
         if (!closed) {
           unsure = true;
           break;
+        }
+        const peek = peekNextNonWs(content, pos);
+        let title = "tagged";
+        if (peek.char === "(") {
+          const inner = peekNextNonWs(content, peek.pos + 1);
+          const str = extractStringAt(content, inner.pos);
+          if (str) title = str.text;
+        }
+        const unitName = allocUnit("table", title);
+        for (let l = tableStartLine; l <= curLine; l++) {
+          lines.add(l);
+          units.set(l, unitName);
         }
         codeBuffer += "`";
         continue;
@@ -338,7 +488,9 @@ export function findTableLines(content) {
         let closed = false;
         while (pos < len) {
           if (content[pos] === "\\") {
-            pos += 2;
+            const esc = skipEscape(content, pos, curLine);
+            pos = esc.pos;
+            curLine = esc.curLine;
             continue;
           }
           if (content[pos] === "\n") break;
@@ -365,9 +517,50 @@ export function findTableLines(content) {
           const next = peekNextNonWs(content, pos + 1);
           if (next.char === "[") {
             nextArrayIsTable = true;
+          } else {
+            // F1: Check if it is an identifier or anything else
+            const idMatch = /^[a-zA-Z_$][a-zA-Z0-9_$]*/.exec(content.slice(next.pos));
+            if (idMatch) {
+              const varName = idMatch[0];
+              const afterId = content.slice(next.pos + varName.length);
+              const isValidArg = /^\s*(?:as\s+const\s*)?\)/.test(afterId);
+              if (isValidArg) {
+                const resolved = resolveArrayVar(content, varName);
+                if (resolved) {
+                  const closeParenIdx = content.indexOf(")", next.pos + varName.length);
+                  let title = varName;
+                  if (closeParenIdx !== -1) {
+                    const peekTitle = peekNextNonWs(content, closeParenIdx + 1);
+                    if (peekTitle.char === "(") {
+                      const inner = peekNextNonWs(content, peekTitle.pos + 1);
+                      const str = extractStringAt(content, inner.pos);
+                      if (str) title = str.text;
+                    }
+                  }
+                  const unitName = allocUnit("table", title);
+                  for (let l = resolved.startLine; l <= resolved.endLine; l++) {
+                    lines.add(l);
+                    units.set(l, unitName);
+                  }
+                } else {
+                  unsure = true;
+                }
+              } else {
+                unsure = true;
+              }
+            } else {
+              unsure = true;
+            }
           }
+          bracketStack.push({ char: "(", line: curLine });
+        } else if (TEST_BLOCK_RE.test(codeBuffer)) {
+          const next = peekNextNonWs(content, pos + 1);
+          const str = extractStringAt(content, next.pos);
+          const title = str ? str.text : "anon";
+          bracketStack.push({ char: "(", line: curLine, isTest: true, title });
+        } else {
+          bracketStack.push({ char: "(", line: curLine });
         }
-        bracketStack.push({ char: "(", line: curLine });
       } else if (ch === "[") {
         const isTable = nextArrayIsTable;
         nextArrayIsTable = false;
@@ -391,8 +584,24 @@ export function findTableLines(content) {
         } else if (top.char !== expected) {
           unsure = true;
         } else if (ch === "]" && top.isTable) {
+          const peek = peekNextNonWs(content, pos + 1);
+          let title = "table";
+          if (peek.char === "(") {
+            const inner = peekNextNonWs(content, peek.pos + 1);
+            const str = extractStringAt(content, inner.pos);
+            if (str) title = str.text;
+          }
+          const unitName = allocUnit("table", title);
           for (let l = top.startLine; l <= curLine; l++) {
             lines.add(l);
+            units.set(l, unitName);
+          }
+        } else if (ch === ")" && top.isTest) {
+          const unitName = allocUnit("test", top.title);
+          for (let l = top.line; l <= curLine; l++) {
+            if (!units.has(l)) {
+              units.set(l, unitName);
+            }
           }
         }
       }
@@ -409,43 +618,89 @@ export function findTableLines(content) {
     unsure = true;
   }
 
-  return { lines, unsure };
+  return { lines, units, unsure };
+}
+
+function applyDiff(oldText, hunks) {
+  const lines = oldText.split("\n");
+  const sorted = [...hunks].sort((a, b) => b.oldStart - a.oldStart);
+  for (const h of sorted) {
+    const idx = h.oldCount === 0 ? h.oldStart : h.oldStart - 1;
+    lines.splice(idx, h.oldCount, ...h.added);
+  }
+  return lines.join("\n");
 }
 
 /** Removed lines of test files as "file:oldLine: text" (old-side line numbers). */
 export function removedLines(diff, getOldFile) {
   const out = [];
 
-  const lines = diff.split("\n");
-  const fileBlocks = [];
-  let currentBlock = null;
+  const fileSections = [];
+  const rawLines = diff.split("\n");
+  let curSection = null;
+  let inHunk = false;
 
-  for (const line of lines) {
-    if (line.startsWith("--- ")) {
-      const file = line.startsWith("--- a/") ? line.slice(6) : null;
-      currentBlock = { file, lines: [] };
-      fileBlocks.push(currentBlock);
-    } else if (currentBlock) {
-      currentBlock.lines.push(line);
+  for (const line of rawLines) {
+    if (line.startsWith("diff --git ")) {
+      inHunk = false;
+      curSection = { file: null, hunks: [] };
+      fileSections.push(curSection);
+      continue;
     }
-  }
-
-  for (const block of fileBlocks) {
-    if (!block.file) continue;
-    const file = block.file;
-
-    // First pass: collect added lines for move detection (E3)
-    const addedCounts = new Map();
-    for (const line of block.lines) {
-      if (line.startsWith("+") && !line.startsWith("+++ ")) {
-        const t = line.slice(1).trim();
-        if (t !== "") {
-          addedCounts.set(t, (addedCounts.get(t) || 0) + 1);
+    if (!curSection) {
+      if (line.startsWith("--- a/")) {
+        curSection = { file: line.slice(6), hunks: [] };
+        fileSections.push(curSection);
+        inHunk = false;
+        continue;
+      }
+      if (line.startsWith("--- /dev/null")) {
+        curSection = { file: null, hunks: [] };
+        fileSections.push(curSection);
+        inHunk = false;
+        continue;
+      }
+      continue;
+    }
+    if (!inHunk) {
+      if (line.startsWith("--- a/")) {
+        curSection.file = line.slice(6);
+        continue;
+      }
+      if (line.startsWith("--- /dev/null")) {
+        curSection.file = null;
+        continue;
+      }
+      if (line.startsWith("@@")) {
+        inHunk = true;
+      }
+    }
+    if (inHunk) {
+      if (line.startsWith("@@")) {
+        const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
+        if (m) {
+          const oldStart = Number(m[1]);
+          const oldCount = m[2] !== undefined ? Number(m[2]) : 1;
+          const newStart = Number(m[3]);
+          const newCount = m[4] !== undefined ? Number(m[4]) : 1;
+          curSection.hunks.push({ oldStart, oldCount, newStart, newCount, lines: [], added: [] });
+          continue;
+        }
+      }
+      if (curSection.hunks.length > 0) {
+        const curHunk = curSection.hunks[curSection.hunks.length - 1];
+        curHunk.lines.push(line);
+        if (line.startsWith("+")) {
+          curHunk.added.push(line.slice(1));
         }
       }
     }
+  }
 
-    // Read old file and get table lines
+  for (const sec of fileSections) {
+    if (!sec.file) continue;
+    const file = sec.file;
+
     let oldContent = null;
     let unsure = false;
     if (getOldFile) {
@@ -460,44 +715,87 @@ export function removedLines(diff, getOldFile) {
     }
 
     let tableLines = new Set();
+    let oldUnits = new Map();
     if (!unsure && oldContent != null) {
       const res = findTableLines(oldContent);
       tableLines = res.lines;
+      oldUnits = res.units;
       if (res.unsure) unsure = true;
     }
 
-    // Second pass: scan hunks and removed lines
-    let old = 0;
-    for (const line of block.lines) {
-      if (line.startsWith("+++ ")) continue;
-      if (line.startsWith("@@")) {
-        old = Number(/^@@ -(\d+)/.exec(line)?.[1] ?? 0);
-      } else if (line.startsWith("-")) {
-        const oldLine = old++;
-        const raw = line.slice(1);
-        const t = raw.trim();
-        if (t === "") continue;
+    let newUnits = new Map();
+    if (!unsure && oldContent != null) {
+      try {
+        const newContent = applyDiff(oldContent, sec.hunks);
+        const newRes = findTableLines(newContent);
+        newUnits = newRes.units;
+      } catch {
+        // diff apply error: newUnits stays empty
+      }
+    }
 
-        // E3: move detection (byte-identical after trim in same file)
-        if ((addedCounts.get(t) || 0) > 0) {
-          addedCounts.set(t, addedCounts.get(t) - 1);
-          continue;
-        }
-
-        // Comment check
-        if (/^\s*(?:\/\/|\/\*|\*)/.test(raw)) continue;
-
-        if (unsure) {
-          // E2: fail closed
-          out.push(`${file}:${oldLine}: ${t.slice(0, 80)}`);
-        } else {
-          // E1
-          if (EXPECT_RE.test(raw) || tableLines.has(oldLine)) {
-            out.push(`${file}:${oldLine}: ${t.slice(0, 80)}`);
+    // First pass: collect added lines per enclosing unit (F2 multiset)
+    const unitAddedCounts = new Map();
+    for (const h of sec.hunks) {
+      let curNew = h.newStart;
+      for (const line of h.lines) {
+        if (line.startsWith("+")) {
+          const newLine = curNew++;
+          const t = line.slice(1).trim();
+          if (t !== "") {
+            const unit = newUnits.get(newLine);
+            if (unit) {
+              const k = `${unit}\0${t}`;
+              unitAddedCounts.set(k, (unitAddedCounts.get(k) || 0) + 1);
+            }
           }
+        } else if (line.startsWith(" ")) {
+          curNew++;
         }
-      } else if (line.startsWith(" ")) {
-        old++;
+      }
+    }
+
+    // Second pass: scan removed lines in each hunk
+    for (const h of sec.hunks) {
+      let curOld = h.oldStart;
+      for (const line of h.lines) {
+        if (line.startsWith("-")) {
+          const oldLine = curOld++;
+          const raw = line.slice(1);
+          const t = raw.trim();
+          if (t === "") continue;
+
+          // E3 move check (F2: only within same enclosing unit)
+          const oldUnit = oldUnits.get(oldLine);
+          if (oldUnit) {
+            const k = `${oldUnit}\0${t}`;
+            if ((unitAddedCounts.get(k) || 0) > 0) {
+              unitAddedCounts.set(k, unitAddedCounts.get(k) - 1);
+              continue; // excused move!
+            }
+          }
+
+          // F5: restore reporting a removed // expect(...) line
+          if (EXPECT_RE.test(raw)) {
+            out.push(`${file}:${oldLine}: ${t.slice(0, 80)}`);
+            continue;
+          }
+
+          // In detected table: F3 never skips comments in table
+          if (!unsure && tableLines.has(oldLine)) {
+            out.push(`${file}:${oldLine}: ${t.slice(0, 80)}`);
+            continue;
+          }
+
+          // E2 fail closed path: F3 comment skip applies only on E2 path
+          if (unsure) {
+            if (/^\s*(?:\/\/|\/\*|\*)/.test(raw)) continue;
+            out.push(`${file}:${oldLine}: ${t.slice(0, 80)}`);
+            continue;
+          }
+        } else if (line.startsWith(" ")) {
+          curOld++;
+        }
       }
     }
   }

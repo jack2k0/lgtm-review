@@ -160,4 +160,197 @@ test("something", () => {});
       'packages/core/src/shell-edits.test.ts:85: "cmd > \\"$OUT\\"",',
     ]);
   });
+
+  test("F1: .each(cases) with external array is detected; fail closed if unresolved", () => {
+    const oldContent = `
+const cases = [
+  {
+    cmd: "a",
+    want: 1,
+  },
+  {
+    cmd: "b",
+    want: 2,
+  },
+];
+test.each(cases)("t %s", () => {});
+`.trimStart();
+
+    const diff = `
+--- a/n.test.ts
++++ b/n.test.ts
+@@ -6,4 +5,0 @@
+-  {
+-    cmd: "b",
+-    want: 2,
+-  },
+`.trimStart();
+
+    const removed = removedLines(diff, () => oldContent);
+    assert.deepEqual(removed, [
+      'n.test.ts:6: {',
+      'n.test.ts:7: cmd: "b",',
+      'n.test.ts:8: want: 2,',
+      'n.test.ts:9: },',
+    ]);
+
+    // Unresolved external call -> fail closed
+    const oldUnresolved = `
+test.each(makeCases())("t", () => {});
+const helper = 1;
+`.trimStart();
+    const diffUnresolved = `
+--- a/u.test.ts
++++ b/u.test.ts
+@@ -2 +1,0 @@
+-const helper = 1;
+`.trimStart();
+    const removedUnresolved = removedLines(diffUnresolved, () => oldUnresolved);
+    assert.deepEqual(removedUnresolved, ["u.test.ts:2: const helper = 1;"]);
+  });
+
+  test("F2: E3 moves are scoped to the same enclosing unit", () => {
+    // Cross-table move: not excused
+    const oldTables = `
+test.each([
+  { cmd: "echo hi", want: 1 },
+])("x", () => {});
+test.each([
+  { cmd: "z", want: 9 },
+])("y", () => {});
+`.trimStart();
+
+    const diffTables = `
+--- a/q.test.ts
++++ b/q.test.ts
+@@ -2 +1,0 @@
+-  { cmd: "echo hi", want: 1 },
+@@ -5,0 +5 @@
++  { cmd: "echo hi", want: 1 },
+`.trimStart();
+
+    const removedTables = removedLines(diffTables, () => oldTables);
+    assert.deepEqual(removedTables, ['q.test.ts:2: { cmd: "echo hi", want: 1 },']);
+
+    // Cross-test move: not excused
+    const oldTests = `
+test("a", () => {
+  expect(f(1)).toBe(2);
+});
+test("b", () => {
+  const x = 1;
+});
+`.trimStart();
+
+    const diffTests = `
+--- a/r.test.ts
++++ b/r.test.ts
+@@ -2 +1,0 @@
+-  expect(f(1)).toBe(2);
+@@ -5,0 +5 @@
++  expect(f(1)).toBe(2);
+`.trimStart();
+
+    const removedTests = removedLines(diffTests, () => oldTests);
+    assert.deepEqual(removedTests, ["r.test.ts:2: expect(f(1)).toBe(2);"]);
+  });
+
+  test("F3: diff header parse boundary and table comment preservation", () => {
+    // Content starting with -- drop must not break diff parsing
+    const oldM3 = `
+test.each([
+  { s: \`
+-- drop
+\`, w: 1 },
+])("x", () => {});
+`.trimStart();
+
+    const diffM3 = `
+--- a/m3.test.ts
++++ b/m3.test.ts
+@@ -3 +2,0 @@
+--- drop
+`.trimStart();
+
+    const removedM3 = removedLines(diffM3, () => oldM3);
+    assert.deepEqual(removedM3, ["m3.test.ts:3: -- drop"]);
+
+    // Comment line inside table template is preserved and not skipped
+    const oldP2 = `
+test.each([
+  { out: \`
+// keep
+* keep2
+\` },
+])("y", () => {});
+`.trimStart();
+
+    const diffP2 = `
+--- a/p2.test.ts
++++ b/p2.test.ts
+@@ -3 +2,0 @@
+-// keep
+`.trimStart();
+
+    const removedP2 = removedLines(diffP2, () => oldP2);
+    assert.deepEqual(removedP2, ["p2.test.ts:3: // keep"]);
+  });
+
+  test("F4: backslash newline continuation does not drift line counter", () => {
+    const oldContent = `
+const a = \`1 \\
+2\`;
+const b = \`3 \\
+4\`;
+const c = \`5 \\
+6\`;
+test.each([
+  { cmd: "a", want: 1 },
+  {
+    cmd: "b",
+    want: 2,
+    extra: 3,
+  },
+])("x", () => {});
+`.trimStart();
+
+    const diff = `
+--- a/l3.test.ts
++++ b/l3.test.ts
+@@ -9,5 +8,0 @@
+-  {
+-    cmd: "b",
+-    want: 2,
+-    extra: 3,
+-  },
+`.trimStart();
+
+    const removed = removedLines(diff, () => oldContent);
+    assert.deepEqual(removed, [
+      'l3.test.ts:9: {',
+      'l3.test.ts:10: cmd: "b",',
+      'l3.test.ts:11: want: 2,',
+      'l3.test.ts:12: extra: 3,',
+      'l3.test.ts:13: },',
+    ]);
+  });
+
+  test("F5: removed commented expectation // expect(...) is reported", () => {
+    const oldContent = `
+test("a", () => {
+  // expect(f(1)).toBe(2);
+  const x = 1;
+});
+`.trimStart();
+
+    const diff = `
+--- a/s.test.ts
++++ b/s.test.ts
+@@ -2 +1,0 @@
+-  // expect(f(1)).toBe(2);
+`.trimStart();
+
+    const removed = removedLines(diff, () => oldContent);
+    assert.deepEqual(removed, ["s.test.ts:2: // expect(f(1)).toBe(2);"]);
+  });
 });

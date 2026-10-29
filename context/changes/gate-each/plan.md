@@ -31,3 +31,10 @@ schema: no
   - `findTableLines(content)` parses the old file to locate line ranges of `.each(...)` / `.each`...`` tables, tracking bracket / quote balance, and returns `{ lines: Set<number>, unsure: boolean }`.
   - `removedLines(diff, getOldFile)` accepts `getOldFile` resolver, identifies moves (byte-identical after trim in same file), checks old file table lines, and applies E1/E2 fail-closed.
 - Done: `node --test scripts/gate.test.mjs` green; `corepack pnpm check` green; `node scripts/gate.mjs --base main --plan context/changes/gate-each/plan.md --run-check` exit 0/2.
+
+## Review fixes
+- F1: `.each(` with named array resolves same-file `const|let <name> = [` table extent, else fails closed.
+- F2: E3 moves are scoped to the same enclosing unit (same table or same `test`/`it` block by title).
+- F3: Diff headers are parsed only at `diff --git` boundaries; comment skip applies only on E2 fail-closed path.
+- F4: Backslash newline continuations in template and string scanners advance the line counter.
+- F5: Removed commented expectations matching EXPECT_RE are reported (EXPECT_RE checked before comment skip).
