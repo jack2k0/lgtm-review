@@ -63,27 +63,207 @@ export interface HeredocStart {
   dash: boolean;
 }
 
-/** Whether the text before a `<<` puts it in a comment or in arithmetic (`$((..))`, `((..))`, `$[..]`, `let`), where it is a shift. */
-function inCommentOrArithmetic(before: string): boolean {
+/** Whether `#` at index `i` begins an unescaped comment (preceded by start of input or unescaped whitespace / `;&|()`). */
+function isUnescapedCommentStart(text: string, i: number): boolean {
+  if (text[i] !== "#") return false;
+  if (i === 0) return true;
+  const prev = text[i - 1] as string;
+  if (!/[\s;&|()]/.test(prev)) return false;
+  let bs = 0;
+  for (let j = i - 2; j >= 0 && text[j] === "\\"; j--) bs++;
+  return bs % 2 === 0;
+}
+
+/** Scans forward from `start` for the closing `)` of depth 1, returning whether it is followed directly by `)`. */
+function scanParenPair(input: string, start: number): boolean {
+  let depth = 1;
   let quote: string | null = null;
-  let cmdStart = 0;
-  for (let i = 0; i < before.length; i++) {
-    const c = before[i] as string;
+  for (let j = start; j < input.length; j++) {
+    const c = input[j] as string;
     if (quote !== null) {
-      if (c === "\\" && quote === '"') i++;
-      else if (c === quote) quote = null;
+      if (quote === "'") {
+        if (c === "'") quote = null;
+      } else if (quote === '"') {
+        if (c === "\\" && j + 1 < input.length) j++;
+        else if (c === '"') quote = null;
+      } else if (quote === "$'") {
+        if (c === "\\" && j + 1 < input.length) j++;
+        else if (c === "'") quote = null;
+      }
       continue;
     }
-    if (c === "\\") i++;
-    else if (c === "'" || c === '"') quote = c;
-    else if (c === "#" && (i === 0 || /[\s;&|()]/.test(before[i - 1] as string))) return true;
-    else if (/[;&|\n]/.test(c)) cmdStart = i + 1;
+    if (c === "\\") {
+      j++;
+      continue;
+    }
+    if (c === "$" && j + 1 < input.length && input[j + 1] === "'") {
+      quote = "$'";
+      j++;
+      continue;
+    }
+    // Backticks are not skipped: splitSegments does not track them either, so both stay in step.
+    if (c === "'" || c === '"') {
+      quote = c;
+      continue;
+    }
+    if (c === "(") {
+      depth++;
+    } else if (c === ")") {
+      depth--;
+      if (depth === 0) {
+        return j + 1 < input.length && input[j + 1] === ")";
+      }
+    }
   }
-  const cmd = before.slice(cmdStart);
-  const unclosed = (open: string, close: string): boolean => cmd.lastIndexOf(open) > cmd.lastIndexOf(close);
-  if (unclosed("$((", "))") || unclosed("$[", "]")) return true;
-  if (/^\s*\(\(/.test(cmd) && !cmd.includes("))")) return true;
-  return /(?:^|[(\s])let\s/.test(cmd) && /^\s*(?:\w+=\S*\s+)*let\s/.test(cmd);
+  return false;
+}
+
+/** Scans forward from `start` for the closing `]` of depth 1. */
+function scanBracketPair(input: string, start: number): boolean {
+  let depth = 1;
+  let quote: string | null = null;
+  for (let j = start; j < input.length; j++) {
+    const c = input[j] as string;
+    if (quote !== null) {
+      if (quote === "'") {
+        if (c === "'") quote = null;
+      } else if (quote === '"') {
+        if (c === "\\" && j + 1 < input.length) j++;
+        else if (c === '"') quote = null;
+      } else if (quote === "$'") {
+        if (c === "\\" && j + 1 < input.length) j++;
+        else if (c === "'") quote = null;
+      }
+      continue;
+    }
+    if (c === "\\") {
+      j++;
+      continue;
+    }
+    if (c === "$" && j + 1 < input.length && input[j + 1] === "'") {
+      quote = "$'";
+      j++;
+      continue;
+    }
+    // Backticks are not skipped: splitSegments does not track them either, so both stay in step.
+    if (c === "'" || c === '"') {
+      quote = c;
+      continue;
+    }
+    if (c === "[") {
+      depth++;
+    } else if (c === "]") {
+      depth--;
+      if (depth === 0) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Checks whether index `pos` in `input` is an arithmetic opener:
+ * - `$((`: arithmetic only if its inner level closes with `))`
+ * - `$[`: arithmetic only if it closes with `]`
+ * - `((`: command-start only, and only if its inner level closes with `))`
+ * Returns the opener token if valid and closed; null if it falls back or is unclosed.
+ */
+function checkArithmeticOpener(
+  input: string,
+  pos: number,
+  isCommandStart: boolean,
+): "$((" | "$[" | "((" | null {
+  if (input.slice(pos, pos + 3) === "$((") {
+    return scanParenPair(input, pos + 3) ? "$((" : null;
+  }
+  if (input.slice(pos, pos + 2) === "$[") {
+    return scanBracketPair(input, pos + 2) ? "$[" : null;
+  }
+  if (isCommandStart && input.slice(pos, pos + 2) === "((") {
+    return scanParenPair(input, pos + 2) ? "((" : null;
+  }
+  return null;
+}
+
+/** Whether the text before `index` (the position of `<<`) in `line` puts it in a quote, comment or arithmetic context (`$((..))`, `((..))`, `$[..]`). */
+function inCommentOrArithmetic(line: string, index: number): boolean {
+  let quote: string | null = null;
+  let cmdStart = 0;
+  const stack: string[] = [];
+
+  for (let i = 0; i < index; i++) {
+    const c = line[i] as string;
+
+    if (quote !== null) {
+      if (quote === "'") {
+        if (c === "'") quote = null;
+      } else if (quote === '"') {
+        if (c === "\\" && i + 1 < line.length) i++;
+        else if (c === '"') quote = null;
+      } else if (quote === "$'") {
+        if (c === "\\" && i + 1 < line.length) i++;
+        else if (c === "'") quote = null;
+      }
+      continue;
+    }
+
+    if (c === "\\") {
+      if (i + 1 < line.length) i++;
+      continue;
+    }
+
+    if (c === "$" && i + 1 < line.length && line[i + 1] === "'") {
+      quote = "$'";
+      i++;
+      continue;
+    }
+
+    if (c === "'" || c === '"') {
+      quote = c;
+      continue;
+    }
+
+    if (stack.length > 0) {
+      if (c === "(") {
+        stack.push("(");
+      } else if (c === "[") {
+        stack.push("[");
+      } else if (c === ")") {
+        const top = stack[stack.length - 1];
+        if (top === "(") {
+          stack.pop();
+        } else if ((top === "$((" || top === "((") && i + 1 < line.length && line[i + 1] === ")") {
+          stack.pop();
+          i++;
+        }
+      } else if (c === "]") {
+        const top = stack[stack.length - 1];
+        if (top === "[" || top === "$[") {
+          stack.pop();
+        }
+      }
+      continue;
+    }
+
+    if (isUnescapedCommentStart(line, i)) {
+      return true;
+    }
+
+    const isCommandStart = /^(?:\s*|\s*(?:if|while|until|then|elif|!)\s*)$/.test(line.slice(cmdStart, i));
+    const arith = checkArithmeticOpener(line, i, isCommandStart);
+    if (arith !== null) {
+      stack.push(arith);
+      i += arith.length - 1;
+      continue;
+    }
+
+    if (/[;&|\n]/.test(c)) {
+      cmdStart = i + 1;
+    }
+  }
+
+  if (quote !== null) return true;
+  if (stack.length > 0) return true;
+  return false;
 }
 
 /**
@@ -96,8 +276,10 @@ export function parseHeredocStarts(line: string): HeredocStart[] {
   const re = /(?<!<)<<(-?)/g;
   for (let m = re.exec(line); m !== null; m = re.exec(line)) {
     if (line[m.index + 2] === "=") continue;
-    const before = line.slice(0, m.index);
-    if (inCommentOrArithmetic(before)) continue;
+    let bs = 0;
+    while (m.index - 1 - bs >= 0 && line[m.index - 1 - bs] === "\\") bs++;
+    if (bs % 2 === 1) continue;
+    if (inCommentOrArithmetic(line, m.index)) continue;
     let i = m.index + m[0].length;
     while (i < line.length && /\s/.test(line[i] as string)) i++;
     let delim = "";
@@ -186,8 +368,18 @@ export function splitSegments(cmd: string): Segment[] {
   let quote: string | null = null;
   let opens = 0;
   let closes = 0;
+  const arithStack: string[] = [];
+
   const end = (op: string): void => {
-    const text = cur.trim().replace(/\s*[)}]+$/, "");
+    let text = cur.trim();
+    if (closes > 0) {
+      let remaining = closes;
+      while (remaining > 0 && /\)\s*$/.test(text)) {
+        text = text.replace(/\)\s*$/, "").trimEnd();
+        remaining--;
+      }
+    }
+    text = text.replace(/\s*\}+$/, "");
     const segOpens = opens;
     const segCloses = closes;
     cur = "";
@@ -206,23 +398,77 @@ export function splitSegments(cmd: string): Segment[] {
     const next = cmd[i + 1];
     if (quote !== null) {
       cur += c;
-      if (c === "\\" && quote === '"') {
-        cur += next ?? "";
-        i++;
-      } else if (c === quote) {
-        quote = null;
+      if (quote === "'") {
+        if (c === "'") quote = null;
+      } else if (quote === '"') {
+        if (c === "\\" && next !== undefined) {
+          cur += next;
+          i++;
+        } else if (c === '"') {
+          quote = null;
+        }
+      } else if (quote === "$'") {
+        if (c === "\\" && next !== undefined) {
+          cur += next;
+          i++;
+        } else if (c === "'") {
+          quote = null;
+        }
       }
       continue;
     }
     if (c === "\\") {
       cur += c + (next ?? "");
       i++;
-    } else if (c === '"' || c === "'") {
+      continue;
+    }
+    if (c === "$" && next === "'") {
+      quote = "$'";
+      cur += "$'";
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'") {
       quote = c;
       cur += c;
-    } else if (c === "#" && (cur === "" || /\s$/.test(cur))) {
+      continue;
+    }
+    if (arithStack.length > 0) {
+      cur += c;
+      if (c === "(") {
+        arithStack.push("(");
+      } else if (c === "[") {
+        arithStack.push("[");
+      } else if (c === ")") {
+        const top = arithStack[arithStack.length - 1];
+        if (top === "(") {
+          arithStack.pop();
+        } else if ((top === "$((" || top === "((") && next === ")") {
+          arithStack.pop();
+          cur += ")";
+          i++;
+        }
+      } else if (c === "]") {
+        const top = arithStack[arithStack.length - 1];
+        if (top === "[" || top === "$[") {
+          arithStack.pop();
+        }
+      }
+      continue;
+    }
+    if (isUnescapedCommentStart(cmd, i)) {
       while (i + 1 < cmd.length && cmd[i + 1] !== "\n") i++;
-    } else if (c === "&" && next === "&") {
+      continue;
+    }
+    const isCommandStart = /^(?:\s*|\s*(?:if|while|until|then|elif|!)\s*)$/.test(cur);
+    const arith = checkArithmeticOpener(cmd, i, isCommandStart);
+    if (arith !== null) {
+      arithStack.push(arith);
+      cur += arith;
+      i += arith.length - 1;
+      continue;
+    }
+    if (c === "&" && next === "&") {
       end("&&");
       i++;
     } else if (c === "|" && next === "|") {

@@ -1,0 +1,13 @@
+{
+  "fixture": "sa10-heredoc-quotes",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "<< inside double quotes is not a heredoc start; sed -i edits src/a.ts which is checked by pnpm test."
+    }
+  ]
+}
