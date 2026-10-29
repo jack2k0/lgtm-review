@@ -1,0 +1,16 @@
+{
+  "0:/home/user/project/notes.txt": {
+    "path": "/home/user/project/notes.txt",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  },
+  "0:/home/user/project/other.txt": {
+    "path": "/home/user/project/other.txt",
+    "kind": "M",
+    "truncated": false,
+    "maybeIncomplete": true,
+    "hunks": []
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "fixture": "sa9-heredoc-multi",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "sed -i in body of B is body text of the second heredoc; notes.txt and other.txt are checked by pnpm test."
+    }
+  ]
+}

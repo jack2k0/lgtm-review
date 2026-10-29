@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { checkScope, classifyCommand, findMaskedFailure, stripHeredocs, type RepoScripts } from "./check-patterns.js";
+import { checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, stripHeredocs, type RepoScripts } from "./check-patterns.js";
 
 const repo: RepoScripts = { packageScripts: ["verify"], makeTargets: ["ci"], scriptFiles: ["tools/run-all.sh"] };
 
@@ -591,5 +591,27 @@ describe("status-accuracy-8 stripHeredocs delimiter words", () => {
     expect(stripHeredocs("cat <<END-1\nbody\nEND-1\npnpm check")).toBe("cat <<END-1\npnpm check");
     expect(stripHeredocs("cat <<E.x\nbody\nE.x\npnpm check")).toBe("cat <<E.x\npnpm check");
     expect(stripHeredocs("cat <<E'-'1\nbody\nE-1\npnpm check")).toBe("cat <<E'-'1\npnpm check");
+  });
+});
+
+describe("status-accuracy-9 multiple heredocs on one line", () => {
+  test("stripHeredocs drops both bodies", () => {
+    const cmd = "cat <<A >notes.txt; cat <<B >other.txt\nx\nA\nbody-b\nB\npnpm check";
+    expect(stripHeredocs(cmd)).toBe("cat <<A >notes.txt; cat <<B >other.txt\npnpm check");
+  });
+
+  test("parseHeredocStarts unit tests", () => {
+    expect(parseHeredocStarts("cat <<A; cat <<B")).toEqual([
+      { delim: "A", quoted: false, dash: false },
+      { delim: "B", quoted: false, dash: false },
+    ]);
+    expect(parseHeredocStarts("cat <<-A; cat <<'Q'")).toEqual([
+      { delim: "A", quoted: false, dash: true },
+      { delim: "Q", quoted: true, dash: false },
+    ]);
+    expect(parseHeredocStarts("cat <<-A; x=$((1<<2)); cat <<'Q'")).toEqual([
+      { delim: "A", quoted: false, dash: true },
+      { delim: "Q", quoted: true, dash: false },
+    ]);
   });
 });

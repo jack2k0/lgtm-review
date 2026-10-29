@@ -10,9 +10,10 @@ import {
   normalizeFirstToken,
   splitSegments,
   stripHeredocs,
-  parseHeredocStart,
+  parseHeredocStarts,
   heredocEnds,
   stripPrefixes,
+  type HeredocStart,
   type RepoScripts,
   type Segment,
 } from "./check-patterns.js";
@@ -635,27 +636,29 @@ function heredocBodies(cmd: string): string[] {
 /** Heredocs with their bodies, whether the delimiter was quoted (a quoted body is literal) and whether it was closed. */
 function heredocParts(cmd: string): { body: string; quoted: boolean; closed: boolean }[] {
   const out: { body: string; quoted: boolean; closed: boolean }[] = [];
-  let delim: string | null = null;
-  let quoted = false;
-  let dash = false;
+  const queue: HeredocStart[] = [];
   let body: string[] = [];
   for (const line of cmd.split("\n")) {
-    if (delim !== null) {
-      if (heredocEnds(line, delim, dash)) {
-        out.push({ body: body.join("\n"), quoted, closed: true });
-        delim = null;
+    if (queue.length > 0) {
+      const cur = queue[0] as HeredocStart;
+      if (heredocEnds(line, cur.delim, cur.dash)) {
+        out.push({ body: body.join("\n"), quoted: cur.quoted, closed: true });
         body = [];
+        queue.shift();
       } else body.push(line);
       continue;
     }
-    const m = parseHeredocStart(line);
-    if (m) {
-      delim = m.delim;
-      quoted = m.quoted;
-      dash = m.dash;
+    const starts = parseHeredocStarts(line);
+    if (starts.length > 0) queue.push(...starts);
+  }
+  if (queue.length > 0) {
+    const cur = queue[0] as HeredocStart;
+    out.push({ body: body.join("\n"), quoted: cur.quoted, closed: false });
+    for (let i = 1; i < queue.length; i++) {
+      const h = queue[i] as HeredocStart;
+      out.push({ body: "", quoted: h.quoted, closed: false });
     }
   }
-  if (delim !== null) out.push({ body: body.join("\n"), quoted, closed: false });
   return out;
 }
 
@@ -1831,7 +1834,10 @@ export function classifyShellMutation(
         dirStack.push({ dir, sticky, docDir, chainCode, chainDoc, chainParen, chainCompound });
       }
       // The heredoc fed to this segment's stdin: its own, or the one that opened the pipeline it belongs to.
-      const own = parseHeredocStart(seg.text) !== null ? heredocs++ : null;
+      const segStarts = parseHeredocStarts(seg.text);
+      const count = segStarts.length;
+      const own = count > 0 ? heredocs + count - 1 : null;
+      heredocs += count;
       if (!prevPipe) pipeHeredoc = null;
       if (own !== null) pipeHeredoc = own;
       const fed = own ?? (prevPipe ? pipeHeredoc : null);

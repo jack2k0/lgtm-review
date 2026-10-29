@@ -87,11 +87,12 @@ function inCommentOrArithmetic(before: string): boolean {
 }
 
 /**
- * First heredoc start in a line. The delimiter is the whole shell word up to an unquoted metacharacter
+ * Heredoc starts in a line, in order. The delimiter is the whole shell word up to an unquoted metacharacter
  * (space, tab, `;`, `&`, `|`, `<`, `>`, `(`, `)`), with quote removal: `E'-'1` is `E-1`.
  * An unterminated quote or an empty word is not a heredoc start.
  */
-export function parseHeredocStart(line: string): HeredocStart | null {
+export function parseHeredocStarts(line: string): HeredocStart[] {
+  const starts: HeredocStart[] = [];
   const re = /(?<!<)<<(-?)/g;
   for (let m = re.exec(line); m !== null; m = re.exec(line)) {
     if (line[m.index + 2] === "=") continue;
@@ -146,9 +147,12 @@ export function parseHeredocStart(line: string): HeredocStart | null {
         i++;
       }
     }
-    if (ok && any && (delim !== "" || quoted)) return { delim, quoted, dash: m[1] === "-" };
+    if (ok && any && (delim !== "" || quoted)) {
+      starts.push({ delim, quoted, dash: m[1] === "-" });
+      re.lastIndex = i;
+    }
   }
-  return null;
+  return starts;
 }
 
 /** Whether a heredoc line ends the body: exactly the delimiter; `<<-` also allows leading tabs. */
@@ -161,19 +165,16 @@ export function heredocEnds(line: string, delim: string, dash: boolean): boolean
 export function stripHeredocs(cmd: string): string {
   if (!cmd.includes("<<")) return cmd;
   const out: string[] = [];
-  let delim: string | null = null;
-  let dash = false;
+  const queue: HeredocStart[] = [];
   for (const line of cmd.split("\n")) {
-    if (delim !== null) {
-      if (heredocEnds(line, delim, dash)) delim = null;
+    if (queue.length > 0) {
+      const cur = queue[0] as HeredocStart;
+      if (heredocEnds(line, cur.delim, cur.dash)) queue.shift();
       continue;
     }
     out.push(line);
-    const m = parseHeredocStart(line);
-    if (m) {
-      delim = m.delim;
-      dash = m.dash;
-    }
+    const starts = parseHeredocStarts(line);
+    if (starts.length > 0) queue.push(...starts);
   }
   return out.join("\n");
 }
