@@ -1,0 +1,13 @@
+{
+  "fixture": "sa12-redirect-targets",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "(( x=1 )) 2> src/a.ts edits src/a.ts via stderr redirect, which is checked by pnpm test."
+    }
+  ]
+}

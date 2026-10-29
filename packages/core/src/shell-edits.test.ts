@@ -78,11 +78,8 @@ describe("classifyShellMutation: edits", () => {
     "echo hi > tmp/scratch/x.txt",
     "echo hi > ~/.cache/x.txt",
     "echo hi > run.log",
-    "echo hi 2> err.txt",
     "ls 2>&1",
     "ls >&2",
-    "ls &> all.txt",
-    "cmd > \"$OUT\"",
     "echo hi | tee /tmp/out.txt",
     "echo hi | tee build.log",
     "sed -i 's/a/b/' /tmp/x.txt",
@@ -1331,5 +1328,74 @@ describe("status-accuracy-7 heredoc forms", () => {
 
   test("sa11 review: `! (( x > 1 ))` has no redirect target", () => {
     expect(classifyShellMutation("! (( x > 1 ))").edits).toEqual([]);
+  });
+
+  test("sa12: approved option B moved expectations", () => {
+    expect(classifyShellMutation("echo hi 2> err.txt")).toMatchObject({ edits: [{ file: "err.txt" }], opaque: true });
+    expect(classifyShellMutation("ls &> all.txt")).toMatchObject({ edits: [{ file: "all.txt" }], opaque: true });
+    expect(classifyShellMutation('cmd > "$OUT"')).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
+  });
+
+  test("sa12: fd-prefixed and dynamic redirect targets", () => {
+    expect(classifyShellMutation("echo > $x.ts")).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
+    expect(classifyShellMutation("echo > $((2)).ts")).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
+    expect(classifyShellMutation("echo hi > $[2]")).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
+    expect(classifyShellMutation("((x)) 2> f.ts")).toMatchObject({ edits: [{ file: "f.ts" }], opaque: true });
+    expect(classifyShellMutation("cmd 2>> f.ts")).toMatchObject({ edits: [{ file: "f.ts" }], opaque: true });
+    expect(classifyShellMutation("cmd &> f.ts")).toMatchObject({ edits: [{ file: "f.ts" }], opaque: true });
+    expect(classifyShellMutation("cmd 1> f.ts")).toMatchObject({ edits: [{ file: "f.ts" }], opaque: false });
+  });
+
+  test("sa12: intentional non-edits stay preserved", () => {
+    expect(files("echo hi > /dev/null")).toEqual([]);
+    expect(files("echo hi > /dev/stderr")).toEqual([]);
+    expect(files("echo hi >&2")).toEqual([]);
+    expect(files("echo hi 2>&1")).toEqual([]);
+    expect(files("echo hi > run.log")).toEqual([]);
+    expect(files("pnpm test > results.json 2>&1")).toEqual([]);
+  });
+
+  test("sa12 review F1: temp targets", () => {
+    expect(files("T=$(mktemp); echo > $T")).toEqual([]);
+    expect(files("T=$(mktemp -d); echo > $T/a.ts")).toEqual([]);
+    expect(files("echo > ${TMPDIR:-/tmp}/a.ts")).toEqual([]);
+    expect(files("echo > ${TMPDIR:-/var/tmp}/a.ts")).toEqual([]);
+    expect(files('echo hi >"$(mktemp)"')).toEqual([]);
+    expect(files('echo hi >"$(mktemp -d)/x"')).toEqual([]);
+    expect(files("T=$(mktemp); T=src; echo > $T/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("echo > ${TMPDIR:-src}/a.ts")).toEqual([SHELL_EDIT_FILE]);
+  });
+
+  test("sa12 review F2: dynamic fd dups stay opaque without listing (shell edit)", () => {
+    expect(classifyShellMutation("echo hi >&$fd")).toMatchObject({ edits: [], opaque: true });
+    expect(classifyShellMutation("echo hi 2>&$n")).toMatchObject({ edits: [], opaque: true });
+    expect(classifyShellMutation('echo hi 2>&"$x"')).toMatchObject({ edits: [], opaque: true });
+    expect(classifyShellMutation("echo hi 2>&${ERR}")).toMatchObject({ edits: [], opaque: true });
+    expect(classifyShellMutation("echo hi >& f.ts")).toMatchObject({ edits: [{ file: "f.ts" }] });
+  });
+
+  test("sa12 review F3: >| and 2>| noclobber override writes", () => {
+    expect(files("echo >| src/f.ts")).toEqual(["src/f.ts"]);
+    expect(files("echo 2>| src/f.ts")).toEqual(["src/f.ts"]);
+    expect(files("echo >| src/f.ts && sed -i s/a/b/ src/z.ts")).toEqual(["src/f.ts", "src/z.ts"]);
+  });
+
+  test("sa12 review 2 G1-G3: mktemp scratch location restrictions, direct mktemp, unescaped >|", () => {
+    // G1: only bare mktemp or -d/-u/-q/-t flags and /tmp template count as scratch
+    expect(files("T=$(mktemp -p src -d); echo > $T/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("T=$(mktemp --tmpdir=src); echo > $T")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("T=$(mktemp src/x.XXXX); echo > $T")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("T=$(mktemp -p .); echo > $T")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("T=$(mktemp -d /tmp/x.XXXX); echo > $T/a")).toEqual([]);
+    expect(files("T=$(mktemp -t x.XXXX); echo > $T")).toEqual([]);
+
+    // G2: direct mktemp target in quoted and unquoted forms
+    expect(files('echo > "$(mktemp)"')).toEqual([]);
+    expect(files("echo > $(mktemp)")).toEqual([]);
+    expect(files('echo > "$(mktemp -p src)"')).toEqual([SHELL_EDIT_FILE]);
+    expect(files("echo > $(mktemp -p src)")).toEqual([SHELL_EDIT_FILE]);
+
+    // G3: escaped > before | is not clobber; | is pipe
+    expect(files("echo \\>| tee src/a.ts")).toEqual(["src/a.ts"]);
   });
 });

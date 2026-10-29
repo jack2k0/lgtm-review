@@ -17,6 +17,7 @@ import {
   checkArithmeticOpener,
   scanParenPairEnd,
   scanBracketPairEnd,
+  isGroupingSubshellOpen,
   type HeredocStart,
   type RepoScripts,
   type Segment,
@@ -78,6 +79,7 @@ interface Word {
 interface Redirect {
   fd: string;
   target: Word | null;
+  op?: string;
 }
 
 const REDIR_RE = /(\d+|&)?(>>|>&|>\||>|<<<|<<-?|<&|<)/y;
@@ -169,11 +171,11 @@ function parseWords(s: string): { words: Word[]; redirects: Redirect[] } {
       i = REDIR_RE.lastIndex;
       const fd = m[1] ?? ""; // "&" for `&>` / `&>>`
       const op = m[2] as string;
-      if (op === ">" || op === ">>" || op === ">|") redirects.push({ fd, target: readWord() });
+      if (op === ">" || op === ">>" || op === ">|") redirects.push({ fd, target: readWord(), op });
       else if (op === ">&") {
         // `>&2`, `2>&1`, `>&-` duplicate or close a descriptor; `>& file` writes the file.
         const target = readWord();
-        if (target !== null && !/^\d*-?$/.test(target.text)) redirects.push({ fd: fd === "" ? "&" : fd, target });
+        if (target !== null && !/^\d*-?$/.test(target.text)) redirects.push({ fd: fd === "" ? "&" : fd, target, op: ">&" });
       } else readWord(); // `<file`, `<<EOF`, `<<<str`: nothing written to a file
       continue;
     }
@@ -204,6 +206,91 @@ function collapseSlashes(p: string): string {
   return p.replace(/\/{2,}/g, "/");
 }
 
+const VAR_PREFIX_RE = /^(?:\$([A-Za-z_]\w*)|\$\{([A-Za-z_]\w*)\})(?:\/(.*))?$/;
+const VAR_DEF_PREFIX_RE = /^\$\{([A-Za-z_]\w*):-([^}]+)\}(?:\/(.*))?$/;
+
+const MKTEMP_SHORT_FLAGS = new Set(["d", "u", "q", "t"]);
+const MKTEMP_LONG_FLAGS = new Set(["--directory", "--dry-run", "--quiet"]);
+
+function isAllowedMktempCmd(cmd: string): boolean {
+  if (/[;&|\n]/.test(cmd)) return false;
+  const parts = cmd.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return false;
+  if (parts[0] !== "mktemp") return false;
+  let hasT = false;
+  let template: string | null = null;
+  for (let i = 1; i < parts.length; i++) {
+    const raw = parts[i] as string;
+    const tok = raw.replace(/^['"]|['"]$/g, "");
+    if (tok === "--") continue;
+    if (tok.startsWith("--")) {
+      if (!MKTEMP_LONG_FLAGS.has(tok)) return false;
+      continue;
+    }
+    if (tok.startsWith("-") && tok.length > 1) {
+      for (let j = 1; j < tok.length; j++) {
+        const c = tok[j] as string;
+        if (!MKTEMP_SHORT_FLAGS.has(c)) return false;
+        if (c === "t") hasT = true;
+      }
+      continue;
+    }
+    if (template !== null) return false;
+    template = tok;
+  }
+  if (template !== null) {
+    if (hasT) {
+      if (!template.includes("/")) return true;
+      const norm = normalizePath(template);
+      return /^\/(?:private\/)?(?:var\/)?tmp(?:\/|$)/.test(norm) && norm !== ".." && !norm.startsWith("../");
+    }
+    const norm = normalizePath(template);
+    return /^\/(?:private\/)?(?:var\/)?tmp(?:\/|$)/.test(norm) && norm !== ".." && !norm.startsWith("../");
+  }
+  return true;
+}
+
+function isMktempValue(raw: string): boolean {
+  const s = raw.trim();
+  const inner =
+    (s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))
+      ? s.slice(1, -1).trim()
+      : s;
+  if (inner.startsWith("$(") && inner.endsWith(")")) {
+    const body = inner.slice(2, -1).trim();
+    return isAllowedMktempCmd(body);
+  }
+  if (inner.startsWith("`") && inner.endsWith("`")) {
+    const body = inner.slice(1, -1).trim();
+    return isAllowedMktempCmd(body);
+  }
+  return false;
+}
+
+function isDirectMktemp(p: string): boolean {
+  if (nonLiteralClimb(p)) return false;
+  const s = collapseSlashes(p.trim().replace(/^"|"$/g, ""));
+  if (!s.startsWith("$(") && !s.startsWith("`")) return false;
+  let cmd = "";
+  let rest = "";
+  if (s.startsWith("$(")) {
+    const end = s.indexOf(")");
+    if (end === -1) return false;
+    cmd = s.slice(2, end).trim();
+    rest = s.slice(end + 1);
+  } else if (s.startsWith("`")) {
+    const end = s.indexOf("`", 1);
+    if (end === -1) return false;
+    cmd = s.slice(1, end).trim();
+    rest = s.slice(end + 1);
+  }
+  if (!isAllowedMktempCmd(cmd)) return false;
+  if (rest === "" || rest === "/") return true;
+  if (!rest.startsWith("/")) return false;
+  const norm = normalizePath(rest.slice(1));
+  return norm !== ".." && !norm.startsWith("../");
+}
+
 function tempPrefixName(prefix: string): string | null {
   const m = /^\$\{?([A-Za-z_]\w*)\}?$/.exec(prefix);
   return m ? (m[1] as string) : null;
@@ -216,12 +303,35 @@ function tempPrefixName(prefix: string): string | null {
  * assignment on (a use earlier in the command stays scratch).
  * Ending exactly on the variable (`$S/foo/..`) is still scratch.
  */
-function tempPrefixKind(p: string, poisoned?: ReadonlySet<string>): "scratch" | "climb" | null {
-  const m = TEMP_PREFIX_RE.exec(collapseSlashes(p));
+function tempPrefixKind(
+  p: string,
+  poisoned?: ReadonlySet<string>,
+  tempVars?: ReadonlySet<string>,
+): "scratch" | "climb" | null {
+  const collapsed = collapseSlashes(p);
+  const mDef = VAR_DEF_PREFIX_RE.exec(collapsed);
+  if (mDef) {
+    const name = mDef[1] as string;
+    const fallback = mDef[2] as string;
+    const rest = mDef[3];
+    if (TEMP_NAME_RE.test(name) || tempVars?.has(name)) {
+      if (poisoned?.has(name)) return "climb";
+      if (!/^\/(?:private\/)?(?:var\/)?tmp(?:\/|$)/.test(pathForIgnore(fallback))) {
+        return "climb";
+      }
+      if (rest === undefined || rest === "") return "scratch";
+      const norm = normalizePath(rest);
+      if (norm === ".." || norm.startsWith("../")) return "climb";
+      return "scratch";
+    }
+  }
+
+  const m = VAR_PREFIX_RE.exec(collapsed);
   if (!m) return null;
-  const name = tempPrefixName(m[1] as string);
-  if (name !== null && poisoned?.has(name)) return "climb";
-  const rest = m[2];
+  const name = (m[1] ?? m[2]) as string;
+  if (!TEMP_NAME_RE.test(name) && !tempVars?.has(name)) return null;
+  if (poisoned?.has(name)) return "climb";
+  const rest = m[3];
   if (rest === undefined || rest === "") return "scratch";
   const norm = normalizePath(rest);
   if (norm === ".." || norm.startsWith("../")) return "climb";
@@ -249,9 +359,10 @@ function pathForIgnore(p: string): string {
 }
 
 /** Scratch, cache and log-capture targets are not edits of the work tree. A temp path that climbs out is. */
-function isIgnoredPath(p: string, poisoned?: ReadonlySet<string>): boolean {
+function isIgnoredPath(p: string, poisoned?: ReadonlySet<string>, tempVars?: ReadonlySet<string>): boolean {
   if (nonLiteralClimb(p)) return false;
-  const temp = tempPrefixKind(p, poisoned);
+  if (isDirectMktemp(p)) return true;
+  const temp = tempPrefixKind(p, poisoned, tempVars);
   if (temp === "climb") return false;
   if (temp === "scratch") return true;
   const n = pathForIgnore(p);
@@ -282,11 +393,11 @@ function isOption(w: Word): boolean {
 }
 
 /** Files of a segment from its operands; `SHELL_EDIT_FILE` when any operand is dynamic or none is left. */
-function operandFiles(ops: Word[], poisoned?: ReadonlySet<string>): string[] {
-  const live = ops.filter((w) => !isIgnoredPath(w.text, poisoned));
+function operandFiles(ops: Word[], poisoned?: ReadonlySet<string>, tempVars?: ReadonlySet<string>): string[] {
+  const live = ops.filter((w) => !isIgnoredPath(w.text, poisoned, tempVars));
   if (live.length === 0 && ops.length > 0) return [];
   // A temp prefix that climbed out, a non-literal `..`, or any dynamic operand, is an unresolved code edit.
-  if (live.length === 0 || live.some((w) => w.dynamic || tempPrefixKind(w.text, poisoned) === "climb" || nonLiteralClimb(w.text))) {
+  if (live.length === 0 || live.some((w) => w.dynamic || tempPrefixKind(w.text, poisoned, tempVars) === "climb" || nonLiteralClimb(w.text))) {
     return [SHELL_EDIT_FILE];
   }
   return live.map((w) => w.text);
@@ -305,7 +416,7 @@ function gitSub(words: Word[]): { sub: string; args: Word[] } | null {
   return sub === undefined ? null : { sub, args: words.slice(i + 1) };
 }
 
-function sedFiles(args: Word[], poisoned?: ReadonlySet<string>): string[] | null {
+function sedFiles(args: Word[], poisoned?: ReadonlySet<string>, tempVars?: ReadonlySet<string>): string[] | null {
   let inPlace = false;
   let hasScriptOpt = false;
   const ops: Word[] = [];
@@ -323,10 +434,10 @@ function sedFiles(args: Word[], poisoned?: ReadonlySet<string>): string[] | null
   }
   if (!inPlace) return null;
   if (!hasScriptOpt) ops.shift(); // the first operand is the script
-  return operandFiles(ops, poisoned);
+  return operandFiles(ops, poisoned, tempVars);
 }
 
-function perlFiles(args: Word[], poisoned?: ReadonlySet<string>): string[] | null {
+function perlFiles(args: Word[], poisoned?: ReadonlySet<string>, tempVars?: ReadonlySet<string>): string[] | null {
   let inPlace = false;
   let hasScript = false;
   const ops: Word[] = [];
@@ -346,13 +457,14 @@ function perlFiles(args: Word[], poisoned?: ReadonlySet<string>): string[] | nul
   }
   if (!inPlace) return null;
   if (!hasScript) ops.shift();
-  return operandFiles(ops, poisoned);
+  return operandFiles(ops, poisoned, tempVars);
 }
 
-function teeFiles(args: Word[], poisoned?: ReadonlySet<string>): string[] {
+function teeFiles(args: Word[], poisoned?: ReadonlySet<string>, tempVars?: ReadonlySet<string>): string[] {
   return operandFiles(
     args.filter((w) => !isOption(w)),
     poisoned,
+    tempVars,
   );
 }
 
@@ -654,8 +766,13 @@ function substituteVars(w: Word, vars: ReadonlyMap<string, string>): Word {
  * A climbing temp path is left unsubstituted. Substituting `S=/home/user/src` would turn `$S/a.ts`
  * into a real path; C17 wants that use unresolved (`(shell edit)`).
  */
-function substituteKeepingClimb(w: Word, vars: ReadonlyMap<string, string>, poisoned: ReadonlySet<string>): Word {
-  if (nonLiteralClimb(w.text) || tempPrefixKind(w.text, poisoned) === "climb") return w;
+function substituteKeepingClimb(
+  w: Word,
+  vars: ReadonlyMap<string, string>,
+  poisoned?: ReadonlySet<string>,
+  tempVars?: ReadonlySet<string>,
+): Word {
+  if (nonLiteralClimb(w.text) || tempPrefixKind(w.text, poisoned, tempVars) === "climb") return w;
   return substituteVars(w, vars);
 }
 
@@ -693,7 +810,7 @@ function heredocParts(cmd: string): { body: string; quoted: boolean; closed: boo
   return out;
 }
 
-const ASSIGN_RE = /^(?:export\s+)?([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|]+)(?=\s|$)\s*/;
+const ASSIGN_RE = /^(?:export\s+)?([A-Za-z_]\w*)=("[^"]*"|'[^']*'|\$\([^)]*\)|`[^`]*`|[^\s;&|]+)(?=\s|$)\s*/;
 
 /** Expands `$NAME` / `${NAME}` in an assignment value. Null when any reference is unknown or the value is empty. */
 function assignmentValue(raw: string, vars: ReadonlyMap<string, string>): string | null {
@@ -829,10 +946,14 @@ function writesOutputFile(head: string, words: Word[]): boolean {
  * A redirect that may write a file we do not see as an edit: any unknown target; for descriptors other than stdout
  * (`2> f`, `&> f`, `>& f`) also a known target that is neither scratch/log nor documentation.
  */
-function writesUnseen(r: Redirect, poisoned?: ReadonlySet<string>): boolean {
+function writesUnseen(
+  r: Redirect,
+  poisoned?: ReadonlySet<string>,
+  tempVars?: ReadonlySet<string>,
+): boolean {
   if (r.target === null) return true;
   // `$S/…`, `$TMPDIR/…`, logs and other scratch targets are not work-tree writes, even before `$S` is substituted.
-  if (isIgnoredPath(r.target.text, poisoned)) return false;
+  if (isIgnoredPath(r.target.text, poisoned, tempVars)) return false;
   if (isUnknownTarget(r.target)) return true;
   if (r.fd === "" || r.fd === "1") return false;
   return !isDocPath(r.target.text);
@@ -904,20 +1025,6 @@ function unquotedParens(text: string): { opens: number; closes: number } {
     else if (c === ")") closes++;
   }
   return { opens, closes };
-}
-
-/** A grouping `( … )`, not `$(…)`, `<(…)`, `>(…)`, `name()`, or `name=(…)`. */
-function isGroupingSubshellOpen(text: string, i: number): boolean {
-  const prev = i > 0 ? (text[i - 1] as string) : "";
-  if (prev === "$" || prev === "<" || prev === ">" || prev === "=") return false;
-  let j = i - 1;
-  while (j >= 0 && /\s/.test(text[j] as string)) j--;
-  if (j >= 0 && /[A-Za-z0-9_]/.test(text[j] as string)) {
-    let k = i + 1;
-    while (k < text.length && /\s/.test(text[k] as string)) k++;
-    if (k < text.length && text[k] === ")") return false;
-  }
-  return true;
 }
 
 /**
@@ -1480,19 +1587,30 @@ function countBraces(segment: string): { open: number; close: number } {
  * that command before the assignment, and the assignment does not survive it. `vars` is the map from
  * earlier segments (same-segment assignments are not visible to each other).
  */
-function poisonTempNamesInSegment(text: string, vars: ReadonlyMap<string, string>, poisoned: Set<string>): void {
+function poisonTempNamesInSegment(
+  text: string,
+  vars: ReadonlyMap<string, string>,
+  poisoned: Set<string>,
+  tempVars: Set<string>,
+): void {
   let s = text.trim();
   const exported = s.startsWith("export ");
-  const found: [string, string | null][] = [];
+  const found: [string, string | null, string][] = [];
   for (let guard = 0; guard < 10; guard++) {
     const m = ASSIGN_RE.exec(s);
     if (!m) break;
-    found.push([m[1] as string, assignmentValue(m[2] as string, vars)]);
+    found.push([m[1] as string, assignmentValue(m[2] as string, vars), m[2] as string]);
     s = s.slice(m[0].length);
   }
   if (s.trim() === "" || exported) {
-    for (const [name, value] of found) {
-      if (TEMP_NAME_RE.test(name) && !isTempRootValue(value)) poisoned.add(name);
+    for (const [name, value, raw] of found) {
+      if (isMktempValue(raw)) {
+        tempVars.add(name);
+      } else if (tempVars.has(name)) {
+        if (!isTempRootValue(value)) poisoned.add(name);
+      } else if (TEMP_NAME_RE.test(name)) {
+        if (!isTempRootValue(value)) poisoned.add(name);
+      }
     }
   }
   const { words } = parseWords(text);
@@ -1500,12 +1618,13 @@ function poisonTempNamesInSegment(text: string, vars: ReadonlyMap<string, string
     const t = (words[i] as Word).text;
     if (t === "for") {
       const name = words[i + 1]?.text ?? "";
-      if (TEMP_NAME_RE.test(name)) poisoned.add(name);
+      if (TEMP_NAME_RE.test(name) || tempVars.has(name)) poisoned.add(name);
     } else if (t === "read") {
       let j = i + 1;
       while (j < words.length && /^-[A-Za-z]+$/.test((words[j] as Word).text)) j++;
-      while (j < words.length && TEMP_NAME_RE.test((words[j] as Word).text)) {
-        poisoned.add((words[j] as Word).text);
+      while (j < words.length) {
+        const name = (words[j] as Word).text;
+        if (TEMP_NAME_RE.test(name) || tempVars.has(name)) poisoned.add(name);
         j++;
       }
     }
@@ -1619,12 +1738,13 @@ function isKnownNonWriting(
   repoRoots: readonly string[],
   poisoned: ReadonlySet<string>,
   gateBlocked: boolean,
+  tempVars?: ReadonlySet<string>,
 ): boolean {
-  const words = unwrapXargs(rawWords.map((w) => substituteKeepingClimb(w, vars, poisoned)));
+  const words = unwrapXargs(rawWords.map((w) => substituteKeepingClimb(w, vars, poisoned, tempVars)));
   const head = words[0]?.text;
   if (head === undefined) return redirects.length === 0;
   // A write redirect to an unknown target is a write we cannot see.
-  if (redirects.some((r) => writesUnseen(r, poisoned))) return false;
+  if (redirects.some((r) => writesUnseen(r, poisoned, tempVars))) return false;
   if (/^[A-Za-z_]\w*=/.test(head)) return true;
   const git = gitSub(words);
   if (git !== null) {
@@ -1659,9 +1779,10 @@ function segmentMutation(
   heredocUnsure: boolean,
   vars: ReadonlyMap<string, string>,
   poisoned: ReadonlySet<string>,
+  tempVars: ReadonlySet<string>,
 ): SegMut | null {
-  const words = unwrapXargs(rawWords.map((w) => substituteKeepingClimb(w, vars, poisoned)));
-  for (const r of redirects) if (r.target !== null) r.target = substituteKeepingClimb(r.target, vars, poisoned);
+  const words = unwrapXargs(rawWords.map((w) => substituteKeepingClimb(w, vars, poisoned, tempVars)));
+  for (const r of redirects) if (r.target !== null) r.target = substituteKeepingClimb(r.target, vars, poisoned, tempVars);
   const head = words[0]?.text ?? "";
   const files: MutFile[] = [];
   let gitOp = false;
@@ -1675,7 +1796,7 @@ function segmentMutation(
       const hasCached = git.args.some((w) => w.text === "--cached");
       if (!hasCached) {
         const ops = git.args.filter((w) => !isOption(w));
-        const targets = operandFiles(ops, poisoned);
+        const targets = operandFiles(ops, poisoned, tempVars);
         if (targets.length > 0) {
           gitOp = true;
           mutating = true;
@@ -1694,15 +1815,15 @@ function segmentMutation(
           const dest = ops[ops.length - 1]!;
           const sources = ops.slice(0, ops.length - 1);
           for (const src of sources) {
-            for (const f of operandFiles([src], poisoned)) {
+            for (const f of operandFiles([src], poisoned, tempVars)) {
               files.push({ file: f, kind: "D" });
             }
           }
-          for (const f of operandFiles([dest], poisoned)) {
+          for (const f of operandFiles([dest], poisoned, tempVars)) {
             files.push({ file: f, kind: "A" });
           }
         } else if (ops.length === 1) {
-          for (const f of operandFiles(ops, poisoned)) {
+          for (const f of operandFiles(ops, poisoned, tempVars)) {
             files.push({ file: f, kind: "A" });
           }
         } else {
@@ -1714,19 +1835,19 @@ function segmentMutation(
       files.push({ file: SHELL_EDIT_FILE, kind: "M" });
     }
   } else if (head === "sed" || head === "gsed") {
-    const f = sedFiles(words.slice(1), poisoned);
+    const f = sedFiles(words.slice(1), poisoned, tempVars);
     if (f !== null) {
       mutating = f.length > 0;
       files.push(...f.map((file) => ({ file, kind: "M" as const })));
     }
   } else if (head === "perl") {
-    const f = perlFiles(words.slice(1), poisoned);
+    const f = perlFiles(words.slice(1), poisoned, tempVars);
     if (f !== null) {
       mutating = f.length > 0;
       files.push(...f.map((file) => ({ file, kind: "M" as const })));
     }
   } else if (head === "tee" && !pipedFromCheck) {
-    const f = teeFiles(words.slice(1), poisoned);
+    const f = teeFiles(words.slice(1), poisoned, tempVars);
     mutating = f.length > 0;
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
   } else if (/^python[\d.]*$/.test(head) && (heredoc !== null || heredocUnsure)) {
@@ -1739,21 +1860,36 @@ function segmentMutation(
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
   }
 
+  let targetOpaque = false;
   // `cmd > file` / `cmd >> file`; a check's own redirects capture its log, not an edit.
   if (!isCheck) {
     for (const r of redirects) {
-      if ((r.fd !== "" && r.fd !== "1") || r.target === null) continue;
-      if (tempPrefixKind(r.target.text, poisoned) === "climb" || nonLiteralClimb(r.target.text)) {
+      if (r.target === null) continue;
+      if (r.op === ">&" && isUnknownTarget(r.target)) {
+        targetOpaque = true;
+        continue;
+      }
+      if (tempPrefixKind(r.target.text, poisoned, tempVars) === "climb" || nonLiteralClimb(r.target.text)) {
         mutating = true;
         files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
         continue;
       }
-      if (isUnknownTarget(r.target) || isIgnoredPath(r.target.text, poisoned)) continue;
+      if (isIgnoredPath(r.target.text, poisoned, tempVars)) continue;
+      if (r.target.text.startsWith("(") || r.target.text.startsWith(">(")) continue;
+      if (isUnknownTarget(r.target)) {
+        mutating = true;
+        targetOpaque = true;
+        files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
+        continue;
+      }
       mutating = true;
       files.push({ file: r.target.text, kind: "M" as const });
     }
   }
-  return mutating ? { gitOp, history, files, ...(surface ? { opaque: true } : {}) } : null;
+  const fdOpaque = redirects.some(
+    (r) => r.fd !== "" && r.fd !== "1" && r.target !== null && !isIgnoredPath(r.target.text, poisoned, tempVars) && !isDocPath(r.target.text),
+  );
+  return mutating ? { gitOp, history, files, ...(surface || targetOpaque || fdOpaque ? { opaque: true } : {}) } : null;
 }
 
 /** Normalizes `.`/`..` segments of a path without touching the file system. */
@@ -1843,6 +1979,7 @@ export function classifyShellMutation(
     // `NODE_OPTIONS` / `PYTHONPATH` from an earlier segment of this command.
     let loaderEnv = false;
     const poisoned = new Set<string>();
+    const tempVars = new Set<string>();
     const dirStack: {
       dir: Dir;
       sticky: boolean;
@@ -1855,8 +1992,9 @@ export function classifyShellMutation(
     const listMarks: ListMark[] = [];
     const groupingOpen: boolean[] = [];
     segs.forEach((seg, i) => {
-      poisonTempNamesInSegment(seg.text, vars, poisoned);
-      collectAssignments(seg.text, vars);
+      const segText = restoredSegment(seg);
+      poisonTempNamesInSegment(segText, vars, poisoned, tempVars);
+      collectAssignments(segText, vars);
       // Vars first, then `$E` when E is only NAME=value words, then prefix stripping (C8).
       const expanded = expandEnvSlots(seg.text, vars);
       // `splitSegments` drops a trailing `)`. Put it back so the subshell close is visible.
@@ -1980,8 +2118,8 @@ export function classifyShellMutation(
       }
       const gateBlocked = loaderEnv || segmentGateBlocked(expanded);
       if (assignsLoader(expanded)) loaderEnv = true;
-      const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, heredoc, unsure, vars, poisoned);
-      if (m === null && !isCheck && !isKnownNonWriting(words, redirects, placeDir, vars, repoRoots, poisoned, gateBlocked)) opaque = true;
+      const m = segmentMutation(words, redirects, isCheck, prevPipe && prevCheck, heredoc, unsure, vars, poisoned, tempVars);
+      if (m === null && !isCheck && !isKnownNonWriting(words, redirects, placeDir, vars, repoRoots, poisoned, gateBlocked, tempVars)) opaque = true;
       prevCheck = isCheck;
       prevPipe = seg.op === "|";
       if (isCheck) checkIdx.push(i);
