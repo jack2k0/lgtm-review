@@ -169,20 +169,339 @@ export function parseLedger(text) {
 
 const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
 
+const EACH_CALL_RE = /\b(test|it|describe)(?:\s*\.\s*[a-zA-Z0-9_$]+)*\s*\.\s*each(?:\s*<[^;{}()]*>)?\s*$/;
+const EACH_TAGGED_RE = /\b(test|it|describe)(?:\s*\.\s*[a-zA-Z0-9_$]+)*\s*\.\s*each\s*$/;
+
+function peekNextNonWs(content, idx) {
+  let p = idx;
+  const len = content.length;
+  while (p < len) {
+    const c = content[p];
+    if (c === " " || c === "\t" || c === "\r" || c === "\n") {
+      p++;
+      continue;
+    }
+    if (c === "/" && content[p + 1] === "/") {
+      p += 2;
+      while (p < len && content[p] !== "\n") p++;
+      continue;
+    }
+    if (c === "/" && content[p + 1] === "*") {
+      p += 2;
+      while (p < len && !(content[p] === "*" && content[p + 1] === "/")) p++;
+      p += 2;
+      continue;
+    }
+    return { char: c, pos: p };
+  }
+  return { char: null, pos: p };
+}
+
+/** Find line numbers (1-based) belonging to parameter tables of test.each / it.each / describe.each. */
+export function findTableLines(content) {
+  const lines = new Set();
+  let unsure = false;
+
+  let pos = 0;
+  const len = content.length;
+  let curLine = 1;
+
+  const bracketStack = [];
+  const templateStack = [];
+  let codeBuffer = "";
+  let nextArrayIsTable = false;
+
+  while (pos < len) {
+    const ch = content[pos];
+
+    if (ch === "\n") {
+      curLine++;
+      pos++;
+      continue;
+    }
+
+    // Inside template literal (not inside an expression ${...})
+    if (templateStack.length > 0 && bracketStack.length === templateStack[templateStack.length - 1].braceDepth) {
+      if (ch === "\\") {
+        pos += 2;
+        continue;
+      }
+      if (ch === "`") {
+        templateStack.pop();
+        pos++;
+        codeBuffer += "`";
+        continue;
+      }
+      if (ch === "$" && content[pos + 1] === "{") {
+        bracketStack.push({ char: "${", line: curLine });
+        pos += 2;
+        codeBuffer += "${";
+        continue;
+      }
+      pos++;
+      continue;
+    }
+
+    // Comments
+    if (ch === "/" && content[pos + 1] === "/") {
+      pos += 2;
+      while (pos < len && content[pos] !== "\n") pos++;
+      continue;
+    }
+    if (ch === "/" && content[pos + 1] === "*") {
+      pos += 2;
+      while (pos < len && !(content[pos] === "*" && content[pos + 1] === "/")) {
+        if (content[pos] === "\n") curLine++;
+        pos++;
+      }
+      if (pos >= len) {
+        unsure = true;
+        break;
+      }
+      pos += 2;
+      continue;
+    }
+
+    // Strings
+    if (ch === "'" || ch === '"') {
+      const quote = ch;
+      pos++;
+      while (pos < len && content[pos] !== quote) {
+        if (content[pos] === "\\") pos += 2;
+        else {
+          if (content[pos] === "\n") curLine++;
+          pos++;
+        }
+      }
+      if (pos >= len) {
+        unsure = true;
+        break;
+      }
+      pos++;
+      codeBuffer += quote + quote;
+      continue;
+    }
+
+    // Tagged template or normal template literal
+    if (ch === "`") {
+      if (EACH_TAGGED_RE.test(codeBuffer)) {
+        const tableStartLine = curLine;
+        pos++;
+        let tmplDepth = 0;
+        let closed = false;
+        while (pos < len) {
+          if (content[pos] === "\n") curLine++;
+          if (content[pos] === "\\") {
+            pos += 2;
+            continue;
+          }
+          if (content[pos] === "`" && tmplDepth === 0) {
+            closed = true;
+            for (let l = tableStartLine; l <= curLine; l++) lines.add(l);
+            pos++;
+            break;
+          }
+          if (content[pos] === "$" && content[pos + 1] === "{") {
+            tmplDepth++;
+            pos += 2;
+            continue;
+          }
+          if (content[pos] === "}" && tmplDepth > 0) {
+            tmplDepth--;
+            pos++;
+            continue;
+          }
+          pos++;
+        }
+        if (!closed) {
+          unsure = true;
+          break;
+        }
+        codeBuffer += "`";
+        continue;
+      }
+
+      templateStack.push({ braceDepth: bracketStack.length, line: curLine });
+      pos++;
+      codeBuffer += "`";
+      continue;
+    }
+
+    // Regex literal check: if / follows operator/punctuation (and not /> or /=)
+    if (ch === "/" && content[pos + 1] !== ">" && content[pos + 1] !== "=") {
+      const trimmed = codeBuffer.trim();
+      const last = trimmed[trimmed.length - 1];
+      const isRegex = !last || /[([{},;=:!?&|+*^%~<>-]/.test(last) || /(?:return|typeof|throw|yield|await|case|delete|void)$/.test(trimmed);
+      if (isRegex) {
+        pos++;
+        let inClass = false;
+        let closed = false;
+        while (pos < len) {
+          if (content[pos] === "\\") {
+            pos += 2;
+            continue;
+          }
+          if (content[pos] === "\n") break;
+          if (content[pos] === "[" && !inClass) inClass = true;
+          else if (content[pos] === "]" && inClass) inClass = false;
+          else if (content[pos] === "/" && !inClass) {
+            closed = true;
+            pos++;
+            break;
+          }
+          pos++;
+        }
+        if (closed) {
+          codeBuffer += "/r/";
+          continue;
+        }
+      }
+    }
+
+    // Brackets
+    if (ch === "(" || ch === "[" || ch === "{") {
+      if (ch === "(") {
+        if (EACH_CALL_RE.test(codeBuffer)) {
+          const next = peekNextNonWs(content, pos + 1);
+          if (next.char === "[") {
+            nextArrayIsTable = true;
+          }
+        }
+        bracketStack.push({ char: "(", line: curLine });
+      } else if (ch === "[") {
+        const isTable = nextArrayIsTable;
+        nextArrayIsTable = false;
+        bracketStack.push({ char: "[", line: curLine, isTable, startLine: curLine });
+      } else {
+        bracketStack.push({ char: "{", line: curLine });
+      }
+      codeBuffer += ch;
+      pos++;
+      continue;
+    }
+
+    if (ch === ")" || ch === "]" || ch === "}") {
+      const expected = ch === ")" ? "(" : ch === "]" ? "[" : "{";
+      if (bracketStack.length === 0) {
+        unsure = true;
+      } else {
+        const top = bracketStack.pop();
+        if (ch === "}" && top.char === "${") {
+          // Exited template expression
+        } else if (top.char !== expected) {
+          unsure = true;
+        } else if (ch === "]" && top.isTable) {
+          for (let l = top.startLine; l <= curLine; l++) {
+            lines.add(l);
+          }
+        }
+      }
+      codeBuffer += ch;
+      pos++;
+      continue;
+    }
+
+    codeBuffer += ch;
+    pos++;
+  }
+
+  if (bracketStack.length > 0 || templateStack.length > 0) {
+    unsure = true;
+  }
+
+  return { lines, unsure };
+}
+
 /** Removed lines of test files as "file:oldLine: text" (old-side line numbers). */
-export function removedLines(diff) {
+export function removedLines(diff, getOldFile) {
   const out = [];
-  let file = null;
-  let old = 0;
-  for (const line of diff.split("\n")) {
-    if (line.startsWith("--- ")) file = line.startsWith("--- a/") ? line.slice(6) : null;
-    else if (line.startsWith("+++ ")) continue;
-    else if (line.startsWith("@@")) old = Number(/^@@ -(\d+)/.exec(line)?.[1] ?? 0);
-    else if (line.startsWith("-")) {
-      if (file && EXPECT_RE.test(line.slice(1))) out.push(`${file}:${old}: ${line.slice(1).trim().slice(0, 80)}`);
-      old++;
+
+  const lines = diff.split("\n");
+  const fileBlocks = [];
+  let currentBlock = null;
+
+  for (const line of lines) {
+    if (line.startsWith("--- ")) {
+      const file = line.startsWith("--- a/") ? line.slice(6) : null;
+      currentBlock = { file, lines: [] };
+      fileBlocks.push(currentBlock);
+    } else if (currentBlock) {
+      currentBlock.lines.push(line);
     }
   }
+
+  for (const block of fileBlocks) {
+    if (!block.file) continue;
+    const file = block.file;
+
+    // First pass: collect added lines for move detection (E3)
+    const addedCounts = new Map();
+    for (const line of block.lines) {
+      if (line.startsWith("+") && !line.startsWith("+++ ")) {
+        const t = line.slice(1).trim();
+        if (t !== "") {
+          addedCounts.set(t, (addedCounts.get(t) || 0) + 1);
+        }
+      }
+    }
+
+    // Read old file and get table lines
+    let oldContent = null;
+    let unsure = false;
+    if (getOldFile) {
+      try {
+        oldContent = getOldFile(file);
+        if (oldContent == null) unsure = true;
+      } catch {
+        unsure = true;
+      }
+    } else {
+      unsure = true;
+    }
+
+    let tableLines = new Set();
+    if (!unsure && oldContent != null) {
+      const res = findTableLines(oldContent);
+      tableLines = res.lines;
+      if (res.unsure) unsure = true;
+    }
+
+    // Second pass: scan hunks and removed lines
+    let old = 0;
+    for (const line of block.lines) {
+      if (line.startsWith("+++ ")) continue;
+      if (line.startsWith("@@")) {
+        old = Number(/^@@ -(\d+)/.exec(line)?.[1] ?? 0);
+      } else if (line.startsWith("-")) {
+        const oldLine = old++;
+        const raw = line.slice(1);
+        const t = raw.trim();
+        if (t === "") continue;
+
+        // E3: move detection (byte-identical after trim in same file)
+        if ((addedCounts.get(t) || 0) > 0) {
+          addedCounts.set(t, addedCounts.get(t) - 1);
+          continue;
+        }
+
+        // Comment check
+        if (/^\s*(?:\/\/|\/\*|\*)/.test(raw)) continue;
+
+        if (unsure) {
+          // E2: fail closed
+          out.push(`${file}:${oldLine}: ${t.slice(0, 80)}`);
+        } else {
+          // E1
+          if (EXPECT_RE.test(raw) || tableLines.has(oldLine)) {
+            out.push(`${file}:${oldLine}: ${t.slice(0, 80)}`);
+          }
+        }
+      } else if (line.startsWith(" ")) {
+        old++;
+      }
+    }
+  }
+
   return out;
 }
 
@@ -260,7 +579,18 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
 
   // 5. Removed expectations
   const testPaths = paths.filter((p) => /\.test\.tsx?$/.test(p));
-  const removed = testPaths.length ? removedLines(git(["diff", "-U0", "--no-renames", ...target, "--", "*.test.ts", "*.test.tsx"])) : [];
+  const removed = testPaths.length
+    ? removedLines(
+        git(["diff", "-U0", "--no-renames", ...target, "--", "*.test.ts", "*.test.tsx"]),
+        (p) => {
+          try {
+            return git(["show", `${mb}:${p}`]);
+          } catch {
+            return null;
+          }
+        }
+      )
+    : [];
   if (!bad("removed-expectations", removed, "removed test line(s) with expectations", "EYES")) add("removed-expectations", "PASS", "none removed");
 
   // 6. Dependencies
