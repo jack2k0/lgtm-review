@@ -13,6 +13,10 @@ import {
   parseHeredocStarts,
   heredocEnds,
   stripPrefixes,
+  isArithmeticCommandStart,
+  checkArithmeticOpener,
+  scanParenPairEnd,
+  scanBracketPairEnd,
   type HeredocStart,
   type RepoScripts,
   type Segment,
@@ -123,6 +127,24 @@ function parseWords(s: string): { words: Word[]; redirects: Redirect[] } {
         i += 2;
         continue;
       }
+      if (c === "$" && s.slice(i, i + 3) === "$((") {
+        const arithEnd = scanParenPairEnd(s, i + 3);
+        if (arithEnd >= 0) {
+          text += s.slice(i, arithEnd + 1);
+          i = arithEnd + 1;
+          dynamic = true;
+          continue;
+        }
+      }
+      if (c === "$" && s.slice(i, i + 2) === "$[") {
+        const arithEnd = scanBracketPairEnd(s, i + 2);
+        if (arithEnd >= 0) {
+          text += s.slice(i, arithEnd + 1);
+          i = arithEnd + 1;
+          dynamic = true;
+          continue;
+        }
+      }
       if ("*?[{$`()".includes(c)) dynamic = true;
       text += c;
       i++;
@@ -132,6 +154,15 @@ function parseWords(s: string): { words: Word[]; redirects: Redirect[] } {
   while (i < n) {
     skipWs();
     if (i >= n) break;
+    const isCommandStart = words.length === 0 || isArithmeticCommandStart(words[words.length - 1]?.text ?? "");
+    if (isCommandStart && s.slice(i, i + 2) === "((") {
+      const end = scanParenPairEnd(s, i + 2);
+      if (end >= 0) {
+        words.push({ text: s.slice(i, end + 1), dynamic: true });
+        i = end + 1;
+        continue;
+      }
+    }
     REDIR_RE.lastIndex = i;
     const m = REDIR_RE.exec(s);
     if (m) {
@@ -1319,8 +1350,11 @@ function substitutionBodies(cmd: string, heredocBody = false): { bodies: string[
     const proc = !heredocBody && quote === null && (c === "<" || c === ">") && cmd[i + 1] === "(";
     if (!dollar && !proc) continue;
     if (dollar && cmd[i + 2] === "(") {
-      i += 2; // arithmetic or a nested group: keep scanning inside it
-      continue;
+      const arith = checkArithmeticOpener(cmd, i, false);
+      if (arith !== null) {
+        i += 2; // arithmetic or a nested group: keep scanning inside it
+        continue;
+      }
     }
     const open = i + 1;
     const close = closeParen(cmd, open);

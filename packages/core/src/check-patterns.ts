@@ -74,8 +74,8 @@ function isUnescapedCommentStart(text: string, i: number): boolean {
   return bs % 2 === 0;
 }
 
-/** Scans forward from `start` for the closing `)` of depth 1, returning whether it is followed directly by `)`. */
-function scanParenPair(input: string, start: number): boolean {
+/** Scans forward from `start` for the closing `)` of depth 1, returning the index of the closing `)` of `))` if matched, or -1. */
+export function scanParenPairEnd(input: string, start: number): number {
   let depth = 1;
   let quote: string | null = null;
   for (let j = start; j < input.length; j++) {
@@ -111,15 +111,15 @@ function scanParenPair(input: string, start: number): boolean {
     } else if (c === ")") {
       depth--;
       if (depth === 0) {
-        return j + 1 < input.length && input[j + 1] === ")";
+        return j + 1 < input.length && input[j + 1] === ")" ? j + 1 : -1;
       }
     }
   }
-  return false;
+  return -1;
 }
 
-/** Scans forward from `start` for the closing `]` of depth 1. */
-function scanBracketPair(input: string, start: number): boolean {
+/** Scans forward from `start` for the closing `]` of depth 1, returning the index of the `]`, or -1. */
+export function scanBracketPairEnd(input: string, start: number): number {
   let depth = 1;
   let quote: string | null = null;
   for (let j = start; j < input.length; j++) {
@@ -154,10 +154,16 @@ function scanBracketPair(input: string, start: number): boolean {
       depth++;
     } else if (c === "]") {
       depth--;
-      if (depth === 0) return true;
+      if (depth === 0) return j;
     }
   }
-  return false;
+  return -1;
+}
+
+/** Whether the command text preceding `((` is in command-start position (start of input, subshell/brace, or control keywords). */
+export function isArithmeticCommandStart(cur: string): boolean {
+  // `!` is not a word character, so it cannot take `\b`.
+  return /^(?:[\s({!]|(?:if|then|else|elif|while|until|do|time)\b)*$/.test(cur);
 }
 
 /**
@@ -167,25 +173,25 @@ function scanBracketPair(input: string, start: number): boolean {
  * - `((`: command-start only, and only if its inner level closes with `))`
  * Returns the opener token if valid and closed; null if it falls back or is unclosed.
  */
-function checkArithmeticOpener(
+export function checkArithmeticOpener(
   input: string,
   pos: number,
   isCommandStart: boolean,
 ): "$((" | "$[" | "((" | null {
   if (input.slice(pos, pos + 3) === "$((") {
-    return scanParenPair(input, pos + 3) ? "$((" : null;
+    return scanParenPairEnd(input, pos + 3) >= 0 ? "$((" : null;
   }
   if (input.slice(pos, pos + 2) === "$[") {
-    return scanBracketPair(input, pos + 2) ? "$[" : null;
+    return scanBracketPairEnd(input, pos + 2) >= 0 ? "$[" : null;
   }
   if (isCommandStart && input.slice(pos, pos + 2) === "((") {
-    return scanParenPair(input, pos + 2) ? "((" : null;
+    return scanParenPairEnd(input, pos + 2) >= 0 ? "((" : null;
   }
   return null;
 }
 
 /** Whether the text before `index` (the position of `<<`) in `line` puts it in a quote, comment or arithmetic context (`$((..))`, `((..))`, `$[..]`). */
-function inCommentOrArithmetic(line: string, index: number): boolean {
+function inCommentOrArithmetic(line: string, index: number, lookahead = line): boolean {
   let quote: string | null = null;
   let cmdStart = 0;
   const stack: string[] = [];
@@ -248,8 +254,8 @@ function inCommentOrArithmetic(line: string, index: number): boolean {
       return true;
     }
 
-    const isCommandStart = /^(?:\s*|\s*(?:if|while|until|then|elif|!)\s*)$/.test(line.slice(cmdStart, i));
-    const arith = checkArithmeticOpener(line, i, isCommandStart);
+    const isCommandStart = isArithmeticCommandStart(line.slice(cmdStart, i));
+    const arith = checkArithmeticOpener(lookahead, i, isCommandStart);
     if (arith !== null) {
       stack.push(arith);
       i += arith.length - 1;
@@ -271,15 +277,16 @@ function inCommentOrArithmetic(line: string, index: number): boolean {
  * (space, tab, `;`, `&`, `|`, `<`, `>`, `(`, `)`), with quote removal: `E'-'1` is `E-1`.
  * An unterminated quote or an empty word is not a heredoc start.
  */
-export function parseHeredocStarts(line: string): HeredocStart[] {
+export function parseHeredocStarts(line: string, prefix = "", lookahead = prefix + line): HeredocStart[] {
   const starts: HeredocStart[] = [];
+  const full = prefix + line;
   const re = /(?<!<)<<(-?)/g;
   for (let m = re.exec(line); m !== null; m = re.exec(line)) {
     if (line[m.index + 2] === "=") continue;
     let bs = 0;
     while (m.index - 1 - bs >= 0 && line[m.index - 1 - bs] === "\\") bs++;
     if (bs % 2 === 1) continue;
-    if (inCommentOrArithmetic(line, m.index)) continue;
+    if (inCommentOrArithmetic(full, prefix.length + m.index, lookahead)) continue;
     let i = m.index + m[0].length;
     while (i < line.length && /\s/.test(line[i] as string)) i++;
     let delim = "";
@@ -321,9 +328,100 @@ export function parseHeredocStarts(line: string): HeredocStart[] {
           i += 2;
           quoted = true;
         }
-      } else if (c === "$" && (line[i + 1] === "'" || line[i + 1] === '"')) {
-        // `$'E'` / `$"E"`: the `$` is dropped and the rest is quoted.
+      } else if (c === "$" && line[i + 1] === '"') {
+        // `$"E"`: the `$` is dropped and the rest is double-quoted.
         i++;
+      } else if (c === "$" && line[i + 1] === "'") {
+        i += 2;
+        let closed = false;
+        while (i < line.length) {
+          const d = line[i] as string;
+          if (d === "'") {
+            closed = true;
+            i++;
+            break;
+          }
+          if (d === "\\" && i + 1 < line.length) {
+            const esc = line[i + 1] as string;
+            if (esc === "n") delim += "\n";
+            else if (esc === "t") delim += "\t";
+            else if (esc === "r") delim += "\r";
+            else if (esc === "a") delim += "\x07";
+            else if (esc === "b") delim += "\b";
+            else if (esc === "e" || esc === "E") delim += "\x1b";
+            else if (esc === "f") delim += "\f";
+            else if (esc === "v") delim += "\v";
+            else if (esc === "\\") delim += "\\";
+            else if (esc === "'") delim += "'";
+            else if (esc === '"') delim += '"';
+            else if (esc === "x") {
+              const m = /^[0-9a-fA-F]{1,2}/.exec(line.slice(i + 2));
+              if (m) {
+                delim += String.fromCharCode(parseInt(m[0], 16));
+                i += 2 + m[0].length;
+                continue;
+              } else {
+                delim += "\\x";
+                i += 2;
+                continue;
+              }
+            } else if (esc === "u") {
+              const m = /^[0-9a-fA-F]{1,4}/.exec(line.slice(i + 2));
+              if (m) {
+                try {
+                  delim += String.fromCodePoint(parseInt(m[0], 16));
+                } catch {
+                  // invalid codepoint
+                }
+                i += 2 + m[0].length;
+                continue;
+              } else {
+                delim += "\\u";
+                i += 2;
+                continue;
+              }
+            } else if (esc === "U") {
+              const m = /^[0-9a-fA-F]{1,8}/.exec(line.slice(i + 2));
+              if (m) {
+                try {
+                  delim += String.fromCodePoint(parseInt(m[0], 16));
+                } catch {
+                  // invalid codepoint
+                }
+                i += 2 + m[0].length;
+                continue;
+              } else {
+                delim += "\\U";
+                i += 2;
+                continue;
+              }
+            } else if (/[0-7]/.test(esc)) {
+              const m = /^[0-7]{1,3}/.exec(line.slice(i + 1));
+              if (m) {
+                delim += String.fromCharCode(parseInt(m[0], 8) & 0xff);
+                i += 1 + m[0].length;
+                continue;
+              }
+            } else if (esc === "c") {
+              if (i + 2 < line.length && line[i + 2] !== "'") {
+                const char = line[i + 2] as string;
+                delim += char === "?" ? "\x7f" : String.fromCharCode(char.charCodeAt(0) & 0x1f);
+                i += 3;
+                continue;
+              } else {
+                delim += "\\c";
+                i += 2;
+                continue;
+              }
+            } else delim += "\\" + esc;
+            i += 2;
+            continue;
+          }
+          delim += d;
+          i++;
+        }
+        if (!closed) ok = false;
+        quoted = true;
       } else {
         delim += c;
         i++;
@@ -348,15 +446,28 @@ export function stripHeredocs(cmd: string): string {
   if (!cmd.includes("<<")) return cmd;
   const out: string[] = [];
   const queue: HeredocStart[] = [];
+  let prefix = "";
+  let cmdOffset = 0;
   for (const line of cmd.split("\n")) {
+    const lineLen = line.length + 1;
     if (queue.length > 0) {
       const cur = queue[0] as HeredocStart;
       if (heredocEnds(line, cur.delim, cur.dash)) queue.shift();
+      if (queue.length === 0) prefix = "";
+      cmdOffset += lineLen;
       continue;
     }
     out.push(line);
-    const starts = parseHeredocStarts(line);
+    const lookahead = prefix + cmd.slice(cmdOffset);
+    const starts = parseHeredocStarts(line, prefix, lookahead);
     if (starts.length > 0) queue.push(...starts);
+    const full = prefix + line;
+    if (inCommentOrArithmetic(full, full.length, lookahead)) {
+      prefix = full + "\n";
+    } else {
+      prefix = "";
+    }
+    cmdOffset += lineLen;
   }
   return out.join("\n");
 }
@@ -460,7 +571,7 @@ export function splitSegments(cmd: string): Segment[] {
       while (i + 1 < cmd.length && cmd[i + 1] !== "\n") i++;
       continue;
     }
-    const isCommandStart = /^(?:\s*|\s*(?:if|while|until|then|elif|!)\s*)$/.test(cur);
+    const isCommandStart = isArithmeticCommandStart(cur);
     const arith = checkArithmeticOpener(cmd, i, isCommandStart);
     if (arith !== null) {
       arithStack.push(arith);
@@ -579,7 +690,11 @@ export function stripPrefixes(seg: string): string {
       s = wrapped.trimStart();
       changed = true;
     }
+    // A closed `((...))` arithmetic command is not a `(` subshell prefix (also after `!` was stripped).
+    const arithmetic = (): boolean => s.startsWith("((") && checkArithmeticOpener(s, 0, true) !== null;
+    if (arithmetic()) break;
     for (const re of PREFIXES) {
+      if (arithmetic()) break;
       const m = re.exec(s);
       if (m && m[0].length > 0) {
         s = s.slice(m[0].length).trimStart();

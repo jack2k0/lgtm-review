@@ -1,0 +1,13 @@
+{
+  "fixture": "sa11-arith-forms",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "if (( x > 1 )) does not treat > as a redirect; sed -i edits src/a.ts which is checked by pnpm test."
+    }
+  ]
+}
