@@ -496,6 +496,78 @@ export function isGroupingSubshellOpen(text: string, i: number): boolean {
   return true;
 }
 
+/** Whether a string consists solely of shell redirections (e.g. `2>&1 > results.txt` or `> out.txt`). */
+function isOnlyRedirects(s: string): boolean {
+  let i = 0;
+  const n = s.length;
+  while (i < n) {
+    while (i < n && /\s/.test(s[i] as string)) i++;
+    if (i >= n) break;
+    const re = /(\d+|&)?(>>|>&|>\||>|<<<|<<-?|<&|<)/y;
+    re.lastIndex = i;
+    const m = re.exec(s);
+    if (!m) return false;
+    i = re.lastIndex;
+    while (i < n && /\s/.test(s[i] as string)) i++;
+    if (i >= n) return false;
+    let any = false;
+    while (i < n && !/\s/.test(s[i] as string)) {
+      const c = s[i] as string;
+      if (c === "<" || c === ">") break;
+      any = true;
+      if (c === "'") {
+        const j = s.indexOf("'", i + 1);
+        if (j < 0) return false;
+        i = j + 1;
+        continue;
+      }
+      if (c === '"') {
+        let j = i + 1;
+        while (j < n && s[j] !== '"') {
+          if (s[j] === "\\" && j + 1 < n) j += 2;
+          else j++;
+        }
+        if (j >= n) return false;
+        i = j + 1;
+        continue;
+      }
+      i++;
+    }
+    if (!any) return false;
+  }
+  return true;
+}
+
+function trimTrailingCompoundBraces(text: string): string {
+  let s = text;
+  while (s.endsWith("}")) {
+    let depth = 0;
+    let inSingle = false;
+    let inDouble = false;
+    for (let i = 0; i < s.length - 1; i++) {
+      const ch = s[i] as string;
+      if (ch === "'" && !inDouble) inSingle = !inSingle;
+      else if (ch === '"' && !inSingle) inDouble = !inDouble;
+      else if (!inSingle) {
+        if (ch === "$" && s[i + 1] === "{") {
+          depth++;
+          i++;
+        } else if (ch === "}" && depth > 0) {
+          depth--;
+        }
+      }
+    }
+    if (depth > 0) break;
+    const before = s.slice(0, -1);
+    if (before === "" || /\s$/.test(before) || /;\s*$/.test(before)) {
+      s = before.trimEnd();
+    } else {
+      break;
+    }
+  }
+  return s;
+}
+
 /** Quote-aware split on `&&`, `||`, `|`, `;`, `&` and newlines. */
 export function splitSegments(cmd: string): Segment[] {
   const segs: Segment[] = [];
@@ -507,22 +579,55 @@ export function splitSegments(cmd: string): Segment[] {
 
   const end = (op: string): void => {
     let text = cur.trim();
-    if (closes > 0) {
-      let excess = Math.max(0, closes - opens);
-      if (excess === 0 && (text.startsWith("(") || text.startsWith("! ("))) {
-        excess = 1;
-      }
-      while (excess > 0 && /\)\s*$/.test(text)) {
-        text = text.replace(/\)\s*$/, "").trimEnd();
-        excess--;
-      }
-    }
-    text = text.replace(/\s*\}+$/, "");
     const segOpens = opens;
     const segCloses = closes;
     cur = "";
     opens = 0;
     closes = 0;
+
+    // A segment consisting only of a compound closing delimiter `}` or `)` followed by redirections
+    // belongs to the preceding compound command; attach its redirections to the previous segment.
+    const mClose = /^\s*([})])(?:\s+(.*)|\s*)$/.exec(text);
+    if (mClose && segs.length > 0 && isOnlyRedirects(mClose[2] ?? "")) {
+      const last = segs[segs.length - 1] as Segment;
+      const redirs = (mClose[2] ?? "").trim();
+      if (redirs !== "") last.text += " " + redirs;
+      last.op = op;
+      if (mClose[1] === ")" || segCloses > 0) last.closes += Math.max(1, segCloses);
+      return;
+    }
+
+    if (closes > 0 || segCloses > 0) {
+      let excess = Math.max(0, (closes || segCloses) - (opens || segOpens));
+      if (excess === 0 && (text.startsWith("(") || text.startsWith("! ("))) {
+        excess = 1;
+      }
+      while (excess > 0) {
+        let idx = -1;
+        let inSingle = false;
+        let inDouble = false;
+        for (let i = text.length - 1; i >= 0; i--) {
+          const ch = text[i] as string;
+          if (ch === "'" && !inDouble) inSingle = !inSingle;
+          else if (ch === '"' && !inSingle) inDouble = !inDouble;
+          else if (!inSingle && !inDouble && ch === ")") {
+            const suffix = text.slice(i + 1);
+            if (isOnlyRedirects(suffix)) {
+              idx = i;
+              break;
+            }
+          }
+        }
+        if (idx >= 0) {
+          const sep = idx > 0 && text[idx - 1] !== " " && idx + 1 < text.length && text[idx + 1] !== " " ? " " : "";
+          text = (text.slice(0, idx) + sep + text.slice(idx + 1)).trim();
+          excess--;
+        } else {
+          break;
+        }
+      }
+    }
+    text = trimTrailingCompoundBraces(text);
     if (text === "") {
       // An operator after an empty segment (e.g. "a;\n") keeps the earlier operator.
       // A segment that held only closing parens still closes the preceding subshell.

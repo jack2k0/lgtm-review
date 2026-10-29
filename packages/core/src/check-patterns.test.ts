@@ -705,4 +705,22 @@ describe("status-accuracy-10 quote- and arithmetic-aware heredoc starts", () => 
       { delim: "E\x7f", quoted: true, dash: false },
     ]);
   });
+
+  test("sa13 R1: check commands in subshells and groupings with redirections", () => {
+    expect(classifyCommand("(pnpm check) 2>&1 > results.txt")).toMatchObject({
+      isCheck: true,
+      label: "pnpm check 2>&1 > results.txt",
+      unreliable: false,
+    });
+    expect(classifyCommand("(pnpm test) > results.txt")).toMatchObject({
+      isCheck: true,
+      label: "pnpm test > results.txt",
+      unreliable: false,
+    });
+    expect(classifyCommand("{ pnpm check; } 2>&1 > results.txt")).toMatchObject({
+      isCheck: true,
+      label: "pnpm check 2>&1 > results.txt",
+      unreliable: false,
+    });
+  });
 });

@@ -1398,4 +1398,94 @@ describe("status-accuracy-7 heredoc forms", () => {
     // G3: escaped > before | is not clobber; | is pipe
     expect(files("echo \\>| tee src/a.ts")).toEqual(["src/a.ts"]);
   });
+
+  test("sa13 R1: check logs inside subshells and groupings", () => {
+    expect(classifyShellMutation("(pnpm check) 2>&1 > results.txt")).toMatchObject({ edits: [], opaque: false });
+    expect(classifyShellMutation("(pnpm test) > results.txt")).toMatchObject({ edits: [], opaque: false });
+    expect(classifyShellMutation("(npm test) 2>&1 > results.txt")).toMatchObject({ edits: [], opaque: false });
+    expect(classifyShellMutation("{ pnpm check; } 2>&1 > results.txt")).toMatchObject({ edits: [], opaque: false });
+    expect(classifyShellMutation("{ npm test; } > results.txt")).toMatchObject({ edits: [], opaque: false });
+    expect(classifyShellMutation("(cd dir && pnpm check) 2>&1 > results.txt")).toMatchObject({ edits: [], opaque: false });
+    expect(classifyShellMutation("{ cd dir && pnpm check; } 2>&1 > results.txt")).toMatchObject({ edits: [], opaque: false });
+
+    // Non-checks inside subshell/group still report their edits
+    expect(classifyShellMutation("(echo hi) > results.txt")).toMatchObject({ edits: [{ file: "results.txt" }] });
+    expect(classifyShellMutation("{ echo hi; } > results.txt")).toMatchObject({ edits: [{ file: "results.txt" }] });
+    expect(classifyShellMutation("(echo hi) 2>&1 > results.txt")).toMatchObject({ edits: [{ file: "results.txt" }] });
+    expect(classifyShellMutation("{ echo hi; } 2>&1 > results.txt")).toMatchObject({ edits: [{ file: "results.txt" }] });
+  });
+
+  test("sa13 R2: non-standard scratch names without assignment fail closed", () => {
+    // Unassigned non-standard scratch names (SCRATCH, SCRATCH_DIR) fail closed under Option B: reported as (shell edit) with opaque: true
+    expect(classifyShellMutation("echo > $SCRATCH/out.txt")).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
+    expect(classifyShellMutation('echo > "$SCRATCH/out.txt"')).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
+    expect(classifyShellMutation("echo > $SCRATCH_DIR/out.txt")).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
+    expect(classifyShellMutation("sed -i s/a/b/ $SCRATCH/foo.ts")).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }] });
+
+    // Standard scratch envs (TMPDIR, TMP, TEMP, S) remain scratch by name even without assignment in command
+    expect(files("echo > $TMPDIR/out.txt")).toEqual([]);
+    expect(files("echo > $TMP/out.txt")).toEqual([]);
+    expect(files("echo > $TEMP/out.txt")).toEqual([]);
+    expect(files("echo > $S/out.txt")).toEqual([]);
+
+    // When SCRATCH or S is assigned in the command to a temp root, it is scratch
+    expect(files("SCRATCH=$(mktemp -d); echo > $SCRATCH/a.ts")).toEqual([]);
+    expect(files("SCRATCH=/tmp/work; echo > $SCRATCH/out.txt")).toEqual([]);
+    expect(files("S=$(mktemp -d); echo > $S/out.txt")).toEqual([]);
+    expect(files("S=$(mktemp); echo > $S")).toEqual([]);
+    expect(files("S=/tmp/work; echo > $S/out.txt")).toEqual([]);
+    expect(files("S=$(mktemp -d); S=src; echo > $S/out.txt")).toEqual([SHELL_EDIT_FILE]);
+  });
+
+  test("sa13 R3: local/declare/readonly/export forms and parameter expansions", () => {
+    // local, declare, readonly, export forms with mktemp
+    expect(files("local T=$(mktemp); echo > $T")).toEqual([]);
+    expect(files("declare T=$(mktemp); echo > $T")).toEqual([]);
+    expect(files("readonly T=$(mktemp); echo > $T")).toEqual([]);
+    expect(files("export T=$(mktemp); echo > $T")).toEqual([]);
+    expect(files("local T=$(mktemp -d); echo > $T/a.ts")).toEqual([]);
+    expect(files("declare T=$(mktemp -d); echo > $T/a.ts")).toEqual([]);
+    expect(files("readonly T=$(mktemp -d); echo > $T/a.ts")).toEqual([]);
+    expect(files("local -r T=$(mktemp -d); echo > $T/a.ts")).toEqual([]);
+    expect(files("declare -x T=$(mktemp -d); echo > $T/a.ts")).toEqual([]);
+
+    // Parameter expansion defaults :=, -, =
+    expect(files("echo > ${TMPDIR:=/tmp}/a.ts")).toEqual([]);
+    expect(files("echo > ${TMPDIR-/tmp}/a.ts")).toEqual([]);
+    expect(files("echo > ${TMPDIR=/tmp}/a.ts")).toEqual([]);
+    expect(files("echo > ${TMPDIR:=/var/tmp}/a.ts")).toEqual([]);
+    expect(files("echo > ${TMPDIR-/var/tmp}/a.ts")).toEqual([]);
+    expect(files("echo > ${TMPDIR:=src}/a.ts")).toEqual([SHELL_EDIT_FILE]);
+
+    // Reassignment poisoning with declaration forms
+    expect(files("local T=$(mktemp); local T=src; echo > $T/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("declare T=$(mktemp); declare T=src; echo > $T/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("T=$(mktemp); local T=src; echo > $T/a.ts")).toEqual([SHELL_EDIT_FILE]);
+  });
+
+  test("sa13 review F1: := / = standalone word poisons temp name when value is non-temp", () => {
+    expect(files(": ${TMPDIR:=src}; echo > $TMPDIR/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files(": ${TMPDIR=src}; echo > $TMPDIR/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files(": ${TMPDIR:=/tmp/work}; echo > $TMPDIR/a.ts")).toEqual([]);
+    expect(files(": ${TMPDIR:=$(mktemp -d)}; echo > $TMPDIR/a.ts")).toEqual([]);
+    expect(files("echo ${S:=src}; echo > $S/a.ts")).toEqual([SHELL_EDIT_FILE]);
+  });
+
+  test("sa13 review F2: check redirects exempt only for log-like targets", () => {
+    // Code file targets stay edits with or without grouping
+    expect(files("{ pnpm check; } > src/out.ts")).toEqual(["src/out.ts"]);
+    expect(files("(pnpm check) > src/out.ts")).toEqual(["src/out.ts"]);
+    expect(files("pnpm check > src/out.ts")).toEqual(["src/out.ts"]);
+    expect(files("{ npm run check; } > src/out.ts")).toEqual(["src/out.ts"]);
+    expect(files("pnpm test > src/out.ts")).toEqual(["src/out.ts"]);
+
+    // Log-like targets are exempt
+    expect(files("(pnpm check) 2>&1 > results.txt")).toEqual([]);
+    expect(files("pnpm test > t.log 2>&1")).toEqual([]);
+    expect(files("(pnpm test) > results.txt")).toEqual([]);
+    expect(files("pnpm check > /dev/null")).toEqual([]);
+    expect(files("pnpm check > /dev/stderr")).toEqual([]);
+    expect(files("pnpm test > results.json 2>&1")).toEqual([]);
+    expect(files("pnpm test > out.json && echo done > done.json")).toEqual(["done.json"]);
+  });
 });

@@ -1,0 +1,13 @@
+{
+  "fixture": "sa13-check-subshells",
+  "source": "synthetic",
+  "prompts": [
+    {
+      "index": 0,
+      "expectedStatus": "checked",
+      "expectedRecommendation": "skim",
+      "expectedHints": [],
+      "note": "echo > src/a.ts edits code, and (pnpm check) 2>&1 > results.txt checks it while capturing log to results.txt without counting the log as an edit."
+    }
+  ]
+}

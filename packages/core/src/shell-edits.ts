@@ -187,9 +187,8 @@ function parseWords(s: string): { words: Word[]; redirects: Redirect[] } {
   return { words, redirects };
 }
 
-/** `$S`, `$TMPDIR`, `$SCRATCH…` and the same names braced. The rest of the path, if any, follows a slash. */
-const TEMP_PREFIX_RE = /^(\$\{?(?:TMPDIR|TMP|TEMP|S|SCRATCH\w*)\}?)(?:\/(.*))?$/;
-const TEMP_NAME_RE = /^(?:TMPDIR|TMP|TEMP|S|SCRATCH\w*)$/;
+/** Known standard scratch environment variables provided by the OS/environment or session. */
+const KNOWN_SCRATCH_ENV_NAMES = new Set(["TMPDIR", "TMP", "TEMP", "S"]);
 
 const IGNORED_PATH_RES: RegExp[] = [
   /^\/dev\//,
@@ -201,13 +200,27 @@ const IGNORED_PATH_RES: RegExp[] = [
   /(?:^|\/)(?:log|out|output|err|stdout|stderr)$/,
 ];
 
+const CHECK_LOG_RES: RegExp[] = [
+  /(?:^|\/)(?:results|result|output|out|report|check|test|gate|err|error)[^/]*\.(?:txt|json|xml|html|tap)$/i,
+];
+
+function isCheckLogTarget(
+  target: string,
+  poisoned?: ReadonlySet<string>,
+  tempVars?: ReadonlySet<string>,
+): boolean {
+  if (isIgnoredPath(target, poisoned, tempVars)) return true;
+  const n = pathForIgnore(target);
+  return CHECK_LOG_RES.some((re) => re.test(n));
+}
+
 /** `//` collapses before the climb test, so `$S//../a.ts` is the same climb as `$S/../a.ts` (C17). */
 function collapseSlashes(p: string): string {
   return p.replace(/\/{2,}/g, "/");
 }
 
 const VAR_PREFIX_RE = /^(?:\$([A-Za-z_]\w*)|\$\{([A-Za-z_]\w*)\})(?:\/(.*))?$/;
-const VAR_DEF_PREFIX_RE = /^\$\{([A-Za-z_]\w*):-([^}]+)\}(?:\/(.*))?$/;
+const VAR_DEF_PREFIX_RE = /^\$\{([A-Za-z_]\w*)(?::=|:-|-|=)([^}]+)\}(?:\/(.*))?$/;
 
 const MKTEMP_SHORT_FLAGS = new Set(["d", "u", "q", "t"]);
 const MKTEMP_LONG_FLAGS = new Set(["--directory", "--dry-run", "--quiet"]);
@@ -314,7 +327,7 @@ function tempPrefixKind(
     const name = mDef[1] as string;
     const fallback = mDef[2] as string;
     const rest = mDef[3];
-    if (TEMP_NAME_RE.test(name) || tempVars?.has(name)) {
+    if (KNOWN_SCRATCH_ENV_NAMES.has(name) || tempVars?.has(name)) {
       if (poisoned?.has(name)) return "climb";
       if (!/^\/(?:private\/)?(?:var\/)?tmp(?:\/|$)/.test(pathForIgnore(fallback))) {
         return "climb";
@@ -329,7 +342,7 @@ function tempPrefixKind(
   const m = VAR_PREFIX_RE.exec(collapsed);
   if (!m) return null;
   const name = (m[1] ?? m[2]) as string;
-  if (!TEMP_NAME_RE.test(name) && !tempVars?.has(name)) return null;
+  if (!KNOWN_SCRATCH_ENV_NAMES.has(name) && !tempVars?.has(name)) return null;
   if (poisoned?.has(name)) return "climb";
   const rest = m[3];
   if (rest === undefined || rest === "") return "scratch";
@@ -810,7 +823,8 @@ function heredocParts(cmd: string): { body: string; quoted: boolean; closed: boo
   return out;
 }
 
-const ASSIGN_RE = /^(?:export\s+)?([A-Za-z_]\w*)=("[^"]*"|'[^']*'|\$\([^)]*\)|`[^`]*`|[^\s;&|]+)(?=\s|$)\s*/;
+const DECL_PREFIX_RE = /^(?:(?:local|declare|typeset|readonly|export)(?:\s+-[A-Za-z]+)*\s+)/;
+const ASSIGN_RE = /^(?:(?:local|declare|typeset|readonly|export)(?:\s+-[A-Za-z]+)*\s+)?([A-Za-z_]\w*)=("[^"]*"|'[^']*'|\$\([^)]*\)|`[^`]*`|[^\s;&|]+)(?=\s|$)\s*/;
 
 /** Expands `$NAME` / `${NAME}` in an assignment value. Null when any reference is unknown or the value is empty. */
 function assignmentValue(raw: string, vars: ReadonlyMap<string, string>): string | null {
@@ -837,7 +851,9 @@ function assignmentValue(raw: string, vars: ReadonlyMap<string, string>): string
 /** Literal `NAME=value` assignments at the start of a segment (also `export NAME=value` and inline env prefixes). */
 function collectAssignments(seg: string, vars: Map<string, string>): void {
   let s = seg.trim();
-  const exported = s.startsWith("export ");
+  const declMatch = DECL_PREFIX_RE.exec(s);
+  const isDecl = declMatch !== null;
+  if (declMatch) s = s.slice(declMatch[0].length);
   const found: [string, string | null][] = [];
   for (let guard = 0; guard < 10; guard++) {
     const m = ASSIGN_RE.exec(s);
@@ -847,7 +863,7 @@ function collectAssignments(seg: string, vars: Map<string, string>): void {
     s = s.slice(m[0].length);
   }
   // `NAME=x cmd` sets NAME for cmd only: later segments do not see it (and `$NAME` in cmd is expanded before it).
-  if (s.trim() !== "" && !exported) return;
+  if (s.trim() !== "" && !isDecl) return;
   for (const [name, v] of found) {
     if (v === null) vars.delete(name);
     else vars.set(name, v);
@@ -1594,7 +1610,9 @@ function poisonTempNamesInSegment(
   tempVars: Set<string>,
 ): void {
   let s = text.trim();
-  const exported = s.startsWith("export ");
+  const declMatch = DECL_PREFIX_RE.exec(s);
+  const isDecl = declMatch !== null;
+  if (declMatch) s = s.slice(declMatch[0].length);
   const found: [string, string | null, string][] = [];
   for (let guard = 0; guard < 10; guard++) {
     const m = ASSIGN_RE.exec(s);
@@ -1602,13 +1620,13 @@ function poisonTempNamesInSegment(
     found.push([m[1] as string, assignmentValue(m[2] as string, vars), m[2] as string]);
     s = s.slice(m[0].length);
   }
-  if (s.trim() === "" || exported) {
+  if (s.trim() === "" || isDecl) {
     for (const [name, value, raw] of found) {
       if (isMktempValue(raw)) {
         tempVars.add(name);
-      } else if (tempVars.has(name)) {
-        if (!isTempRootValue(value)) poisoned.add(name);
-      } else if (TEMP_NAME_RE.test(name)) {
+      } else if (isTempRootValue(value)) {
+        tempVars.add(name);
+      } else if (tempVars.has(name) || KNOWN_SCRATCH_ENV_NAMES.has(name)) {
         if (!isTempRootValue(value)) poisoned.add(name);
       }
     }
@@ -1616,15 +1634,28 @@ function poisonTempNamesInSegment(
   const { words } = parseWords(text);
   for (let i = 0; i < words.length; i++) {
     const t = (words[i] as Word).text;
+    const defMatch = /^\$\{([A-Za-z_]\w*)(?::=|=)(.*)\}$/.exec(t);
+    if (defMatch) {
+      const name = defMatch[1] as string;
+      const raw = defMatch[2] as string;
+      const value = assignmentValue(raw, vars);
+      if (isMktempValue(raw)) {
+        tempVars.add(name);
+      } else if (isTempRootValue(value)) {
+        tempVars.add(name);
+      } else if (tempVars.has(name) || KNOWN_SCRATCH_ENV_NAMES.has(name)) {
+        if (!isTempRootValue(value)) poisoned.add(name);
+      }
+    }
     if (t === "for") {
       const name = words[i + 1]?.text ?? "";
-      if (TEMP_NAME_RE.test(name) || tempVars.has(name)) poisoned.add(name);
+      if (KNOWN_SCRATCH_ENV_NAMES.has(name) || tempVars.has(name)) poisoned.add(name);
     } else if (t === "read") {
       let j = i + 1;
       while (j < words.length && /^-[A-Za-z]+$/.test((words[j] as Word).text)) j++;
       while (j < words.length) {
         const name = (words[j] as Word).text;
-        if (TEMP_NAME_RE.test(name) || tempVars.has(name)) poisoned.add(name);
+        if (KNOWN_SCRATCH_ENV_NAMES.has(name) || tempVars.has(name)) poisoned.add(name);
         j++;
       }
     }
@@ -1636,10 +1667,10 @@ function assignsLoader(raw: string): boolean {
   let s = raw.trim();
   for (let guard = 0; guard < 10; guard++) {
     s = s.replace(/^[({!]+\s*/, "");
-    const name = /^(?:export\s+)?([A-Za-z_]\w*)=/.exec(s);
+    const name = /^(?:(?:local|declare|typeset|readonly|export)(?:\s+-[A-Za-z]+)*\s+)?([A-Za-z_]\w*)=/.exec(s);
     if (!name) return false;
     if (name[1] === "NODE_OPTIONS" || name[1] === "PYTHONPATH") return true;
-    const full = /^(?:export\s+)?[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S*)\s*/.exec(s);
+    const full = /^(?:(?:local|declare|typeset|readonly|export)(?:\s+-[A-Za-z]+)*\s+)?[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S*)\s*/.exec(s);
     if (!full) return false;
     s = s.slice(full[0].length);
     if (s.trim() === "") return false;
@@ -1846,10 +1877,16 @@ function segmentMutation(
       mutating = f.length > 0;
       files.push(...f.map((file) => ({ file, kind: "M" as const })));
     }
-  } else if (head === "tee" && !pipedFromCheck) {
-    const f = teeFiles(words.slice(1), poisoned, tempVars);
-    mutating = f.length > 0;
-    files.push(...f.map((file) => ({ file, kind: "M" as const })));
+  } else if (head === "tee") {
+    if (!pipedFromCheck) {
+      const f = teeFiles(words.slice(1), poisoned, tempVars);
+      mutating = f.length > 0;
+      files.push(...f.map((file) => ({ file, kind: "M" as const })));
+    } else {
+      const f = teeFiles(words.slice(1), poisoned, tempVars).filter((p) => !isCheckLogTarget(p, poisoned, tempVars));
+      mutating = f.length > 0;
+      files.push(...f.map((file) => ({ file, kind: "M" as const })));
+    }
   } else if (/^python[\d.]*$/.test(head) && (heredoc !== null || heredocUnsure)) {
     // `python -c` is not scanned (C17: same as main). A heredoc, including a dash-less one, still is.
     const dash = words.findIndex((w) => w.text === "-");
@@ -1862,32 +1899,37 @@ function segmentMutation(
 
   let targetOpaque = false;
   // `cmd > file` / `cmd >> file`; a check's own redirects capture its log, not an edit.
-  if (!isCheck) {
-    for (const r of redirects) {
-      if (r.target === null) continue;
-      if (r.op === ">&" && isUnknownTarget(r.target)) {
-        targetOpaque = true;
-        continue;
-      }
-      if (tempPrefixKind(r.target.text, poisoned, tempVars) === "climb" || nonLiteralClimb(r.target.text)) {
-        mutating = true;
-        files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
-        continue;
-      }
-      if (isIgnoredPath(r.target.text, poisoned, tempVars)) continue;
-      if (r.target.text.startsWith("(") || r.target.text.startsWith(">(")) continue;
-      if (isUnknownTarget(r.target)) {
-        mutating = true;
-        targetOpaque = true;
-        files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
-        continue;
-      }
-      mutating = true;
-      files.push({ file: r.target.text, kind: "M" as const });
+  for (const r of redirects) {
+    if (r.target === null) continue;
+    if (r.op === ">&" && isUnknownTarget(r.target)) {
+      targetOpaque = true;
+      continue;
     }
+    if (tempPrefixKind(r.target.text, poisoned, tempVars) === "climb" || nonLiteralClimb(r.target.text)) {
+      mutating = true;
+      files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
+      continue;
+    }
+    if (isCheck && isCheckLogTarget(r.target.text, poisoned, tempVars)) continue;
+    if (isIgnoredPath(r.target.text, poisoned, tempVars)) continue;
+    if (r.target.text.startsWith("(") || r.target.text.startsWith(">(")) continue;
+    if (isUnknownTarget(r.target)) {
+      mutating = true;
+      targetOpaque = true;
+      files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
+      continue;
+    }
+    mutating = true;
+    files.push({ file: r.target.text, kind: "M" as const });
   }
   const fdOpaque = redirects.some(
-    (r) => r.fd !== "" && r.fd !== "1" && r.target !== null && !isIgnoredPath(r.target.text, poisoned, tempVars) && !isDocPath(r.target.text),
+    (r) =>
+      r.fd !== "" &&
+      r.fd !== "1" &&
+      r.target !== null &&
+      !(isCheck && isCheckLogTarget(r.target.text, poisoned, tempVars)) &&
+      !isIgnoredPath(r.target.text, poisoned, tempVars) &&
+      !isDocPath(r.target.text),
   );
   return mutating ? { gitOp, history, files, ...(surface || targetOpaque || fdOpaque ? { opaque: true } : {}) } : null;
 }

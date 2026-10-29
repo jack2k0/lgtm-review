@@ -1,0 +1,58 @@
+[
+  {
+    "index": 0,
+    "text": "Edit code and run check in subshell.",
+    "status": "checked",
+    "reason": "pnpm check 2>&1 > results.txt passed after last edit (shell edits may be incomplete)",
+    "headline": "Mostly reading (50%), 1 check",
+    "startedAt": "2026-01-01T00:00:01.000Z",
+    "activeMs": 4000,
+    "truncated": false,
+    "hints": [],
+    "recommendation": "skim",
+    "steps": [
+      {
+        "n": 1,
+        "phase": "read",
+        "title": "Edit src/a.ts (+0 -0)",
+        "startedAt": "2026-01-01T00:00:02.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "echo 'export const x = 1;' > src/a.ts",
+            "ok": true,
+            "ts": "2026-01-01T00:00:02.000Z"
+          }
+        ],
+        "files": [
+          "/home/user/project/src/a.ts"
+        ]
+      },
+      {
+        "n": 2,
+        "phase": "check",
+        "title": "Run pnpm check 2>&1 > results.txt -> passed",
+        "startedAt": "2026-01-01T00:00:04.000Z",
+        "durationMs": 2000,
+        "quotes": [],
+        "actions": [
+          {
+            "tool": "Bash",
+            "summary": "(pnpm check) 2>&1 > results.txt",
+            "ok": true,
+            "ts": "2026-01-01T00:00:04.000Z"
+          }
+        ],
+        "files": [],
+        "check": {
+          "command": "(pnpm check) 2>&1 > results.txt",
+          "exitCode": 0,
+          "passed": true,
+          "excerpt": ""
+        }
+      }
+    ]
+  }
+]
