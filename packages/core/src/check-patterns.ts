@@ -586,8 +586,12 @@ export function splitSegments(cmd: string): Segment[] {
       end("||");
       i++;
     } else if (c === "|") {
-      end("|");
-      if (next === "&") i++;
+      if (cmd[i - 1] === ">") {
+        cur += c;
+      } else {
+        end("|");
+        if (next === "&") i++;
+      }
     } else if (c === ";") {
       end(";");
     } else if (c === "\n") {
@@ -1312,7 +1316,7 @@ function segmentRoots(toks: string[], s: string): string[] | null {
   }
 }
 
-const REDIRECT_RE = /^(?:\d+|&)?>>?(?:\S*)$|^(?:\d+|&)?<(?:\S*)$/;
+const REDIRECT_RE = /^(?:\d+|&)?(?:>>?\|?)(?:\S*)$|^(?:\d+|&)?<(?:\S*)$/;
 
 /** Drops shell redirections (`> out`, `2>&1`, `< in`) from a segment's tokens; they are not arguments. */
 function stripRedirects(toks: string[]): string[] {
@@ -1324,7 +1328,7 @@ function stripRedirects(toks: string[]): string[] {
       continue;
     }
     // A bare operator (`>`, `2>`, `<`) carries its target in the next token.
-    if (/^(?:\d+|&)?>>?$/.test(t) || /^(?:\d+|&)?<$/.test(t)) i++;
+    if (/^(?:\d+|&)?(?:>>?\|?)$/.test(t) || /^(?:\d+|&)?<$/.test(t)) i++;
   }
   return out;
 }

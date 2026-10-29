@@ -109,3 +109,26 @@ Ran against real session logs (`~/.claude/projects`) comparing main CLI vs branc
   - `A: rows 123, unique uuid 108 | main status 104/123 = 84.6% (unique 93/108 = 86.1%) | reason class 87/123 = 70.7% (unique 78/108 = 72.2%)`
   - `B: rows 173, unique uuid 158 | main status 145/173 = 83.8% (unique 134/158 = 84.8%) | reason class 127/173 = 73.4% (unique 118/158 = 74.7%)`
   - `C: rows 50, unique uuid 50 | main status 41/50 = 82.0% (unique 41/50 = 82.0%) | reason class 40/50 = 80.0% (unique 40/50 = 80.0%)`
+
+## Review fixes
+Review findings from Sonnet & Haiku addressed:
+- **F1 (Sonnet 1 + Haiku 2: Temp targets)**:
+  - Treat as scratch: variable assigned `$(mktemp ...)`, `$(mktemp -d ...)`, or backtick mktemp in earlier segments of the same command (tracked in `tempVars`), direct `"$(mktemp ...)"` targets (`isDirectMktemp`), and `${TMPDIR:-/tmp}` / `${TMPDIR:-/var/tmp}` prefixes (`VAR_DEF_PREFIX_RE`).
+  - Later reassignment of a variable poisons it (fails closed to `climb` / edit).
+  - Tests: `T=$(mktemp); echo > $T` -> `[]`, `T=$(mktemp -d); echo > $T/a.ts` -> `[]`, `echo > ${TMPDIR:-/tmp}/a.ts` -> `[]`, `echo > ${TMPDIR:-/var/tmp}/a.ts` -> `[]`, `echo hi >"$(mktemp)"` -> `[]`, `echo hi >"$(mktemp -d)/x"` -> `[]`, `T=$(mktemp); T=src; echo > $T/a.ts` -> `["(shell edit)"]`, `echo > ${TMPDIR:-src}/a.ts` -> `["(shell edit)"]`.
+- **F2 (Haiku 1: Dynamic fd-dup targets)**:
+  - `>&$fd`, `2>&$n`, `2>&"$x"`, `2>&${ERR}` do not report `(shell edit)`. The segment stays opaque as on main (`edits: []`, `opaque: true`).
+  - When `r.op === ">&"` and `isUnknownTarget(r.target)`, mark `targetOpaque = true` and continue without adding `(shell edit)`.
+- **F3 (Sonnet 3: `>|` and `2>|` noclobber override writes)**:
+  - `splitSegments` recognizes `|` preceded by `>` as part of `>|`, not a pipeline operator.
+  - `REDIRECT_RE` in check-patterns and `REDIR_RE` in shell-edits recognize `>|` and `2>|`.
+  - Tests: `echo >| src/f.ts` -> `["src/f.ts"]`, `echo 2>| src/f.ts` -> `["src/f.ts"]`.
+- **F4 (Sonnet 2: Assert `.opaque`)**:
+  - sa12 tests assert `.opaque` where the rule specifies it.
+
+### Review differential harness
+Rerun differential against main (2 seeds x 3000):
+- Seed 4242 (N=3000): `cases: 3000`, `branch-loss: 0`, `both-miss: 0`, `branch-gain: 0`, `branch-only-new-edits: 104`
+- Seed 9001 (N=3000): `cases: 3000`, `branch-loss: 0`, `both-miss: 0`, `branch-gain: 0`, `branch-only-new-edits: 117`
+- Branch-only losses: 0.
+

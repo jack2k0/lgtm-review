@@ -1331,19 +1331,19 @@ describe("status-accuracy-7 heredoc forms", () => {
   });
 
   test("sa12: approved option B moved expectations", () => {
-    expect(files("echo hi 2> err.txt")).toEqual(["err.txt"]);
-    expect(files("ls &> all.txt")).toEqual(["all.txt"]);
-    expect(files('cmd > "$OUT"')).toEqual([SHELL_EDIT_FILE]);
+    expect(classifyShellMutation("echo hi 2> err.txt")).toMatchObject({ edits: [{ file: "err.txt" }], opaque: true });
+    expect(classifyShellMutation("ls &> all.txt")).toMatchObject({ edits: [{ file: "all.txt" }], opaque: true });
+    expect(classifyShellMutation('cmd > "$OUT"')).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
   });
 
   test("sa12: fd-prefixed and dynamic redirect targets", () => {
-    expect(files("echo > $x.ts")).toEqual([SHELL_EDIT_FILE]);
-    expect(files("echo > $((2)).ts")).toEqual([SHELL_EDIT_FILE]);
-    expect(files("echo hi > $[2]")).toEqual([SHELL_EDIT_FILE]);
-    expect(files("((x)) 2> f.ts")).toEqual(["f.ts"]);
-    expect(files("cmd 2>> f.ts")).toEqual(["f.ts"]);
-    expect(files("cmd &> f.ts")).toEqual(["f.ts"]);
-    expect(files("cmd 1> f.ts")).toEqual(["f.ts"]);
+    expect(classifyShellMutation("echo > $x.ts")).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
+    expect(classifyShellMutation("echo > $((2)).ts")).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
+    expect(classifyShellMutation("echo hi > $[2]")).toMatchObject({ edits: [{ file: SHELL_EDIT_FILE }], opaque: true });
+    expect(classifyShellMutation("((x)) 2> f.ts")).toMatchObject({ edits: [{ file: "f.ts" }], opaque: true });
+    expect(classifyShellMutation("cmd 2>> f.ts")).toMatchObject({ edits: [{ file: "f.ts" }], opaque: true });
+    expect(classifyShellMutation("cmd &> f.ts")).toMatchObject({ edits: [{ file: "f.ts" }], opaque: true });
+    expect(classifyShellMutation("cmd 1> f.ts")).toMatchObject({ edits: [{ file: "f.ts" }], opaque: false });
   });
 
   test("sa12: intentional non-edits stay preserved", () => {
@@ -1353,5 +1353,30 @@ describe("status-accuracy-7 heredoc forms", () => {
     expect(files("echo hi 2>&1")).toEqual([]);
     expect(files("echo hi > run.log")).toEqual([]);
     expect(files("pnpm test > results.json 2>&1")).toEqual([]);
+  });
+
+  test("sa12 review F1: temp targets", () => {
+    expect(files("T=$(mktemp); echo > $T")).toEqual([]);
+    expect(files("T=$(mktemp -d); echo > $T/a.ts")).toEqual([]);
+    expect(files("echo > ${TMPDIR:-/tmp}/a.ts")).toEqual([]);
+    expect(files("echo > ${TMPDIR:-/var/tmp}/a.ts")).toEqual([]);
+    expect(files('echo hi >"$(mktemp)"')).toEqual([]);
+    expect(files('echo hi >"$(mktemp -d)/x"')).toEqual([]);
+    expect(files("T=$(mktemp); T=src; echo > $T/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("echo > ${TMPDIR:-src}/a.ts")).toEqual([SHELL_EDIT_FILE]);
+  });
+
+  test("sa12 review F2: dynamic fd dups stay opaque without listing (shell edit)", () => {
+    expect(classifyShellMutation("echo hi >&$fd")).toMatchObject({ edits: [], opaque: true });
+    expect(classifyShellMutation("echo hi 2>&$n")).toMatchObject({ edits: [], opaque: true });
+    expect(classifyShellMutation('echo hi 2>&"$x"')).toMatchObject({ edits: [], opaque: true });
+    expect(classifyShellMutation("echo hi 2>&${ERR}")).toMatchObject({ edits: [], opaque: true });
+    expect(classifyShellMutation("echo hi >& f.ts")).toMatchObject({ edits: [{ file: "f.ts" }] });
+  });
+
+  test("sa12 review F3: >| and 2>| noclobber override writes", () => {
+    expect(files("echo >| src/f.ts")).toEqual(["src/f.ts"]);
+    expect(files("echo 2>| src/f.ts")).toEqual(["src/f.ts"]);
+    expect(files("echo >| src/f.ts && sed -i s/a/b/ src/z.ts")).toEqual(["src/f.ts", "src/z.ts"]);
   });
 });
