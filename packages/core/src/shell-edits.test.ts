@@ -1234,4 +1234,40 @@ describe("status-accuracy-7 heredoc forms", () => {
     const r = classifyShellMutation(cmd);
     expect(r.edits.map((e) => e.file)).toEqual(["src/b.py"]);
   });
+
+  test("sa10 review F1: nested subshell with space is not arithmetic; reports edit and hasCd", () => {
+    const r = classifyShellMutation("((cd a && sed -i s/a/b/ src/f.ts) )");
+    expect(r.edits.length).toBeGreaterThan(0);
+    expect(r.hasCd).toBe(true);
+  });
+
+  test("sa10 review F1: nested subshell with semicolon reports edit file", () => {
+    const r = classifyShellMutation("((sed -i s/a/b/ src/f.ts); echo hi)");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/f.ts"]);
+  });
+
+  test("sa10 review F1: $((...) fallback to command substitution reports edit across semicolon", () => {
+    const r = classifyShellMutation("echo $((echo ok) ; sed -i s/a/b/ src/a.ts)");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
+
+  test("sa10 review F1: $(( 1 ) ; ...) reports edit across semicolon", () => {
+    const r = classifyShellMutation("echo $(( 1 ) ; sed -i s/a/b/ src/a.ts)");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
+
+  test("sa10 review F1: $((cd /tmp; sed ...) | cat) reports edit", () => {
+    const r = classifyShellMutation("echo $((cd /tmp; sed -i s/a/b/ src/a.ts) | cat)");
+    expect(r.edits.length).toBeGreaterThan(0);
+  });
+
+  test("sa10 review F1: if (( x > 1 )); then sed ...; fi still reports edit", () => {
+    const r = classifyShellMutation("if (( x > 1 )); then sed -i s/a/b/ src/f.ts; fi");
+    expect(r.edits.map((e) => e.file)).toContain("src/f.ts");
+  });
+
+  test("sa10 review F2: # after escaped space is not a comment; subsequent edit is found", () => {
+    const r = classifyShellMutation("echo a\\ #b; sed -i s/a/b/ src/a.ts");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
 });

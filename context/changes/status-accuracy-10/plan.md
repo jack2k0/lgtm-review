@@ -41,3 +41,9 @@ schema: no
   - `let x=1<<2; cat <<A` -> both `2` and `A` are heredocs.
 - One fixture `sa10-heredoc-quotes` (session with quoted heredoc tokens and check; labels from the rules).
 - Done: `pnpm check` green; gate exit 0/2.
+
+## Review fixes
+- F1: `$((` or command-start `((` is arithmetic only if its inner level closes with `))`; otherwise bash treats as command substitution or nested subshells (`((echo ok) ; echo hi)` -> `ok\nhi`, `echo $((echo ok) ; echo hi)` -> `ok hi`).
+- F2: `#` starts a comment only after unescaped whitespace or `;&|()` or at start (`echo a\ #b; echo hi` -> `a #b\nhi`).
+- F3: `<<` preceded by an odd number of backslashes is an escaped `<` followed by input redirect `<word>`, not a heredoc start (`echo \<<E` -> bash prints `E: No such file or directory`).
+

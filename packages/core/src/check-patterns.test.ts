@@ -643,4 +643,18 @@ describe("status-accuracy-10 quote- and arithmetic-aware heredoc starts", () => 
       { delim: "A", quoted: false, dash: false },
     ]);
   });
+
+  test("sa10 review F2: # after escaped space is not a comment", () => {
+    expect(parseHeredocStarts("echo \\ #x; cat <<E")).toEqual([
+      { delim: "E", quoted: false, dash: false },
+    ]);
+  });
+
+  test("sa10 review F3: backslash-escaped << is not a heredoc start", () => {
+    expect(parseHeredocStarts("echo \\<<E")).toEqual([]);
+    expect(parseHeredocStarts("echo \\\\<<E")).toEqual([
+      { delim: "E", quoted: false, dash: false },
+    ]);
+    expect(parseHeredocStarts("echo \\\\\\<<E")).toEqual([]);
+  });
 });
