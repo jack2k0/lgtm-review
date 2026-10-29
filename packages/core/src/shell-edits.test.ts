@@ -1305,4 +1305,27 @@ describe("status-accuracy-7 heredoc forms", () => {
     const r2 = classifyShellMutation('echo "$(echo ok ; sed -i s/a/b/ src/a.ts)"');
     expect(r2.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
   });
+
+  test("sa11 review F1: command-start (( redirects", () => {
+    expect(classifyShellMutation("(( x > 1 ))").edits).toEqual([]);
+    expect(classifyShellMutation("(( x > 1 )) && sed -i s/a/b/ src/z.ts").edits.map((e) => e.file)).toEqual([
+      "src/z.ts",
+    ]);
+    expect(classifyShellMutation("(( x > y )); sed -i s/a/b/ src/z.ts").edits.map((e) => e.file)).toEqual([
+      "src/z.ts",
+    ]);
+    expect(classifyShellMutation("(( x > 1 )) > out.txt").edits.map((e) => e.file)).toEqual(["out.txt"]);
+    const sub = classifyShellMutation("((cd a && sed -i s/a/b/ src/f.ts) )");
+    expect(sub.edits.length).toBeGreaterThan(0);
+    expect(sub.hasCd).toBe(true);
+  });
+
+  test("sa11 review F2: numeric/hex escapes in delimiter close heredoc and find following edits", () => {
+    const r1 = classifyShellMutation("cat <<E$'\\x41'\nbody\nEA\nsed -i s/a/b/ src/a.ts");
+    expect(r1.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+    const r2 = classifyShellMutation("cat <<E$'\\101'\nbody\nEA\nsed -i s/a/b/ src/a.ts");
+    expect(r2.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+    const r3 = classifyShellMutation("cat <<E$'A'\nbody\nEA\nsed -i s/a/b/ src/a.ts");
+    expect(r3.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
 });

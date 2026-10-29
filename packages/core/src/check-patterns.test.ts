@@ -684,4 +684,25 @@ describe("status-accuracy-10 quote- and arithmetic-aware heredoc starts", () => 
       "echo $((\n1 << 2)) ; cat <<E\necho ZZB2",
     );
   });
+
+  test("sa11 review F2: parseHeredocStarts decodes numeric, hex, unicode and control escapes in $''", () => {
+    expect(parseHeredocStarts("cat <<E$'\\x41'")).toEqual([
+      { delim: "EA", quoted: true, dash: false },
+    ]);
+    expect(parseHeredocStarts("cat <<E$'\\101'")).toEqual([
+      { delim: "EA", quoted: true, dash: false },
+    ]);
+    expect(parseHeredocStarts("cat <<E$'\\u0041'")).toEqual([
+      { delim: "EA", quoted: true, dash: false },
+    ]);
+    expect(parseHeredocStarts("cat <<E$'\\U00000041'")).toEqual([
+      { delim: "EA", quoted: true, dash: false },
+    ]);
+    expect(parseHeredocStarts("cat <<E$'\\cA'")).toEqual([
+      { delim: "E\x01", quoted: true, dash: false },
+    ]);
+    expect(parseHeredocStarts("cat <<E$'\\c?'")).toEqual([
+      { delim: "E\x7f", quoted: true, dash: false },
+    ]);
+  });
 });

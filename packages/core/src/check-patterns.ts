@@ -353,7 +353,66 @@ export function parseHeredocStarts(line: string, prefix = "", lookahead = prefix
             else if (esc === "\\") delim += "\\";
             else if (esc === "'") delim += "'";
             else if (esc === '"') delim += '"';
-            else delim += "\\" + esc;
+            else if (esc === "x") {
+              const m = /^[0-9a-fA-F]{1,2}/.exec(line.slice(i + 2));
+              if (m) {
+                delim += String.fromCharCode(parseInt(m[0], 16));
+                i += 2 + m[0].length;
+                continue;
+              } else {
+                delim += "\\x";
+                i += 2;
+                continue;
+              }
+            } else if (esc === "u") {
+              const m = /^[0-9a-fA-F]{1,4}/.exec(line.slice(i + 2));
+              if (m) {
+                try {
+                  delim += String.fromCodePoint(parseInt(m[0], 16));
+                } catch {
+                  // invalid codepoint
+                }
+                i += 2 + m[0].length;
+                continue;
+              } else {
+                delim += "\\u";
+                i += 2;
+                continue;
+              }
+            } else if (esc === "U") {
+              const m = /^[0-9a-fA-F]{1,8}/.exec(line.slice(i + 2));
+              if (m) {
+                try {
+                  delim += String.fromCodePoint(parseInt(m[0], 16));
+                } catch {
+                  // invalid codepoint
+                }
+                i += 2 + m[0].length;
+                continue;
+              } else {
+                delim += "\\U";
+                i += 2;
+                continue;
+              }
+            } else if (/[0-7]/.test(esc)) {
+              const m = /^[0-7]{1,3}/.exec(line.slice(i + 1));
+              if (m) {
+                delim += String.fromCharCode(parseInt(m[0], 8) & 0xff);
+                i += 1 + m[0].length;
+                continue;
+              }
+            } else if (esc === "c") {
+              if (i + 2 < line.length && line[i + 2] !== "'") {
+                const char = line[i + 2] as string;
+                delim += char === "?" ? "\x7f" : String.fromCharCode(char.charCodeAt(0) & 0x1f);
+                i += 3;
+                continue;
+              } else {
+                delim += "\\c";
+                i += 2;
+                continue;
+              }
+            } else delim += "\\" + esc;
             i += 2;
             continue;
           }
@@ -631,6 +690,9 @@ export function stripPrefixes(seg: string): string {
       changed = true;
     }
     for (const re of PREFIXES) {
+      if (s.startsWith("((") && checkArithmeticOpener(s, 0, true) !== null) {
+        if (re.source.includes("(")) continue;
+      }
       const m = re.exec(s);
       if (m && m[0].length > 0) {
         s = s.slice(m[0].length).trimStart();

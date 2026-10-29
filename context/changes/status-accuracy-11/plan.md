@@ -57,3 +57,11 @@ schema: no
     - seed 77: cases 2471, branch-wrong 1, main-wrong 1, branch-only-wrong 0
     - seed 2024: cases 2451, branch-wrong 2, main-wrong 2, branch-only-wrong 0
 
+## Review fixes
+- F1: `stripPrefixes` does not strip `(` when `s` starts a closed `((...))` arithmetic command, preventing `(( x > 1 ))` from creating spurious redirect file `1`. Bash: `(( x > 1 )); ls 1` -> `ls: cannot access '1': No such file or directory`; `(( x > 1 )) > out.txt; ls out.txt` -> `out.txt`.
+- F2: `$'...'` heredoc delimiter decodes `\xHH`, octal `\NNN` (1-3 digits), `\uHHHH`, `\UHHHHHHHH`, `\cX`. Bash: `cat <<E$'\x41'` / `<<E$'\101'` / `<<E$'\u0041'` / `<<E$'\U00000041'` close on `EA`.
+- Review differential (2 seeds x 3000):
+  - edit-diff: seed 77 (branch-loss 0, both-miss 1, branch-gain 0); seed 101 (branch-loss 0, both-miss 0, branch-gain 0). Branch-loss: 0.
+  - hd-diff: seed 5 (cases 2466, branch-only-wrong 0); seed 77 (cases 2471, branch-only-wrong 0). Branch-only-wrong: 0.
+
+
