@@ -1195,4 +1195,23 @@ describe("status-accuracy-7 heredoc forms", () => {
     const r = classifyShellMutation("echo hi # cat <<EOF\nsed -i s/a/b/ src/a.ts");
     expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
   });
+
+  test("sa9: two heredocs on one line; body of the second is not read as commands", () => {
+    const cmd = "cat <<A >notes.txt; cat <<B >other.txt\nx\nA\nsed -i s/a/b/ src/a.ts\nB";
+    const r = classifyShellMutation(cmd);
+    expect(r.edits.map((e) => e.file)).not.toContain("src/a.ts");
+  });
+
+  test("sa9: multiple heredocs fed to pipeline stdin uses the last one", () => {
+    const yWrites = "cat <<X <<Y | python3\npass\nX\nopen('src/b.py', 'w').close()\nY";
+    expect(classifyShellMutation(yWrites).edits.map((e) => e.file)).toEqual(["src/b.py"]);
+
+    const xWrites = "cat <<X <<Y | python3\nopen('src/b.py', 'w').close()\nX\npass\nY";
+    expect(classifyShellMutation(xWrites).edits.map((e) => e.file)).toEqual([]);
+  });
+
+  test("sa9: unclosed second heredoc fails closed (opaque, D3)", () => {
+    const r = classifyShellMutation("cat <<A; cat <<B\nx\nA\nsed -i s/a/b/ src/a.ts");
+    expect(r.opaque).toBe(true);
+  });
 });

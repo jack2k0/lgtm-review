@@ -1,0 +1,43 @@
+{
+  "sessionId": "sa9-heredoc-multi",
+  "title": "Write notes and run checks.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Write notes and run checks.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/notes.txt",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        },
+        {
+          "path": "/home/user/project/other.txt",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly reading (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    }
+  ],
+  "warnings": []
+}
