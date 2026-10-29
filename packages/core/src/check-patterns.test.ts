@@ -615,3 +615,32 @@ describe("status-accuracy-9 multiple heredocs on one line", () => {
     ]);
   });
 });
+
+describe("status-accuracy-10 quote- and arithmetic-aware heredoc starts", () => {
+  test("sa10: a << inside single quotes, double quotes or ANSI quotes is not a heredoc start", () => {
+    expect(parseHeredocStarts('python3 -c "print(1 << 2)"')).toEqual([]);
+    expect(parseHeredocStarts('grep "<<EOF" "a b"')).toEqual([]);
+    expect(parseHeredocStarts("echo 'a <<B'")).toEqual([]);
+    expect(parseHeredocStarts("echo $'foo <<EOF bar'")).toEqual([]);
+    expect(parseHeredocStarts('python3 -c "import sys; print(1 << 2)"')).toEqual([]);
+  });
+
+  test("sa10: arithmetic context $(( ... )) or $[ ... ] preserves shift across pipe or semicolon", () => {
+    expect(parseHeredocStarts("echo $((8 | 1<<2)); cat <<E | python3")).toEqual([
+      { delim: "E", quoted: false, dash: false },
+    ]);
+    expect(parseHeredocStarts("echo $[8 | 1<<2]; cat <<E")).toEqual([
+      { delim: "E", quoted: false, dash: false },
+    ]);
+  });
+
+  test("sa10: let unquoted vs quoted heredoc start detection", () => {
+    expect(parseHeredocStarts('let "x = 1 << 2"; cat <<A')).toEqual([
+      { delim: "A", quoted: false, dash: false },
+    ]);
+    expect(parseHeredocStarts("let x=1<<2; cat <<A")).toEqual([
+      { delim: "2", quoted: false, dash: false },
+      { delim: "A", quoted: false, dash: false },
+    ]);
+  });
+});

@@ -63,27 +63,101 @@ export interface HeredocStart {
   dash: boolean;
 }
 
-/** Whether the text before a `<<` puts it in a comment or in arithmetic (`$((..))`, `((..))`, `$[..]`, `let`), where it is a shift. */
+/** Whether the text before a `<<` puts it in a quote, comment or arithmetic context (`$((..))`, `((..))`, `$[..]`), where it is not a heredoc start. */
 function inCommentOrArithmetic(before: string): boolean {
   let quote: string | null = null;
   let cmdStart = 0;
+  const stack: string[] = [];
+
   for (let i = 0; i < before.length; i++) {
     const c = before[i] as string;
+
     if (quote !== null) {
-      if (c === "\\" && quote === '"') i++;
-      else if (c === quote) quote = null;
+      if (quote === "'") {
+        if (c === "'") quote = null;
+      } else if (quote === '"') {
+        if (c === "\\" && i + 1 < before.length) i++;
+        else if (c === '"') quote = null;
+      } else if (quote === "$'") {
+        if (c === "\\" && i + 1 < before.length) i++;
+        else if (c === "'") quote = null;
+      }
       continue;
     }
-    if (c === "\\") i++;
-    else if (c === "'" || c === '"') quote = c;
-    else if (c === "#" && (i === 0 || /[\s;&|()]/.test(before[i - 1] as string))) return true;
-    else if (/[;&|\n]/.test(c)) cmdStart = i + 1;
+
+    if (c === "\\") {
+      if (i + 1 < before.length) i++;
+      continue;
+    }
+
+    if (c === "$" && i + 1 < before.length && before[i + 1] === "'") {
+      quote = "$'";
+      i++;
+      continue;
+    }
+
+    if (c === "'" || c === '"') {
+      quote = c;
+      continue;
+    }
+
+    if (stack.length > 0) {
+      if (c === "(") {
+        stack.push("(");
+      } else if (c === "[") {
+        stack.push("[");
+      } else if (c === ")") {
+        const top = stack[stack.length - 1];
+        if (top === "(") {
+          stack.pop();
+        } else if ((top === "$((" || top === "((") && i + 1 < before.length && before[i + 1] === ")") {
+          stack.pop();
+          i++;
+        }
+      } else if (c === "]") {
+        const top = stack[stack.length - 1];
+        if (top === "[" || top === "$[") {
+          stack.pop();
+        }
+      }
+      continue;
+    }
+
+    if (c === "#" && (i === 0 || /[\s;&|()]/.test(before[i - 1] as string))) {
+      return true;
+    }
+
+    if (before.slice(i, i + 3) === "$((") {
+      stack.push("$((");
+      i += 2;
+      continue;
+    }
+
+    if (before.slice(i, i + 2) === "$[") {
+      stack.push("$[");
+      i++;
+      continue;
+    }
+
+    if (
+      c === "(" &&
+      i + 1 < before.length &&
+      before[i + 1] === "(" &&
+      /^(?:\s*|\s*(?:if|while|until|then|elif|!)\s*)$/.test(before.slice(cmdStart, i))
+    ) {
+      stack.push("((");
+      i++;
+      continue;
+    }
+
+    if (/[;&|\n]/.test(c)) {
+      cmdStart = i + 1;
+    }
   }
-  const cmd = before.slice(cmdStart);
-  const unclosed = (open: string, close: string): boolean => cmd.lastIndexOf(open) > cmd.lastIndexOf(close);
-  if (unclosed("$((", "))") || unclosed("$[", "]")) return true;
-  if (/^\s*\(\(/.test(cmd) && !cmd.includes("))")) return true;
-  return /(?:^|[(\s])let\s/.test(cmd) && /^\s*(?:\w+=\S*\s+)*let\s/.test(cmd);
+
+  if (quote !== null) return true;
+  if (stack.length > 0) return true;
+  return false;
 }
 
 /**
@@ -186,6 +260,8 @@ export function splitSegments(cmd: string): Segment[] {
   let quote: string | null = null;
   let opens = 0;
   let closes = 0;
+  const arithStack: string[] = [];
+
   const end = (op: string): void => {
     const text = cur.trim().replace(/\s*[)}]+$/, "");
     const segOpens = opens;
@@ -206,23 +282,91 @@ export function splitSegments(cmd: string): Segment[] {
     const next = cmd[i + 1];
     if (quote !== null) {
       cur += c;
-      if (c === "\\" && quote === '"') {
-        cur += next ?? "";
-        i++;
-      } else if (c === quote) {
-        quote = null;
+      if (quote === "'") {
+        if (c === "'") quote = null;
+      } else if (quote === '"') {
+        if (c === "\\" && next !== undefined) {
+          cur += next;
+          i++;
+        } else if (c === '"') {
+          quote = null;
+        }
+      } else if (quote === "$'") {
+        if (c === "\\" && next !== undefined) {
+          cur += next;
+          i++;
+        } else if (c === "'") {
+          quote = null;
+        }
       }
       continue;
     }
     if (c === "\\") {
       cur += c + (next ?? "");
       i++;
-    } else if (c === '"' || c === "'") {
+      continue;
+    }
+    if (c === "$" && next === "'") {
+      quote = "$'";
+      cur += "$'";
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'") {
       quote = c;
       cur += c;
-    } else if (c === "#" && (cur === "" || /\s$/.test(cur))) {
+      continue;
+    }
+    if (arithStack.length > 0) {
+      cur += c;
+      if (c === "(") {
+        arithStack.push("(");
+      } else if (c === "[") {
+        arithStack.push("[");
+      } else if (c === ")") {
+        const top = arithStack[arithStack.length - 1];
+        if (top === "(") {
+          arithStack.pop();
+        } else if ((top === "$((" || top === "((") && next === ")") {
+          arithStack.pop();
+          cur += ")";
+          i++;
+        }
+      } else if (c === "]") {
+        const top = arithStack[arithStack.length - 1];
+        if (top === "[" || top === "$[") {
+          arithStack.pop();
+        }
+      }
+      continue;
+    }
+    if (c === "#" && (cur === "" || /\s$/.test(cur))) {
       while (i + 1 < cmd.length && cmd[i + 1] !== "\n") i++;
-    } else if (c === "&" && next === "&") {
+      continue;
+    }
+    if (cmd.slice(i, i + 3) === "$((") {
+      arithStack.push("$((");
+      cur += "$((";
+      i += 2;
+      continue;
+    }
+    if (cmd.slice(i, i + 2) === "$[") {
+      arithStack.push("$[");
+      cur += "$[";
+      i++;
+      continue;
+    }
+    if (
+      c === "(" &&
+      next === "(" &&
+      /^(?:\s*|\s*(?:if|while|until|then|elif|!)\s*)$/.test(cur)
+    ) {
+      arithStack.push("((");
+      cur += "((";
+      i++;
+      continue;
+    }
+    if (c === "&" && next === "&") {
       end("&&");
       i++;
     } else if (c === "|" && next === "|") {

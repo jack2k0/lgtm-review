@@ -1214,4 +1214,23 @@ describe("status-accuracy-7 heredoc forms", () => {
     const r = classifyShellMutation("cat <<A; cat <<B\nx\nA\nsed -i s/a/b/ src/a.ts");
     expect(r.opaque).toBe(true);
   });
+
+  test("sa10: grep \"<<EOF\" does not start a heredoc; subsequent edit is found and not opaque", () => {
+    const cmd = 'grep "<<EOF" "a b"\nsed -i s/a/b/ src/a.ts\nEOF a';
+    const r = classifyShellMutation(cmd);
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+    expect(r.opaque).toBe(false);
+  });
+
+  test("sa10: python3 -c \"print(1 << 2)\" does not hide subsequent shell edit", () => {
+    const cmd = 'python3 -c "print(1 << 2)"\nsed -i s/a/b/ src/a.ts';
+    const r = classifyShellMutation(cmd);
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
+
+  test("sa10: arithmetic shift with pipe inside $(( ... )) feeds pipeline heredoc correctly", () => {
+    const cmd = 'echo $((8 | 1<<2)); cat <<E | python3\nopen("src/b.py", "w").close()\nE';
+    const r = classifyShellMutation(cmd);
+    expect(r.edits.map((e) => e.file)).toEqual(["src/b.py"]);
+  });
 });
