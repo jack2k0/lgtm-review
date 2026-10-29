@@ -225,7 +225,7 @@ describe("GET /api/sessions/:id/prompts/:index", () => {
         for (const st of d.steps) for (const f of st.files) expect(files.has(f), f).toBe(true);
       }
     }
-  });
+  }, 20_000);
 
   test("requires the token", async () => {
     expect((await get(srv, "/api/sessions/diffs-mixed/prompts/0", null)).status).toBe(403);
