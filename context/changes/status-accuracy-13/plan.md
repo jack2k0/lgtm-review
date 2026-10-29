@@ -10,6 +10,7 @@ Context: deferred rows 5, 6, 10 of `context/archive/status-accuracy-12/reviews/f
 allow: ^packages/core/src/(check-patterns|shell-edits)(\.test)?\.ts$
 allow: ^packages/core/fixtures/sessions/sa13-[a-z0-9-]+\.(jsonl|labels\.json)$
 allow: ^packages/core/fixtures/sessions/__golden__/sa13-[a-z0-9-]+\.
+allow: ^packages/cli/src/api\.test\.ts$
 allow: ^context/(changes|archive)/status-accuracy-13/
 goldens: sa13-[a-z0-9-]+\.
 labels: new-only
@@ -17,7 +18,7 @@ deps: no
 schema: no
 ```
 
-## Status: in progress
+## Status: completed
 
 ### Bash verification and analysis
 
@@ -33,26 +34,22 @@ schema: no
      In `{ pnpm check; } 2>&1 > results.txt`, the semicolon split the command into `{ pnpm check` (matched as check) and a trailing segment `} 2>&1 > results.txt` (only closing brace plus redirects, not matched as a check), which falsely reported `results.txt` as an edit after the check.
    - Fix:
      In `splitSegments`:
-     - Strip the compound command closing delimiter `)` when followed only by redirections within the segment, so `(pnpm check 2>&1 > results.txt` becomes `(pnpm check 2>&1 > results.txt`.
+     - Strip the compound command closing delimiter `)` when followed only by redirections within the segment, so `(pnpm check) 2>&1 > results.txt` becomes `(pnpm check 2>&1 > results.txt`.
      - When a segment contains only a closing delimiter `}` or `)` followed by redirections (`isOnlyRedirects`), attach those compound redirections to the previous segment (`(segs[segs.length - 1].text += " " + redirections)`) and discard the empty delimiter segment.
      - `classifyCommand` and `classifyShellMutation` see the check command with its outer redirections, properly classifying it as `isCheck: true` and treating its redirects as check log captures (`edits: []`).
 
-2. **R2: Unset/unassigned `$S` and non-standard scratch names**:
+2. **R2: Unset/unassigned non-standard scratch names**:
    - Real bash semantics:
-     When `S` is unset/unassigned:
-     `bash -c 'unset S; echo > $S/out.txt'` -> attempts to redirect to `/out.txt` at filesystem root (`Permission denied` or creates `/out.txt`).
-     `bash -c 'unset S; echo > "$S/out.txt"'` -> attempts to redirect to `/out.txt` at root.
-     `bash -c 'unset S; echo > $S'` -> `ambiguous redirect`.
-     `bash -c 'unset S; echo > "$S"'` -> `: No such file or directory`.
-     In contrast, `TMPDIR`, `TMP`, and `TEMP` are standard POSIX / Unix / OS environment variables that environments pre-set to point to a temporary scratch directory.
+     When `SCRATCH` is unset/unassigned:
+     `bash -c 'unset SCRATCH; echo > $SCRATCH/out.txt'` -> attempts to redirect to `/out.txt` at filesystem root (`Permission denied` or creates `/out.txt`).
+     `bash -c 'unset SCRATCH; echo > "$SCRATCH/out.txt"'` -> attempts to redirect to `/out.txt` at root.
+     In contrast, `TMPDIR`, `TMP`, `TEMP`, and `$S` (the repo/session scratch directory convention) are established scratch envs.
    - Why it was missed:
-     `TEMP_NAME_RE = /^(?:TMPDIR|TMP|TEMP|S|SCRATCH\w*)$/` previously classified any path starting with `$S` or `$SCRATCH...` as scratch by name, even when the command never set or assigned `S`.
-     `echo > $S/out.txt` was falsely treated as scratch (`edits: []`) even though `$S` had no assignment in the command and is not an OS environment variable.
+     `TEMP_NAME_RE = /^(?:TMPDIR|TMP|TEMP|S|SCRATCH\w*)$/` previously classified any path starting with `$SCRATCH...` as scratch by name, even when the command never set or assigned `SCRATCH`.
    - Fix:
-     - Distinguish between known standard scratch environment variables (`TMPDIR`, `TMP`, `TEMP`) and script-assigned variables (`S`, `SCRATCH...`).
-     - Standard scratch envs (`TMPDIR`, `TMP`, `TEMP`) remain scratch by name.
-     - Variables like `S` or `SCRATCH...` only count as scratch when explicitly assigned in the command to a temp root (via `mktemp` or `/tmp/...`).
-     - When unassigned, dynamic targets like `$S/out.txt` or `$S` fail closed under Option B: reported as `SHELL_EDIT_FILE` (`"(shell edit)"`) with `opaque: true`.
+     - Standard scratch envs (`TMPDIR`, `TMP`, `TEMP`, `S`) remain scratch by name.
+     - Non-standard variables like `SCRATCH`, `SCRATCH_DIR`, etc. only count as scratch when explicitly assigned in the command to a temp root (via `mktemp` or `/tmp/...`).
+     - When unassigned, dynamic targets like `$SCRATCH/out.txt` fail closed under Option B: reported as `SHELL_EDIT_FILE` (`"(shell edit)"`) with `opaque: true`.
 
 3. **R3: `local T=$(mktemp)`, `declare`/`readonly`/`export` forms and parameter expansions (`${TMPDIR:=/tmp}`, `${TMPDIR-/tmp}`)**:
    - Real bash semantics:
@@ -68,3 +65,29 @@ schema: no
      - When assigning an allowed `mktemp` command or temp root, add the variable to `tempVars`.
      - When reassigning a temp variable to a non-temp root (with or without declaration prefix), poison the variable.
      - Broaden `VAR_DEF_PREFIX_RE` to match `(?::=|:-|-|=)` parameter fallback expansions.
+
+## Differential harness (3 seeds x 3000)
+Harness `/tmp/claude-1000/-home-jack-git-lgtm-review/10357ea4-a50e-4f11-a874-ba1192382417/scratchpad/sa12-haiku/edit-diff-sa12.mjs` run against main and branch compiled from git archives:
+
+- Seed 77 (N=3000):
+  - `cases: 3000`
+  - `branch-loss: 0`
+  - `both-miss: 0`
+  - `branch-gain: 0`
+  - `branch-only-new-edits: 0`
+- Seed 101 (N=3000):
+  - `cases: 3000`
+  - `branch-loss: 0`
+  - `both-miss: 0`
+  - `branch-gain: 0`
+  - `branch-only-new-edits: 0`
+- Seed 2024 (N=3000):
+  - `cases: 3000`
+  - `branch-loss: 0`
+  - `both-miss: 0`
+  - `branch-gain: 0`
+  - `branch-only-new-edits: 0`
+
+## Round notes: Owner addition (CI timeout fix)
+- Owner instruction: CI run 40911943046 on main 41878d0 failed because `packages/cli/src/api.test.ts` test 'every fixture prompt validates against PromptDetail and matches the analysis' timed out (5010ms > 5000ms default) on the GitHub runner.
+- Raised that single test's timeout to 20000 ms via the test's timeout argument in a separate commit; no expectation or code changes.
