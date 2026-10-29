@@ -1,0 +1,36 @@
+{
+  "sessionId": "sa12-redirect-targets",
+  "title": "Run command with stderr redirect and test.",
+  "branch": "main",
+  "startedAt": "2026-01-01T00:00:01.000Z",
+  "prompts": [
+    {
+      "index": 0,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "text": "Run command with stderr redirect and test.",
+      "status": "checked",
+      "reason": "pnpm test passed after last edit (shell edits may be incomplete)",
+      "files": [
+        {
+          "path": "/home/user/project/src/a.ts",
+          "kind": "M",
+          "added": 0,
+          "removed": 0,
+          "maybeIncomplete": true
+        }
+      ],
+      "partial": false,
+      "timeSplit": {
+        "readMs": 2000,
+        "writeMs": 0,
+        "checkMs": 2000,
+        "fixMs": 0
+      },
+      "activeMs": 4000,
+      "headline": "Mostly reading (50%), 1 check",
+      "hints": [],
+      "recommendation": "skim"
+    }
+  ],
+  "warnings": []
+}

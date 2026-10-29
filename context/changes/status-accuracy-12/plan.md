@@ -15,32 +15,32 @@ deps: no
 schema: no
 ```
 
-## Status: parked, owner decision
+## Status: approved option B
 
-### Why each example is missed
+### Why each example was missed
 1. **Dynamic targets (`echo > $x.ts`, `echo > $((2)).ts`, `echo hi > $[2]`)**:
    - In `packages/core/src/shell-edits.ts`:
-     - `isUnknownTarget(w)` (lines 276-278) returns `true` for targets that start with `$`, `` ` ``, or are marked `dynamic`. The docstring explicitly states: `/** Unknown variable / substitution targets of a redirect: nothing reliable to say, so no edit. */`.
-     - In `segmentMutation` (line 1751): `if (isUnknownTarget(r.target) || isIgnoredPath(r.target.text, poisoned)) continue;`. Unknown targets are dropped from edit reporting.
-     - The segment falls through to `writesUnseen` (lines 832-839), which marks the command `opaque: true` with `edits: []`.
+     - `isUnknownTarget(w)` (lines 276-278) returns `true` for targets that start with `$`, `` ` ``, or are marked `dynamic`. The docstring previously stated: `/** Unknown variable / substitution targets of a redirect: nothing reliable to say, so no edit. */`.
+     - In `segmentMutation` (line 1751): `if (isUnknownTarget(r.target) || isIgnoredPath(r.target.text, poisoned)) continue;`. Unknown targets were dropped from edit reporting.
+     - The segment fell through to `writesUnseen` (lines 832-839), which marked the command `opaque: true` with `edits: []`.
 
 2. **FD-prefixed and combined redirects (`((x)) 2> f.ts`, `cmd 2>> f.ts`, `cmd &> f.ts`)**:
    - In `packages/core/src/shell-edits.ts`:
      - In `segmentMutation` (line 1745): `if ((r.fd !== "" && r.fd !== "1") || r.target === null) continue;`.
-     - Any descriptor other than stdout (`""` or `"1"`) is filtered out and skipped completely.
-     - Consequently, `2>` (stderr), `2>>` (stderr append), `&>` (stdout+stderr), and custom descriptors `3>`, etc. never produce edit targets.
-     - `writesUnseen` flags them as unobserved writes, resulting in `opaque: true` and `edits: []`.
+     - Any descriptor other than stdout (`""` or `"1"`) was filtered out and skipped completely.
+     - Consequently, `2>` (stderr), `2>>` (stderr append), `&>` (stdout+stderr), and custom descriptors `3>`, etc. never produced edit targets.
+     - `writesUnseen` flagged them as unobserved writes, resulting in `opaque: true` and `edits: []`.
 
 3. **Explicit stdout redirect (`cmd 1> f.ts`)**:
    - `1>` is already parsed as stdout. It reports `f.ts` for non-check commands, but when `cmd` is a recognized check, its redirects are captured as check logs rather than edits.
 
 ### Conflicting existing test expectations
-Three tests in `packages/core/src/shell-edits.test.ts` (lines 81, 84, 85) within `test.each([...])("no edit: %s", (cmd) => { expect(files(cmd)).toEqual([]); })` explicitly pin the S-01 design rule:
-- Line 81: `"echo hi 2> err.txt"` -> expects `files(cmd) === []`. If `2>` is treated as an edit, it yields `["err.txt"]` and fails.
-- Line 84: `"ls &> all.txt"` -> expects `files(cmd) === []`. If `&>` is treated as an edit, it yields `["all.txt"]` and fails.
-- Line 85: `"cmd > \"$OUT\""` -> expects `files(cmd) === []`. If unresolved dynamic targets fail closed to `(shell edit)`, it yields `["(shell edit)"]` and fails.
+Three tests in `packages/core/src/shell-edits.test.ts` (lines 81, 84, 85) within `test.each([...])("no edit: %s", (cmd) => { expect(files(cmd)).toEqual([]); })` pinned the S-01 design rule:
+- Line 81: `"echo hi 2> err.txt"` -> expected `files(cmd) === []`. Under Option B, yields `["err.txt"]`.
+- Line 84: `"ls &> all.txt"` -> expected `files(cmd) === []`. Under Option B, yields `["all.txt"]`.
+- Line 85: `"cmd > \"$OUT\""` -> expected `files(cmd) === []`. Under Option B, yields `["(shell edit)"]`.
 
-Per AGENTS.md (*"Never change or delete an existing test expectation to make a change pass. If you believe an expectation is wrong, stop and report it with evidence"*), these tests cannot be modified or deleted without owner decision.
+Owner approved moving these 3 expectations out of the "no edit" table into an "edit" test with the new Option B results. No other existing expectations were modified.
 
 ### Bash verification (/tmp/claude-1000/-home-jack-git-lgtm-review/10357ea4-a50e-4f11-a874-ba1192382417/scratchpad/sa12)
 Real bash creates or truncates files for all output redirect forms regardless of fd or target dynamics:
@@ -54,11 +54,58 @@ Real bash creates or truncates files for all output redirect forms regardless of
 - `bash -c 'ls &> all.txt'` -> creates `./all.txt`
 - `bash -c 'OUT=out.txt; cmd > "$OUT"'` -> creates `./out.txt`
 
-### Options for owner decision
-- **Option A (Keep S-01 design)**:
-  - Close finding row 5 as rejected/intentional.
-  - Retain current behavior: stderr/`&>` redirects and unresolved variable targets remain classified as non-edits (with opacity where appropriate), preserving lines 81, 84, and 85.
-- **Option B (Fail closed)**:
-  - Update `segmentMutation` to treat `2>`, `2>>`, `&>`, and unresolved dynamic targets (`SHELL_EDIT_FILE`) as file edits when target is not an ignored/scratch path.
-  - Owner product decision to update the existing test expectations in `packages/core/src/shell-edits.test.ts` (lines 81, 84, 85).
-  - Measure impact against real session logs.
+### Implementation details (Option B)
+- In `packages/core/src/shell-edits.ts` (`segmentMutation`):
+  - Removed fd restriction `r.fd !== "" && r.fd !== "1"`. All output redirect descriptors (`r.op.startsWith(">")`) are evaluated.
+  - Process substitutions `>(...)` and `<(...)` are filtered out so they do not produce spurious dynamic targets.
+  - Ignored paths (`/dev/null`, `/dev/stderr`, `>&2`, `2>&1`, check log captures, scratch/tmp paths) remain preserved as non-edits.
+  - Dynamic / unresolved targets (`isUnknownTarget(r.target)`) produce `SHELL_EDIT_FILE` (`"(shell edit)"`) with `targetOpaque = true`.
+  - Non-stdout descriptors (`r.fd !== "" && r.fd !== "1"`) targeting non-documentation files set `fdOpaque = true` to preserve opacity semantics.
+- Fixture `sa12-redirect-targets` added with golden records.
+
+## Differential harness (3 seeds x 3000)
+Harness extended with redirect forms (`>`, `>>`, `1>`, `1>>`, `2>`, `2>>`, `&>`, `&>>`, `((1)) 2>`, `cmd 2>`, `cmd 3>`, and distractors `/dev/null`, `/dev/stderr`, `>&2`, `2>&1`, `$OUT`, `$x.ts`).
+
+- Seed 77 (N=3000):
+  - `cases: 3000`
+  - `branch-loss: 0`
+  - `both-miss: 0`
+  - `branch-gain: 0`
+  - `branch-only-new-edits: 130`
+- Seed 101 (N=3000):
+  - `cases: 3000`
+  - `branch-loss: 0`
+  - `both-miss: 0`
+  - `branch-gain: 0`
+  - `branch-only-new-edits: 119`
+- Seed 2024 (N=3000):
+  - `cases: 3000`
+  - `branch-loss: 0`
+  - `both-miss: 0`
+  - `branch-gain: 0`
+  - `branch-only-new-edits: 91`
+
+Sample branch-only new edits:
+- `(( 0 )) || a || echo hi 2> f34.txt || 8 | 1<<2]` -> `f34.txt` (main edits: `[]`)
+- `if (( 1 )) ; then (1) ; echo hi &>> f62.txt | (1); fi && echo q` -> `f62.txt` (main edits: `[]`)
+- `x=$(((1) & echo hi 2> f122.txt ) | (1))` -> `f122.txt` (main edits: `[]`)
+- `echo $[1 ) | 1 ) | 1]\necho hi 2> f119.txt` -> `f119.txt` (main edits: `[]`)
+
+## Real-log audit (Option B)
+Ran against real session logs (`~/.claude/projects`) comparing main CLI vs branch CLI.
+
+### Aggregate diff metrics (`diff.mjs`):
+- Total prompts: 164
+- Status changed count: 0
+- Transition table (from -> to: count): (none)
+- Edited-file count changed: 1
+
+### Accuracy comparison (`scripts/audit/compare.mjs`):
+- Main CLI:
+  - `A: rows 123, unique uuid 108 | main status 104/123 = 84.6% (unique 93/108 = 86.1%) | reason class 87/123 = 70.7% (unique 78/108 = 72.2%)`
+  - `B: rows 173, unique uuid 158 | main status 145/173 = 83.8% (unique 134/158 = 84.8%) | reason class 127/173 = 73.4% (unique 118/158 = 74.7%)`
+  - `C: rows 50, unique uuid 50 | main status 41/50 = 82.0% (unique 41/50 = 82.0%) | reason class 40/50 = 80.0% (unique 40/50 = 80.0%)`
+- Branch CLI:
+  - `A: rows 123, unique uuid 108 | main status 104/123 = 84.6% (unique 93/108 = 86.1%) | reason class 87/123 = 70.7% (unique 78/108 = 72.2%)`
+  - `B: rows 173, unique uuid 158 | main status 145/173 = 83.8% (unique 134/158 = 84.8%) | reason class 127/173 = 73.4% (unique 118/158 = 74.7%)`
+  - `C: rows 50, unique uuid 50 | main status 41/50 = 82.0% (unique 41/50 = 82.0%) | reason class 40/50 = 80.0% (unique 40/50 = 80.0%)`

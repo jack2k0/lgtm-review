@@ -1739,21 +1739,32 @@ function segmentMutation(
     files.push(...f.map((file) => ({ file, kind: "M" as const })));
   }
 
+  let targetOpaque = false;
   // `cmd > file` / `cmd >> file`; a check's own redirects capture its log, not an edit.
   if (!isCheck) {
     for (const r of redirects) {
-      if ((r.fd !== "" && r.fd !== "1") || r.target === null) continue;
+      if (r.target === null) continue;
       if (tempPrefixKind(r.target.text, poisoned) === "climb" || nonLiteralClimb(r.target.text)) {
         mutating = true;
         files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
         continue;
       }
-      if (isUnknownTarget(r.target) || isIgnoredPath(r.target.text, poisoned)) continue;
+      if (isIgnoredPath(r.target.text, poisoned)) continue;
+      if (r.target.text.startsWith("(") || r.target.text.startsWith(">(")) continue;
+      if (isUnknownTarget(r.target)) {
+        mutating = true;
+        targetOpaque = true;
+        files.push({ file: SHELL_EDIT_FILE, kind: "M" as const });
+        continue;
+      }
       mutating = true;
       files.push({ file: r.target.text, kind: "M" as const });
     }
   }
-  return mutating ? { gitOp, history, files, ...(surface ? { opaque: true } : {}) } : null;
+  const fdOpaque = redirects.some(
+    (r) => r.fd !== "" && r.fd !== "1" && r.target !== null && !isIgnoredPath(r.target.text, poisoned) && !isDocPath(r.target.text),
+  );
+  return mutating ? { gitOp, history, files, ...(surface || targetOpaque || fdOpaque ? { opaque: true } : {}) } : null;
 }
 
 /** Normalizes `.`/`..` segments of a path without touching the file system. */

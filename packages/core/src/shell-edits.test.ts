@@ -78,11 +78,8 @@ describe("classifyShellMutation: edits", () => {
     "echo hi > tmp/scratch/x.txt",
     "echo hi > ~/.cache/x.txt",
     "echo hi > run.log",
-    "echo hi 2> err.txt",
     "ls 2>&1",
     "ls >&2",
-    "ls &> all.txt",
-    "cmd > \"$OUT\"",
     "echo hi | tee /tmp/out.txt",
     "echo hi | tee build.log",
     "sed -i 's/a/b/' /tmp/x.txt",
@@ -1331,5 +1328,30 @@ describe("status-accuracy-7 heredoc forms", () => {
 
   test("sa11 review: `! (( x > 1 ))` has no redirect target", () => {
     expect(classifyShellMutation("! (( x > 1 ))").edits).toEqual([]);
+  });
+
+  test("sa12: approved option B moved expectations", () => {
+    expect(files("echo hi 2> err.txt")).toEqual(["err.txt"]);
+    expect(files("ls &> all.txt")).toEqual(["all.txt"]);
+    expect(files('cmd > "$OUT"')).toEqual([SHELL_EDIT_FILE]);
+  });
+
+  test("sa12: fd-prefixed and dynamic redirect targets", () => {
+    expect(files("echo > $x.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("echo > $((2)).ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("echo hi > $[2]")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("((x)) 2> f.ts")).toEqual(["f.ts"]);
+    expect(files("cmd 2>> f.ts")).toEqual(["f.ts"]);
+    expect(files("cmd &> f.ts")).toEqual(["f.ts"]);
+    expect(files("cmd 1> f.ts")).toEqual(["f.ts"]);
+  });
+
+  test("sa12: intentional non-edits stay preserved", () => {
+    expect(files("echo hi > /dev/null")).toEqual([]);
+    expect(files("echo hi > /dev/stderr")).toEqual([]);
+    expect(files("echo hi >&2")).toEqual([]);
+    expect(files("echo hi 2>&1")).toEqual([]);
+    expect(files("echo hi > run.log")).toEqual([]);
+    expect(files("pnpm test > results.json 2>&1")).toEqual([]);
   });
 });
