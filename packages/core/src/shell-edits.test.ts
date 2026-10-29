@@ -1379,4 +1379,23 @@ describe("status-accuracy-7 heredoc forms", () => {
     expect(files("echo 2>| src/f.ts")).toEqual(["src/f.ts"]);
     expect(files("echo >| src/f.ts && sed -i s/a/b/ src/z.ts")).toEqual(["src/f.ts", "src/z.ts"]);
   });
+
+  test("sa12 review 2 G1-G3: mktemp scratch location restrictions, direct mktemp, unescaped >|", () => {
+    // G1: only bare mktemp or -d/-u/-q/-t flags and /tmp template count as scratch
+    expect(files("T=$(mktemp -p src -d); echo > $T/a.ts")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("T=$(mktemp --tmpdir=src); echo > $T")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("T=$(mktemp src/x.XXXX); echo > $T")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("T=$(mktemp -p .); echo > $T")).toEqual([SHELL_EDIT_FILE]);
+    expect(files("T=$(mktemp -d /tmp/x.XXXX); echo > $T/a")).toEqual([]);
+    expect(files("T=$(mktemp -t x.XXXX); echo > $T")).toEqual([]);
+
+    // G2: direct mktemp target in quoted and unquoted forms
+    expect(files('echo > "$(mktemp)"')).toEqual([]);
+    expect(files("echo > $(mktemp)")).toEqual([]);
+    expect(files('echo > "$(mktemp -p src)"')).toEqual([SHELL_EDIT_FILE]);
+    expect(files("echo > $(mktemp -p src)")).toEqual([SHELL_EDIT_FILE]);
+
+    // G3: escaped > before | is not clobber; | is pipe
+    expect(files("echo \\>| tee src/a.ts")).toEqual(["src/a.ts"]);
+  });
 });

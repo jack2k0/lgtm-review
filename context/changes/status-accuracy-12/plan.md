@@ -132,3 +132,22 @@ Rerun differential against main (2 seeds x 3000):
 - Seed 9001 (N=3000): `cases: 3000`, `branch-loss: 0`, `both-miss: 0`, `branch-gain: 0`, `branch-only-new-edits: 117`
 - Branch-only losses: 0.
 
+### Review round 2 fixes (commit: fix(status-accuracy-12): mktemp scratch only without a location, escaped >| (review 2))
+- **G1 (Sonnet 1 + Haiku 2: mktemp scratch location restrictions)**:
+  - `isAllowedMktempCmd`: only bare `mktemp`, or flags from `{-d, -u, -q, -t, --directory, --dry-run, --quiet}` and optionally ONE template that is an absolute path under `/tmp/` or `/var/tmp/` (or a bare template with `-t`) count as scratch.
+  - `-p`, `--tmpdir`, relative templates, or unknown options disqualify scratch status (target treated as unresolved: `(shell edit)`).
+  - Tests: `T=$(mktemp -p src -d); echo > $T/a.ts` -> `(shell edit)`, `T=$(mktemp --tmpdir=src); echo > $T` -> `(shell edit)`, `T=$(mktemp src/x.XXXX); echo > $T` -> `(shell edit)`, `T=$(mktemp -p .); echo > $T` -> `(shell edit)`, `T=$(mktemp -d /tmp/x.XXXX); echo > $T/a` -> `[]`, `T=$(mktemp -t x.XXXX); echo > $T` -> `[]`.
+- **G2 (Sonnet 2: direct mktemp wired up)**:
+  - `isDirectMktemp`: handles both `"$(mktemp)"` and `$(mktemp)` (and backtick versions) with the G1 argument rules.
+  - `splitSegments`: only strips trailing `)` when `excess = closes - opens > 0` (or for subshells starting with `(`), preventing command substitution parens in commands like `echo > $(mktemp)` from having their closing paren stripped.
+  - Tests: `echo > "$(mktemp)"` -> `[]`, `echo > $(mktemp)` -> `[]`, `echo > "$(mktemp -p src)"` -> `(shell edit)`, `echo > $(mktemp -p src)` -> `(shell edit)`.
+- **G3 (Sonnet 3: unescaped > before |)**:
+  - In `splitSegments`, require unescaped `>` before `|` (`cmd[i - 1] === ">" && bs % 2 === 0`).
+  - Test: `echo \>| tee src/a.ts` -> `["src/a.ts"]`.
+
+### Review 2 differential harness
+Differential against main (fresh seeds x 3000):
+- Seed 4243 (N=3000): `cases: 3000`, `branch-loss: 0`, `both-miss: 0`, `branch-gain: 0`, `branch-only-new-edits: 89`
+- Seed 9003 (N=3000): `cases: 3000`, `branch-loss: 0`, `both-miss: 0`, `branch-gain: 0`, `branch-only-new-edits: 119`
+- Branch-only losses: 0.
+

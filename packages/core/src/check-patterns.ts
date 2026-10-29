@@ -472,6 +472,30 @@ export function stripHeredocs(cmd: string): string {
   return out.join("\n");
 }
 
+/** A grouping `( … )`, not `$(…)`, `<(…)`, `>(…)`, `name()`, or `name=(…)`. */
+export function isGroupingSubshellOpen(text: string, i: number): boolean {
+  if (i > 0) {
+    const prev = text[i - 1] as string;
+    if (prev === "$" || prev === "<" || prev === ">" || prev === "=") {
+      let bs = 0;
+      let j = i - 2;
+      while (j >= 0 && text[j] === "\\") {
+        bs++;
+        j--;
+      }
+      if (bs % 2 === 0) return false;
+    }
+  }
+  let j = i - 1;
+  while (j >= 0 && /\s/.test(text[j] as string)) j--;
+  if (j >= 0 && /[A-Za-z0-9_]/.test(text[j] as string)) {
+    let k = i + 1;
+    while (k < text.length && /\s/.test(text[k] as string)) k++;
+    if (k < text.length && text[k] === ")") return false;
+  }
+  return true;
+}
+
 /** Quote-aware split on `&&`, `||`, `|`, `;`, `&` and newlines. */
 export function splitSegments(cmd: string): Segment[] {
   const segs: Segment[] = [];
@@ -484,10 +508,13 @@ export function splitSegments(cmd: string): Segment[] {
   const end = (op: string): void => {
     let text = cur.trim();
     if (closes > 0) {
-      let remaining = closes;
-      while (remaining > 0 && /\)\s*$/.test(text)) {
+      let excess = Math.max(0, closes - opens);
+      if (excess === 0 && (text.startsWith("(") || text.startsWith("! ("))) {
+        excess = 1;
+      }
+      while (excess > 0 && /\)\s*$/.test(text)) {
         text = text.replace(/\)\s*$/, "").trimEnd();
-        remaining--;
+        excess--;
       }
     }
     text = text.replace(/\s*\}+$/, "");
@@ -586,7 +613,13 @@ export function splitSegments(cmd: string): Segment[] {
       end("||");
       i++;
     } else if (c === "|") {
-      if (cmd[i - 1] === ">") {
+      let bs = 0;
+      let j = i - 2;
+      while (j >= 0 && cmd[j] === "\\") {
+        bs++;
+        j--;
+      }
+      if (cmd[i - 1] === ">" && bs % 2 === 0) {
         cur += c;
       } else {
         end("|");

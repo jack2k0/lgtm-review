@@ -17,6 +17,7 @@ import {
   checkArithmeticOpener,
   scanParenPairEnd,
   scanBracketPairEnd,
+  isGroupingSubshellOpen,
   type HeredocStart,
   type RepoScripts,
   type Segment,
@@ -208,6 +209,47 @@ function collapseSlashes(p: string): string {
 const VAR_PREFIX_RE = /^(?:\$([A-Za-z_]\w*)|\$\{([A-Za-z_]\w*)\})(?:\/(.*))?$/;
 const VAR_DEF_PREFIX_RE = /^\$\{([A-Za-z_]\w*):-([^}]+)\}(?:\/(.*))?$/;
 
+const MKTEMP_SHORT_FLAGS = new Set(["d", "u", "q", "t"]);
+const MKTEMP_LONG_FLAGS = new Set(["--directory", "--dry-run", "--quiet"]);
+
+function isAllowedMktempCmd(cmd: string): boolean {
+  if (/[;&|\n]/.test(cmd)) return false;
+  const parts = cmd.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return false;
+  if (parts[0] !== "mktemp") return false;
+  let hasT = false;
+  let template: string | null = null;
+  for (let i = 1; i < parts.length; i++) {
+    const raw = parts[i] as string;
+    const tok = raw.replace(/^['"]|['"]$/g, "");
+    if (tok === "--") continue;
+    if (tok.startsWith("--")) {
+      if (!MKTEMP_LONG_FLAGS.has(tok)) return false;
+      continue;
+    }
+    if (tok.startsWith("-") && tok.length > 1) {
+      for (let j = 1; j < tok.length; j++) {
+        const c = tok[j] as string;
+        if (!MKTEMP_SHORT_FLAGS.has(c)) return false;
+        if (c === "t") hasT = true;
+      }
+      continue;
+    }
+    if (template !== null) return false;
+    template = tok;
+  }
+  if (template !== null) {
+    if (hasT) {
+      if (!template.includes("/")) return true;
+      const norm = normalizePath(template);
+      return /^\/(?:private\/)?(?:var\/)?tmp(?:\/|$)/.test(norm) && norm !== ".." && !norm.startsWith("../");
+    }
+    const norm = normalizePath(template);
+    return /^\/(?:private\/)?(?:var\/)?tmp(?:\/|$)/.test(norm) && norm !== ".." && !norm.startsWith("../");
+  }
+  return true;
+}
+
 function isMktempValue(raw: string): boolean {
   const s = raw.trim();
   const inner =
@@ -216,11 +258,11 @@ function isMktempValue(raw: string): boolean {
       : s;
   if (inner.startsWith("$(") && inner.endsWith(")")) {
     const body = inner.slice(2, -1).trim();
-    return /^mktemp(?:\s+[^);&|\n]+)?$/.test(body);
+    return isAllowedMktempCmd(body);
   }
   if (inner.startsWith("`") && inner.endsWith("`")) {
     const body = inner.slice(1, -1).trim();
-    return /^mktemp(?:\s+[^`;|\n]+)?$/.test(body);
+    return isAllowedMktempCmd(body);
   }
   return false;
 }
@@ -242,7 +284,7 @@ function isDirectMktemp(p: string): boolean {
     cmd = s.slice(1, end).trim();
     rest = s.slice(end + 1);
   }
-  if (!/^mktemp(?:\s+[^);&|\n]+)?$/.test(cmd)) return false;
+  if (!isAllowedMktempCmd(cmd)) return false;
   if (rest === "" || rest === "/") return true;
   if (!rest.startsWith("/")) return false;
   const norm = normalizePath(rest.slice(1));
@@ -983,20 +1025,6 @@ function unquotedParens(text: string): { opens: number; closes: number } {
     else if (c === ")") closes++;
   }
   return { opens, closes };
-}
-
-/** A grouping `( … )`, not `$(…)`, `<(…)`, `>(…)`, `name()`, or `name=(…)`. */
-function isGroupingSubshellOpen(text: string, i: number): boolean {
-  const prev = i > 0 ? (text[i - 1] as string) : "";
-  if (prev === "$" || prev === "<" || prev === ">" || prev === "=") return false;
-  let j = i - 1;
-  while (j >= 0 && /\s/.test(text[j] as string)) j--;
-  if (j >= 0 && /[A-Za-z0-9_]/.test(text[j] as string)) {
-    let k = i + 1;
-    while (k < text.length && /\s/.test(text[k] as string)) k++;
-    if (k < text.length && text[k] === ")") return false;
-  }
-  return true;
 }
 
 /**
