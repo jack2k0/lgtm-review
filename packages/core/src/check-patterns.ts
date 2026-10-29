@@ -89,9 +89,6 @@ function scanParenPair(input: string, start: number): boolean {
       } else if (quote === "$'") {
         if (c === "\\" && j + 1 < input.length) j++;
         else if (c === "'") quote = null;
-      } else if (quote === "`") {
-        if (c === "\\" && j + 1 < input.length) j++;
-        else if (c === "`") quote = null;
       }
       continue;
     }
@@ -104,7 +101,8 @@ function scanParenPair(input: string, start: number): boolean {
       j++;
       continue;
     }
-    if (c === "'" || c === '"' || c === "`") {
+    // Backticks are not skipped: splitSegments does not track them either, so both stay in step.
+    if (c === "'" || c === '"') {
       quote = c;
       continue;
     }
@@ -135,9 +133,6 @@ function scanBracketPair(input: string, start: number): boolean {
       } else if (quote === "$'") {
         if (c === "\\" && j + 1 < input.length) j++;
         else if (c === "'") quote = null;
-      } else if (quote === "`") {
-        if (c === "\\" && j + 1 < input.length) j++;
-        else if (c === "`") quote = null;
       }
       continue;
     }
@@ -150,7 +145,8 @@ function scanBracketPair(input: string, start: number): boolean {
       j++;
       continue;
     }
-    if (c === "'" || c === '"' || c === "`") {
+    // Backticks are not skipped: splitSegments does not track them either, so both stay in step.
+    if (c === "'" || c === '"') {
       quote = c;
       continue;
     }

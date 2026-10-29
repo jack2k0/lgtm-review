@@ -1270,4 +1270,17 @@ describe("status-accuracy-7 heredoc forms", () => {
     const r = classifyShellMutation("echo a\\ #b; sed -i s/a/b/ src/a.ts");
     expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
   });
+
+  test("sa10 review 2: a backtick with ) inside $(( splits like main; edit after ; is found", () => {
+    const r = classifyShellMutation("echo $((`echo )` ; sed -i s/a/b/ src/a.ts))");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
+
+  test("sa10 review 2: escape parity before #", () => {
+    // `a\\ #b`: the backslash is escaped, the space is not, so `#b; sed ...` is a comment (bash runs no sed).
+    expect(classifyShellMutation("echo a\\\\ #b; sed -i s/a/b/ src/a.ts").edits).toEqual([]);
+    // `a\\\ #b`: the space is escaped, so `#b` is a word and sed runs.
+    const r = classifyShellMutation("echo a\\\\\\ #b; sed -i s/a/b/ src/a.ts");
+    expect(r.edits.map((e) => e.file)).toEqual(["src/a.ts"]);
+  });
 });
