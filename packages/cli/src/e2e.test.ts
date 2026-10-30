@@ -365,4 +365,54 @@ describe("built CLI, --export", () => {
     expect(html).toContain("~/work");
     expect(r.stdout).toMatch(/\((?:[3-9]|\d\d+) redactions\)$/m);
   });
+
+  test("--raw without --list or --json => exit 1", () => {
+    const r = run(["--raw", "--projects-dir", projects, "--dir", PROJECT]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("--raw only works with --list or --json");
+  });
+
+  test("--list and --json redact secrets by default, --raw reveals them", () => {
+    const pdir = join(work, "projects-redact", "-home-user-project");
+    mkdirSync(pdir, { recursive: true });
+    const sid = "33333333-3333-4333-8333-333333333333";
+    const secret = "password=hunter2secret";
+    const rec = (type: string, n: number, message: unknown, extra: Record<string, unknown> = {}) =>
+      JSON.stringify({ ...extra, type, uuid: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`, sessionId: sid, timestamp: `2026-01-01T00:00:0${n}.000Z`, cwd: PROJECT, gitBranch: "main", version: "2.1.0", message });
+    const lines = [
+      rec("user", 1, { role: "user", content: `Run test with ${secret}` }),
+      rec("assistant", 2, { role: "assistant", content: [{ type: "tool_use", id: "t0", name: "Edit", input: { file_path: `${PROJECT}/src/a.ts`, old_string: "1", new_string: "2" } }] }),
+      rec("user", 3, { role: "user", content: [{ type: "tool_result", tool_use_id: "t0", content: "ok" }] }, {
+        toolUseResult: { type: "update", filePath: `${PROJECT}/src/a.ts`, oldString: "1", newString: "2", structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-1", "+2"] }] },
+      }),
+      rec("assistant", 4, { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "pnpm test" } }] }),
+      rec("user", 5, { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: `Exit code 1\nFAIL: check with ${secret} rejected`, is_error: true }] }),
+    ];
+    writeFileSync(join(pdir, `${sid}.jsonl`), lines.join("\n") + "\n");
+    const projDir = join(work, "projects-redact");
+
+    // 1. Default --list: secret does not appear, [redacted:secret] appears
+    const listDef = run(["--list", "--projects-dir", projDir, "--dir", PROJECT], { NO_COLOR: "1" });
+    expect(listDef.status).toBe(0);
+    expect(listDef.stdout).not.toContain("hunter2secret");
+    expect(listDef.stdout).toContain("[redacted:secret]");
+
+    // 2. Default --json: secret does not appear, [redacted:secret] appears
+    const jsonDef = run(["--list", "--json", "--projects-dir", projDir, "--dir", PROJECT]);
+    expect(jsonDef.status).toBe(0);
+    expect(jsonDef.stdout).not.toContain("hunter2secret");
+    expect(jsonDef.stdout).toContain("[redacted:secret]");
+    expect(() => Analysis.parse(JSON.parse(jsonDef.stdout))).not.toThrow();
+
+    // 3. --list --raw: secret appears
+    const listRaw = run(["--list", "--raw", "--projects-dir", projDir, "--dir", PROJECT], { NO_COLOR: "1" });
+    expect(listRaw.status).toBe(0);
+    expect(listRaw.stdout).toContain("hunter2secret");
+
+    // 4. --json --raw: secret appears
+    const jsonRaw = run(["--json", "--raw", "--projects-dir", projDir, "--dir", PROJECT]);
+    expect(jsonRaw.status).toBe(0);
+    expect(jsonRaw.stdout).toContain("hunter2secret");
+    expect(() => Analysis.parse(JSON.parse(jsonRaw.stdout))).not.toThrow();
+  });
 });

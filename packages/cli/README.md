@@ -5,7 +5,7 @@ CLI. Run `npx lgtm-review`.
 ## Usage
 
 ```
-npx lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>] [--no-worktrees] [--llm-url <url> --llm-model <name> [--llm-cache-dir <dir>]] [--version] [--help]
+npx lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--raw] [--no-open] [--port <n>] [--no-worktrees] [--llm-url <url> --llm-model <name> [--llm-cache-dir <dir>]] [--version] [--help]
 ```
 
 Without flags the command starts a local web UI for the Claude Code sessions of the current repository, prints its URL and opens it in your browser. Press Ctrl+C to stop.
@@ -14,7 +14,8 @@ Without flags the command starts a local web UI for the Claude Code sessions of 
 - `--projects-dir <path>` sets the Claude Code projects directory (default: `~/.claude/projects`).
 - `--archive` mirrors new or updated session logs of this repository to a private local archive (see Archive below).
 - `--archive-dir <path>` sets the local archive root directory (default: `$LGTM_REVIEW_ARCHIVE` or `~/.lgtm-review/archive`).
-- `--list` prints the sessions and their prompt statuses in the terminal instead of starting the UI (`--json` prints the analysis as JSON).
+- `--list` prints the sessions and their prompt statuses in the terminal instead of starting the UI (`--json` prints the analysis as JSON). Output is redacted best-effort.
+- `--raw` prints log text unredacted (only valid with `--list` or `--json`).
 - `--summary` prints a markdown review summary of one session (see below); `--session <id-prefix>` picks the session (default: the newest), `--no-titles` leaves prompt titles out.
 - `--no-open` prints the URL without opening a browser.
 - `--no-worktrees` shows only the sessions of `--dir`, not of the repository's other git worktrees.
