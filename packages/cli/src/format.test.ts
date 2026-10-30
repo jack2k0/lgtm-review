@@ -152,3 +152,33 @@ describe("formatText", () => {
     expect(() => Analysis.parse(redacted)).not.toThrow();
   });
 });
+
+describe("redacted branch name", () => {
+  test("a secret in the branch name does not reach --list output", () => {
+    const secret = "gh" + "p_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
+    const session = { sessionId: "s1", title: "t", branch: secret, startedAt: null, prompts: [], warnings: [] } as unknown as SessionAnalysis;
+    expect(formatText([session], { color: false, dir: "/r" })).not.toContain(secret);
+  });
+});
+
+describe("log-supplied metadata", () => {
+  const secret = "gh" + "p_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
+  const session = { sessionId: "s1", title: "t", branch: "main", startedAt: secret, prompts: [{ index: 0, uuid: secret, text: "x", reason: "r", status: "no-changes", files: [] }], warnings: [] } as unknown as SessionAnalysis;
+
+  test("a secret in the timestamp does not reach --list output", () => {
+    expect(formatText([session], { color: false, dir: "/r" })).not.toContain(secret);
+  });
+
+  test("a secret in startedAt or uuid does not reach --json output", () => {
+    expect(JSON.stringify(redactAnalysis({ dir: "/r", sessions: [session] }))).not.toContain(secret);
+  });
+
+  test("a normal timestamp and uuid stay readable", () => {
+    const ts = "2026-10-01T10:00:00.000Z";
+    const uuid = "00000000-0000-4000-8000-000000000001";
+    const ok = { ...session, startedAt: ts, prompts: [{ ...session.prompts[0], uuid }] } as unknown as SessionAnalysis;
+    const out = JSON.stringify(redactAnalysis({ dir: "/r", sessions: [ok] }));
+    expect(out).toContain(ts);
+    expect(out).toContain(uuid);
+  });
+});

@@ -32,17 +32,15 @@ const EXEMPT_KEYS = new Set([
   "sessionId",
   "inheritedFrom",
   "status",
-  "startedAt",
   "kind",
   "rule",
   "severity",
   "recommendation",
-  "uuid",
 ]);
 
 /**
  * Walks an `Analysis` object and redacts every string value, keeping keys, numbers, and structure.
- * `sessionId`, `status`, timestamps (`startedAt`), schema enums and top-level `dir` are preserved.
+ * `sessionId`, `status`, schema enums and `dir` are preserved; log-supplied values such as `startedAt` and `uuid` go through the redactor.
  */
 export function redactAnalysis(
   analysis: Analysis,
@@ -126,7 +124,7 @@ export function formatText(sessions: SessionAnalysis[], opts: FormatOptions): st
       .join(", ");
     const archived = (s.archived ? " (archived)" : "") + (s.worktree !== undefined && s.worktree !== "." ? ` [worktree ${s.worktree}]` : "");
     out.push(
-      `${paint(opts, "1", s.sessionId.slice(0, 8))}  ${oneLine(red(s.title), 60)}  [${s.branch}]  ${s.startedAt ?? "unknown start"}${archived}`,
+      `${paint(opts, "1", s.sessionId.slice(0, 8))}  ${oneLine(red(s.title), 60)}  [${red(s.branch)}]  ${red(s.startedAt ?? "unknown start")}${red(archived)}`,
     );
     out.push(`  ${own.length} prompt(s)${counts ? `: ${counts}` : ""}${inh ? ` (+${inh.count} inherited from ${inh.from.slice(0, 8)}${inheritedOthers(inh)})` : ""}`);
     for (const p of s.prompts) {

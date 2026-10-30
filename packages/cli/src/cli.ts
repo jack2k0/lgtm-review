@@ -299,7 +299,7 @@ async function main(): Promise<number> {
     console.error(`lgtm-review: invalid --session "${values.session}" (expected the start of a session id)`);
     return 1;
   }
-  if (values.raw && !values.list && !values.json) {
+  if (values.raw && ((!values.list && !values.json) || values.summary || exporting)) {
     console.error("lgtm-review: --raw only works with --list or --json");
     return 1;
   }
