@@ -197,6 +197,100 @@ describe("extractPythonImports", () => {
     expect(extractPythonImports("   \n\n  ")).toEqual([]);
     expect(extractPythonImports("x = 10\nprint('hello')")).toEqual([]);
   });
+
+  test("ignores import text inside a nested same-quote f-string spanning lines (PEP 701, L2)", () => {
+    const src = ["x = f\"\"\"{f\"\"\"", "import fake", "\"\"\"}\"\"\"", "import os"].join("\n");
+
+    expect(extractPythonImports(src)).toEqual([{ module: "os", names: [], line: 4 }]);
+  });
+
+  test("ignores import text in a nested f-string on its own field lines (PEP 701, L2)", () => {
+    const src = ["x = f\"\"\"", "{f\"\"\"import fake\"\"\"}", "\"\"\"", "import os"].join("\n");
+
+    expect(extractPythonImports(src)).toEqual([{ module: "os", names: [], line: 4 }]);
+  });
+
+  test("keeps imports after PEP 701 nested and escaped-brace f-strings (L2)", () => {
+    // Each line is a statement on its own; compare with python3: only the `import` after the
+    // f-string is real, the text inside the f-string never is.
+    expect(extractPythonImports("f\"{x + f'{y}'}\"; import re")).toEqual([
+      { module: "re", names: [], line: 1 },
+    ]);
+    expect(extractPythonImports(["f\"{'a' if b else \"c\"}\"", "import sys"].join("\n"))).toEqual([
+      { module: "sys", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports(["f\"{f\"{y}\"}\"", "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports("f\"{{}}\"; import os")).toEqual([
+      { module: "os", names: [], line: 1 },
+    ]);
+    expect(extractPythonImports("f\"{v:{w}}\"; import os")).toEqual([
+      { module: "os", names: [], line: 1 },
+    ]);
+    expect(extractPythonImports("x = f\"{v:{'import fake'}}\"\nimport os")).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports(["x = f\"\"\"{f\"\"\"a\"\"\"}{f\"\"\"b\"\"\"}\"\"\"", "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+  });
+
+  test("comment shapes stay comments even with string markers (L1)", () => {
+    expect(extractPythonImports(["s = 'x'  # '''", "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports(["'''doc'''  # \"\"\" docstring-like", "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports(["from django.db.models import (", "    CharField,  # \"\"\"", ")", "import os"].join("\n"))).toEqual([
+      { module: "django.db.models", names: ["CharField"], line: 1 },
+      { module: "os", names: [], line: 4 },
+    ]);
+  });
+
+  test("treats any f/F anywhere in the string prefix run as an f-string (review)", () => {
+    // Both snippets parse in python3 3.14 with only the trailing import: the Rf f-string hides
+    // `import fake` behind a nested spanning-lines triple f-string, the rf f-string must not
+    // swallow `import m1` behind it.
+    expect(extractPythonImports(['x = Rf"{f"""', "import fake", '"""}"', "import m3"].join("\n"))).toEqual([
+      { module: "m3", names: [], line: 4 },
+    ]);
+    expect(extractPythonImports(['x = rf"import fake}}{f"""', "", '"""=:}"', "import m1"].join("\n"))).toEqual([
+      { module: "m1", names: [], line: 4 },
+    ]);
+  });
+
+  test("an escaped backslash cannot swallow the closing quote of an f-string (review)", () => {
+    // Both snippets parse in python3 3.14 (os@2 / os@1): `\\` is one escape consuming the second
+    // backslash, so the next quote still closes the string (regression vs main).
+    expect(extractPythonImports(['x = f"""a\\\\"""', "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports('x = f"abc\\\\" ; import os')).toEqual([
+      { module: "os", names: [], line: 1 },
+    ]);
+  });
+
+  test("an aborted triple-quoted f-string keeps blanking inside it (review)", () => {
+    // Syntax errors in CPython; the scanner keeps main's behaviour: an unterminated field or
+    // nested string never re-enters code state inside the still-open triple f-string, so string
+    // text (`fake@2`) is never reported and the rest of the string stays blanked.
+    expect(extractPythonImports(['x = f"""{\'abc', "import fake", '"""', "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 4 },
+    ]);
+    expect(extractPythonImports(["s = f\"\"\"{x", "import fake", '"""', "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 4 },
+    ]);
+  });
+
+  test("deeply nested f-strings hit the nesting cap instead of overflowing the stack (review)", () => {
+    // CPython rejects 150 or more nested f-strings; the only guarantee is that the
+    // scan returns instead of throwing RangeError (a hostile file could abort a map build).
+    let src = "x";
+    for (let k = 0; k < 5000; k++) src = `f"{${src}}"`;
+    expect(() => extractPythonImports(`y = ${src}\nimport os\n`)).not.toThrow();
+  });
 });
 
 describe("createPythonResolver", () => {
