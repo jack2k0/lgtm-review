@@ -374,7 +374,7 @@ Follow-up rule rounds on real logs after S-20 (round 2), merged into main; track
 | S-27 | docs-refresh       | read a current README (status, Map, Play, install truth) and grouped `--help`                            | S    | Medium | S-25        | NFR docs match behaviour       | done (2026-10-30) |
 | S-28 | cli-dedupe         | (internal) one shared session-analysis path, a smaller `main()`, shared path helpers                     | S    | High | S-23          | Maintainability                | done (2026-10-30) |
 | S-29 | ui-browser         | use the UI on narrow screens, with Esc going back, less cross-check noise, highlighted diffs; browser tests | L  | Medium | S-26        | FR-005, FR-006, FR-019         | done (2026-10-30; e2e job not yet run on GitHub) |
-| S-30 | rule-files-split   | (internal) `shell-edits.ts` and `check-patterns.ts` split into modules with no behaviour change          | L    | High + audit | S-24, S-28 | Maintainability              | planned |
+| S-30 | rule-files-split   | (internal) `shell-edits.ts` and `check-patterns.ts` split into modules with no behaviour change          | L    | High + audit | S-24, S-28 | Maintainability              | done (2026-10-30) |
 
 Order: S-22 → S-23 → S-24 → S-25 → S-26 ‖ S-27 → S-28 → S-29 → S-30. At most two in flight. S-30 is last so a refactor never mixes with rule fixes; it is dropped if its PRE/POST audit is not byte-identical.
 
