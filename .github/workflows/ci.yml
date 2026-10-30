@@ -81,4 +81,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: node scripts/gate.mjs --base origin/${{ github.base_ref }} || [ $? -eq 2 ]
+      # A change branch brings its plan, whose gate block sets scope, goldens, deps and schema. Exit 2 needs a look, not a failure.
+      - env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          plan="context/changes/${HEAD#change/}/plan.md"
+          if [ -f "$plan" ]; then set -- --plan "$plan"; fi
+          node scripts/gate.mjs --base "origin/$BASE" "$@" || [ $? -eq 2 ]
