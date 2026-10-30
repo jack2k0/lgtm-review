@@ -1,6 +1,16 @@
 {
   "name": "lgtm-review",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Review what a coding agent did in a Claude Code session",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jack2k0/lgtm-review.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/jack2k0/lgtm-review#readme",
+  "bugs": {
+    "url": "https://github.com/jack2k0/lgtm-review/issues"
+  },
   "type": "module",
   "license": "Apache-2.0",
   "bin": { "lgtm-review": "dist/cli.js" },
