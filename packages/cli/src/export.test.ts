@@ -162,6 +162,10 @@ describe("exportDate: SOURCE_DATE_EPOCH", () => {
     expect(exportDate({ SOURCE_DATE_EPOCH: "0" })).toBe("1970-01-01");
   });
 
+  test("a date after year 2243 is still honoured (the cap is the Date maximum, not 8.64e12 ms)", () => {
+    expect(exportDate({ SOURCE_DATE_EPOCH: "10000000000" })).toBe("2286-11-20");
+  });
+
   test("a valid value gives its date in UTC YYYY-MM-DD", () => {
     const start = Date.parse("2026-03-02T09:00:00.000Z") / 1000; // the demo session start
     expect(exportDate({ SOURCE_DATE_EPOCH: String(start) })).toBe("2026-03-02");
