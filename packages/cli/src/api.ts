@@ -1,6 +1,7 @@
-import { realpathSync } from "node:fs";
-import { stat } from "node:fs/promises";
+import { constants, realpathSync } from "node:fs";
+import { access, stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { join } from "node:path";
 import { analyzeFile, analyzeFileDetail, discoverRootSessions, gitCrosscheck, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile, type SessionRoot } from "@lgtm/core/node";
 import { buildBeats, condenseForTitle, inheritedSource, markInherited, needsAttention, ownershipRanks } from "@lgtm/core";
 import type { Analyzer, GitCrosscheckResponse, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
@@ -113,14 +114,35 @@ export function createApi(opts: ServerOptions): ApiHandler {
     }
   }
 
-  async function detailFor(f: SessionFile): Promise<DetailEntry | null> {
+  /** mtime:ctime:size from stat if readable, '-' if missing, or a changing error token if unreadable (fail closed). */
+  async function statFingerprint(path: string): Promise<string> {
+    try {
+      await access(path, constants.R_OK);
+      const st = await stat(path);
+      return `${st.mtimeMs}:${st.ctimeMs}:${st.size}`;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return "-";
+      return `err:${Date.now()}:${Math.random()}`;
+    }
+  }
+
+  /** Cheap fingerprint of the exact inputs loadRepoScripts reads: package.json, Makefile, and scripts/ */
+  async function repoScriptsStamp(root: string): Promise<string> {
+    const pkg = await statFingerprint(join(root, "package.json"));
+    const mk = await statFingerprint(join(root, "Makefile"));
+    const sc = await statFingerprint(join(root, "scripts"));
+    return `${root}:${pkg}:${mk}:${sc}`;
+  }
+
+  async function detailFor(f: SessionFile, repoStamp?: string): Promise<DetailEntry | null> {
     let size: number;
     try {
       size = (await stat(f.path)).size;
     } catch {
       return null;
     }
-    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}\0${f.worktree ?? ""}`;
+    const stamp = repoStamp ?? (await repoScriptsStamp(f.root ?? opts.dir));
+    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}:${stamp}\0${f.worktree ?? ""}`;
     let hit = detailCache.get(f.path);
     if (hit && hit.key === key) {
       detailCache.delete(f.path); // refresh recency
@@ -153,14 +175,15 @@ export function createApi(opts: ServerOptions): ApiHandler {
     }
   }
 
-  async function analysisFor(f: SessionFile): Promise<SessionAnalysis | null> {
+  async function analysisFor(f: SessionFile, repoStamp?: string): Promise<SessionAnalysis | null> {
     let size: number;
     try {
       size = (await stat(f.path)).size;
     } catch {
       return null;
     }
-    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}\0${f.worktree ?? ""}`;
+    const stamp = repoStamp ?? (await repoScriptsStamp(f.root ?? opts.dir));
+    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}:${stamp}\0${f.worktree ?? ""}`;
     let entry = cache.get(f.path);
     if (!entry || entry.key !== key) {
       const analysis = loadRepoScripts(f.root ?? opts.dir).then(async (repo) => {
@@ -194,11 +217,17 @@ export function createApi(opts: ServerOptions): ApiHandler {
   }
 
   /** Stamp of the whole project: inheritance depends on every session file, so every ETag carries it. */
-  async function projectStamp(files: SessionFile[]): Promise<string> {
+  async function projectStamp(files: SessionFile[], repoStamps?: Map<string, string>): Promise<string> {
     const versions: string[] = [];
     for (const f of files) {
       const v = await versionOf(f); // a file that vanished since discovery is skipped
       if (v !== null) versions.push(v);
+    }
+    const rootDirs = [...new Set([opts.dir, ...roots.map((r) => r.dir), ...files.map((f) => f.root ?? opts.dir)])].sort();
+    for (const r of rootDirs) {
+      const s = await repoScriptsStamp(r);
+      repoStamps?.set(r, s);
+      versions.push(s);
     }
     return versions.join("\0");
   }
@@ -206,12 +235,13 @@ export function createApi(opts: ServerOptions): ApiHandler {
   let allAnalysesCache: { stamp: string; result: Promise<SessionAnalysis[]> } | null = null;
 
   /** All readable sessions of the project with inheritance marked, cached per project stamp. */
-  function allAnalyses(files: SessionFile[], stamp: string): Promise<SessionAnalysis[]> {
+  function allAnalyses(files: SessionFile[], stamp: string, repoStamps?: ReadonlyMap<string, string>): Promise<SessionAnalysis[]> {
     if (allAnalysesCache && allAnalysesCache.stamp === stamp) return allAnalysesCache.result;
     const result = (async () => {
       const sessions: SessionAnalysis[] = [];
       for (const f of files) {
-        const a = await analysisFor(f); // sequential on purpose
+        const repoStamp = repoStamps?.get(f.root ?? opts.dir);
+        const a = await analysisFor(f, repoStamp); // sequential on purpose
         if (a) sessions.push(a);
       }
       return markInherited(sessions);
@@ -243,7 +273,15 @@ export function createApi(opts: ServerOptions): ApiHandler {
   }
 
   /** `/prompts/:index` and `/prompts/:index/diff?path=`. `path` is only ever compared with the prompt's own file list. */
-  async function promptRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, stamp: string | null, rawIndex: string, isDiff: boolean): Promise<boolean> {
+  async function promptRoute(
+    req: IncomingMessage,
+    res: ServerResponse,
+    file: SessionFile | undefined,
+    stamp: string | null,
+    rawIndex: string,
+    isDiff: boolean,
+    repoStamp?: string,
+  ): Promise<boolean> {
     if (!INDEX_RE.test(rawIndex)) {
       sendJson(req, res, 400, { error: "bad request" });
       return true;
@@ -260,7 +298,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
     }
     const etag = file && stamp !== null ? etagFor(`${isDiff ? "diff" : "prompt"}\0${file.id}\0${stamp}\0${index}\0${wanted ?? ""}`) : null;
     if (file && etag && notModifiedEarly(req, res, etag)) return true;
-    const d = file ? await detailFor(file) : null;
+    const d = file ? await detailFor(file, repoStamp) : null;
     const prompt = d?.analysis.prompts[index];
     if (!d || !prompt) return false;
     if (wanted === undefined) {
@@ -297,21 +335,29 @@ export function createApi(opts: ServerOptions): ApiHandler {
     return INDEX_RE.test(found) ? Number(found) : "bad";
   }
 
-  async function mapRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, files: SessionFile[], stamp: string): Promise<boolean> {
+  async function mapRoute(
+    req: IncomingMessage,
+    res: ServerResponse,
+    file: SessionFile | undefined,
+    files: SessionFile[],
+    stamp: string,
+    repoStamps?: ReadonlyMap<string, string>,
+  ): Promise<boolean> {
     const prompt = promptQuery(req.url ?? "");
     if (prompt === "bad") {
       sendJson(req, res, 400, { error: "bad request" });
       return true;
     }
     if (!file || (await versionOf(file)) === null) return false;
-    const analysis = (await allAnalyses(files, stamp)).find((x) => x.sessionId === file.id);
+    const analysis = (await allAnalyses(files, stamp, repoStamps)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     if (prompt !== null) {
       const p = analysis.prompts[prompt];
       if (!p || p.inheritedFrom !== undefined) return false;
     }
+    const repoStamp = repoStamps?.get(file.root ?? opts.dir);
     const plan = await planImportMap(file.root ?? opts.dir, analysis, prompt, opts.mapCaps, async () => {
-      const d = await detailFor(file);
+      const d = await detailFor(file, repoStamp);
       if (!d) return null;
       return {
         diffFor: (idx: number, path: string) => d.analyzer.diffFor(idx, path),
@@ -340,6 +386,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
     files: SessionFile[],
     stamp: string,
     rawIndex: string,
+    repoStamps?: ReadonlyMap<string, string>,
   ): Promise<boolean> {
     if (!INDEX_RE.test(rawIndex)) {
       sendJson(req, res, 400, { error: "bad request" });
@@ -347,14 +394,15 @@ export function createApi(opts: ServerOptions): ApiHandler {
     }
     const index = Number(rawIndex);
     if (!file || (await versionOf(file)) === null) return false;
-    const analysis = (await allAnalyses(files, stamp)).find((x) => x.sessionId === file.id);
+    const analysis = (await allAnalyses(files, stamp, repoStamps)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     const prompt = analysis.prompts[index];
     if (!prompt) return false;
     if (prompt.inheritedFrom !== undefined) return false;
 
     let detailPromise: Promise<DetailEntry | null> | undefined;
-    const detail = (): Promise<DetailEntry | null> => (detailPromise ??= detailFor(file));
+    const repoStamp = repoStamps?.get(file.root ?? opts.dir);
+    const detail = (): Promise<DetailEntry | null> => (detailPromise ??= detailFor(file, repoStamp));
     const plan = await planImportMap(file.root ?? opts.dir, analysis, index, opts.mapCaps, async () => {
       const d = await detail();
       const promptDetail = d?.details[index];
@@ -424,9 +472,16 @@ export function createApi(opts: ServerOptions): ApiHandler {
     return true;
   }
 
-  async function gitRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, files: SessionFile[], stamp: string): Promise<boolean> {
+  async function gitRoute(
+    req: IncomingMessage,
+    res: ServerResponse,
+    file: SessionFile | undefined,
+    files: SessionFile[],
+    stamp: string,
+    repoStamps?: ReadonlyMap<string, string>,
+  ): Promise<boolean> {
     if (!file || (await versionOf(file)) === null) return false;
-    const analysis = (await allAnalyses(files, stamp)).find((x) => x.sessionId === file.id);
+    const analysis = (await allAnalyses(files, stamp, repoStamps)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     const sessionFiles = [...new Set(analysis.prompts.filter((p) => p.inheritedFrom === undefined).flatMap((p) => p.files.map((f) => f.path)))];
     const result = await gitCrosscheck({ dir: file.root ?? opts.dir, branch: analysis.branch, startedAt: analysis.startedAt, endedAtMs: file.mtimeMs, sessionFiles });
@@ -440,14 +495,21 @@ export function createApi(opts: ServerOptions): ApiHandler {
    * Without a titler the body is `{enabled:false}` and no prompt is analysed.
    * With one, own prompts are enqueued; this handler does not build prompt details and does not wait.
    */
-  async function titlesRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, files: SessionFile[], stamp: string): Promise<boolean> {
+  async function titlesRoute(
+    req: IncomingMessage,
+    res: ServerResponse,
+    file: SessionFile | undefined,
+    files: SessionFile[],
+    stamp: string,
+    repoStamps?: ReadonlyMap<string, string>,
+  ): Promise<boolean> {
     const version = file ? await versionOf(file) : null;
     if (!file || version === null) return false;
     if (opts.llm === undefined) {
       sendJson(req, res, 200, { enabled: false, titles: {}, pending: 0, error: null });
       return true;
     }
-    const analysis = (await allAnalyses(files, stamp)).find((x) => x.sessionId === file.id);
+    const analysis = (await allAnalyses(files, stamp, repoStamps)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     const own: number[] = [];
     for (let i = 0; i < analysis.prompts.length; i++) {
@@ -461,8 +523,9 @@ export function createApi(opts: ServerOptions): ApiHandler {
       repoDir = rootDir;
     }
     const redactOpts = { repoDir, usernames: [...osUsernames()] };
+    const repoStamp = repoStamps?.get(file.root ?? opts.dir);
     opts.llm.enqueue(file.id, `${version}\0${stamp}`, own, async (index) => {
-      const d = await detailFor(file);
+      const d = await detailFor(file, repoStamp);
       const prompt = d?.analysis.prompts[index];
       if (!d || !prompt || prompt.inheritedFrom !== undefined) return null;
       return { input: condenseForTitle(prompt, d.details[index] ?? null, redactOpts), redact: redactOpts };
@@ -479,11 +542,12 @@ export function createApi(opts: ServerOptions): ApiHandler {
     if (!match) return false;
     try {
       const files = await discover();
-      const stamp = await projectStamp(files);
+      const repoStamps = new Map<string, string>();
+      const stamp = await projectStamp(files, repoStamps);
       if (match[1] === undefined) {
         const etag = etagFor(`list\0${stamp}`);
         if (notModifiedEarly(req, res, etag)) return true;
-        const sessions = await allAnalyses(files, stamp);
+        const sessions = await allAnalyses(files, stamp, repoStamps);
         reply(req, res, etag, { dir: opts.dir, sessions: sortSessions(sessions).map((x) => summarize(x, sessions)) });
         return true;
       }
@@ -495,15 +559,18 @@ export function createApi(opts: ServerOptions): ApiHandler {
       }
       // The id is only ever compared against the discovered list; it never becomes a path.
       const file = files.find((f) => f.id === id);
-      if (match[4] !== undefined) return await mapRoute(req, res, file, files, stamp);
-      if (match[5] !== undefined) return await gitRoute(req, res, file, files, stamp);
-      if (match[6] !== undefined) return await titlesRoute(req, res, file, files, stamp);
-      if (match[3] === "/play") return await playRoute(req, res, file, files, stamp, match[2]);
-      if (match[2] !== undefined) return await promptRoute(req, res, file, file ? stamp : null, match[2], match[3] === "/diff");
+      if (match[4] !== undefined) return await mapRoute(req, res, file, files, stamp, repoStamps);
+      if (match[5] !== undefined) return await gitRoute(req, res, file, files, stamp, repoStamps);
+      if (match[6] !== undefined) return await titlesRoute(req, res, file, files, stamp, repoStamps);
+      if (match[3] === "/play") return await playRoute(req, res, file, files, stamp, match[2], repoStamps);
+      if (match[2] !== undefined) {
+        const repoStamp = file ? repoStamps.get(file.root ?? opts.dir) : undefined;
+        return await promptRoute(req, res, file, file ? stamp : null, match[2], match[3] === "/diff", repoStamp);
+      }
       if (!file || (await versionOf(file)) === null) return false;
       const etag = etagFor(`session\0${file.id}\0${stamp}`);
       if (notModifiedEarly(req, res, etag)) return true;
-      const analysis = (await allAnalyses(files, stamp)).find((x) => x.sessionId === file.id);
+      const analysis = (await allAnalyses(files, stamp, repoStamps)).find((x) => x.sessionId === file.id);
       if (!analysis) return false;
       reply(req, res, etag, analysis);
       return true;
