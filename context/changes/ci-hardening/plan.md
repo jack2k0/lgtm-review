@@ -6,7 +6,7 @@
 
 ## Phase 1
 
-Files: `.github/workflows/ci.yml`, root `package.json`, `turbo.json`, `pnpm-lock.yaml`, `eslint.config.mjs` (new), `packages/core/package.json`, `packages/cli/package.json`, `packages/web/package.json`.
+Files: `.gitignore` (the coverage directory), `.github/workflows/ci.yml`, root `package.json`, `turbo.json`, `pnpm-lock.yaml`, `eslint.config.mjs` (new), `packages/core/package.json`, `packages/cli/package.json`, `packages/web/package.json`.
 
 1. Lint: add `eslint`, `typescript-eslint` at the root; flat config with `recommended` (not type-checked) over `packages/*/src` and `scripts`, ignoring `dist`, fixtures and `__golden__`. Every rule with an existing violation is set to `warn` with no source edits; `pnpm lint` exits 0 on warnings and non-zero on errors. Each package gets a `lint` script, or the root runs it once, whichever fits `turbo.json`. Not part of `pnpm check`; CI runs `pnpm lint` as its own step.
 2. Coverage: add `@vitest/coverage-v8` at the version matching vitest; a `test:coverage` script in core and cli (the perf exclusion stays); a CI job on Ubuntu Node 22 that runs it and uploads the reports with `actions/upload-artifact`. No thresholds.
@@ -25,6 +25,7 @@ Fixing lint warnings, source edits of any kind, thresholds, pinning actions, rel
 allow: ^\.github/workflows/ci\.yml$
 allow: ^package\.json$
 allow: ^turbo\.json$
+allow: ^\.gitignore$
 allow: ^pnpm-lock\.yaml$
 allow: ^eslint\.config\.mjs$
 allow: ^packages/(core|cli|web)/package\.json$

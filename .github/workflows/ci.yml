@@ -29,4 +29,63 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --audit-level=high
+      - run: pnpm lint
       - run: pnpm check
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @lgtm/core test:coverage
+      - run: pnpm --filter lgtm-review test:coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            packages/core/coverage
+            packages/cli/coverage
+
+  other-os:
+    # Removed when the job is green
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+
+  gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # A change branch brings its plan, whose gate block sets scope, goldens, deps and schema. Exit 2 needs a look, not a failure.
+      - env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          plan="context/changes/${HEAD#change/}/plan.md"
+          if [ -f "$plan" ]; then set -- --plan "$plan"; fi
+          node scripts/gate.mjs --base "origin/$BASE" "$@" || [ $? -eq 2 ]
