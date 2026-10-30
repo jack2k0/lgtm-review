@@ -34,6 +34,6 @@ jobs:
       - name: Publish to npm
         working-directory: packages/cli
         # pnpm rewrites workspace: ranges in the published manifest; npm would publish them as they are.
-        run: pnpm publish --no-git-checks --provenance --tag next
+        run: pnpm publish --no-git-checks --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
