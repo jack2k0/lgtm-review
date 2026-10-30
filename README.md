@@ -2,33 +2,58 @@
 
 Review what a coding agent did in a Claude Code session without reading every line: which prompts were checked, where the time went, what the agent did step by step, and what it changed.
 
-Monorepo: packages/core, packages/cli (published), packages/web.
+Monorepo: packages/core, packages/cli, packages/web.
 
-## Status (MVP)
+## What it does
 
-- S-01 sessions and prompt statuses (checked / unchecked / failing / no changes): done.
-- S-02 local web UI with the session list, prompt table and time split: done.
-- S-03 steps per prompt and per-file diffs from the log: done.
-- S-05 review hints per prompt (where to look, Skim / Read flagged / Read all) and `npx lgtm-review --summary`, a markdown summary for a PR description: done.
+- **Statuses**: heuristic classification of each prompt (`checked`, `unchecked`, `failing`, `no-changes`) based on whether tests or checks ran after code edits.
+- **Triage**: filter prompts by "Needs attention" (unchecked, failing, or carrying review hints) in the UI and session list; keyboard navigation (`↑`/`↓`, `Enter`/`Space`, `s` for steps, `m` for map, `Escape`).
+- **Steps and diffs**: vertical breakdown of agent actions per prompt (Read, Write, Check, Fix), check results, agent quotes, and per-file unified diffs showing what the agent edited from session logs (agent edits, not final git state).
+- **Review hints**: deterministic heuristics and recommendations (`Read all`, `Read flagged`, `Skim`) highlighting sensitive paths, tests modified during fix, removed assertions, skipped tests, unchecked edits, dependency changes, public surface, config changes, large changes, and scoped checks.
+- **Import map**: visual dependency graph of changed source files and 1-hop in-repo neighbours grouped by directory layer, highlighting new imports added by the session (TypeScript/JavaScript and Python).
+- **Play**: step-by-step playback replaying the prompt's file edits, new imports, and checks against the map.
+- **Git cross-check**: compares session log edits against read-only `git status` and commit history to highlight uncommitted/committed files not in the log, or log edits not in git.
+- **Worktrees**: automatically discovers linked git worktrees (`git worktree add`, `claude --worktree`) and presents sessions across all worktrees.
+- **Live refresh**: polls the local API every 5 seconds via conditional requests (`ETag`/`304`) to update running sessions live without losing scroll or expanded state.
+- **`--summary`**: prints a markdown review summary of a session (default: newest) for a PR description.
+- **`--export`**: writes a self-contained offline HTML file of a session (no JavaScript, best-effort secret redaction).
+- **`--archive`**: mirrors session logs to a private local archive directory so older sessions are not lost when Claude Code cleans up logs after `cleanupPeriodDays`.
+- **Local LLM titles**: optional one-sentence prompt titles generated via a local model server (Ollama, llama.cpp, LM Studio) over loopback HTTP.
 
-Not in the MVP: syntax highlighting, split diffs.
+See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
-## Run
+## Installation and running
 
+The package is not on npm yet. After the first release, you will be able to run it with `npx lgtm-review`. Until then, run it from a checkout (requires Node >= 22).
+
+### From a checkout
+
+```bash
+git clone https://github.com/jack2k0/lgtm-review.git
+cd lgtm-review
+corepack pnpm install --frozen-lockfile
+corepack pnpm check                 # typecheck, tests, build, pack smoke test, perf suite
+node packages/cli/dist/cli.js       # starts the local UI for the current repo
 ```
+
+CLI modes from a checkout:
+
+```bash
+node packages/cli/dist/cli.js --list     # terminal list (redacted best-effort; --raw prints unredacted log text)
+node packages/cli/dist/cli.js --summary  # markdown summary of a session for a PR description
+node packages/cli/dist/cli.js --export <id-prefix>  # self-contained HTML file of a session
+```
+
+### After the first release (`npx`)
+
+```bash
 npx lgtm-review            # starts the local UI for the sessions of the current repo
-npx lgtm-review --list     # terminal output instead of the UI (redacted best-effort; --raw for unredacted)
+npx lgtm-review --list     # terminal output instead of the UI (redacted best-effort; --raw prints unredacted log text)
 npx lgtm-review --summary  # markdown summary of a session for a PR description
-npx lgtm-review --export <id-prefix>  # self-contained HTML file of a session (redaction is best-effort: review it before sharing)
+npx lgtm-review --export <id-prefix>  # self-contained HTML file of a session (redaction is best-effort)
 ```
 
-From a checkout (Node >= 22, pnpm):
-
-```
-pnpm install --frozen-lockfile
-pnpm check                 # typecheck, tests, build and the pack smoke test
-node packages/cli/dist/cli.js
-```
+The `--raw` flag prints log text unredacted (only valid with `--list` or `--json`; by default secrets, repo paths, and usernames are redacted best-effort).
 
 Merge gate (run from a worktree; exit 0 pass, 1 hard fail, 2 needs a look):
 
