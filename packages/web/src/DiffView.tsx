@@ -1,4 +1,5 @@
 import type { FileDiff } from "@lgtm/core";
+import { highlightLine } from "./highlight";
 import { diffCounts, diffPrefix, kindLabel, plural, routeHref } from "./viewmodel";
 
 export const INCOMPLETE_NOTE = "may be incomplete (shell edits, removals and moves may be missing)";
@@ -34,12 +35,25 @@ export function DiffView({ sessionId, index, diff }: { sessionId: string; index:
           {diff.hunks.map((h, i) => (
             <span key={i} className="hunk">
               <span className="dl dl-hunk">{h.header}</span>
-              {h.lines.map((l, j) => (
-                <span key={j} className={`dl ${l.t === "+" ? "dl-add" : l.t === "-" ? "dl-del" : "dl-ctx"}`}>
-                  <span className="dp">{diffPrefix(l.t)}</span>
-                  {l.s}
-                </span>
-              ))}
+              {h.lines.map((l, j) => {
+                const tokens = highlightLine(l.s, diff.path);
+                return (
+                  <span key={j} className={`dl ${l.t === "+" ? "dl-add" : l.t === "-" ? "dl-del" : "dl-ctx"}`}>
+                    <span className="dp">{diffPrefix(l.t)}</span>
+                    {tokens.length === 0
+                      ? null
+                      : tokens.map((tok, k) =>
+                          tok.kind === "plain" ? (
+                            tok.text
+                          ) : (
+                            <span key={k} className={`tok-${tok.kind}`}>
+                              {tok.text}
+                            </span>
+                          ),
+                        )}
+                  </span>
+                );
+              })}
             </span>
           ))}
           </span>

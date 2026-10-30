@@ -41,6 +41,10 @@
   --live-lost: #9a3412;
   --map-band: #eef2f7;
   --map-edge: #6b7280;
+  --tok-keyword: #86198f;
+  --tok-string: #0369a1;
+  --tok-number: #c2410c;
+  --tok-comment: #4b5563;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -86,6 +90,10 @@
     --live-lost: #fdba74;
     --map-band: #151922;
     --map-edge: #9ca3af;
+    --tok-keyword: #e879f9;
+    --tok-string: #38bdf8;
+    --tok-number: #fb923c;
+    --tok-comment: #a3aab8;
   }
 }
 
@@ -111,6 +119,7 @@ main { padding-top: 12px; padding-bottom: 48px; }
 h2 { font-size: 16px; margin: 0 0 2px; }
 a { color: var(--link); }
 a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+summary { cursor: pointer; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
 .muted { color: var(--muted); }
 .error { color: var(--error); font-weight: 600; }
@@ -254,6 +263,10 @@ tr.detail > td { background: var(--surface); }
 .dl-hunk { background: var(--hunk-bg); color: var(--muted); font-weight: 600; margin-top: 2px; }
 .hunk:first-child > .dl-hunk { margin-top: 0; }
 .file-link { overflow-wrap: anywhere; }
+.tok-keyword { color: var(--tok-keyword); font-weight: 600; }
+.tok-string { color: var(--tok-string); }
+.tok-number { color: var(--tok-number); }
+.tok-comment { color: var(--tok-comment); font-style: italic; }
 
 .map-caption { margin: 0 0 6px; }
 .map-note { margin: 4px 0; font-size: 12.5px; }

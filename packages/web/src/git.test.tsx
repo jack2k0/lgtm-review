@@ -166,4 +166,25 @@ describe("GitView", () => {
     expect(closedDetails).toHaveLength(2);
     expect(closedDetails.every((d) => (d as HTMLDetailsElement).open)).toBe(false);
   });
+
+  test("notInGit is open at 20 rows and closed above that", async () => {
+    const files = (n: number) => Array.from({ length: n }, (_, i) => `f${i}.txt`);
+    const openView = await mount(<GitView data={makeGit({ notInGit: files(20) })} />);
+    const openDetails = openView.querySelector("details");
+    expect(openDetails).not.toBeNull();
+    expect(openDetails!.open).toBe(true);
+    expect(openDetails!.querySelector("summary")?.textContent).toBe(
+      "Edited in the log but not changed in git (20)",
+    );
+    expect(openView.querySelectorAll("li")).toHaveLength(20);
+
+    const closedView = await mount(<GitView data={makeGit({ notInGit: files(21) })} />);
+    const closedDetails = closedView.querySelector("details");
+    expect(closedDetails).not.toBeNull();
+    expect(closedDetails!.open).toBe(false);
+    expect(closedDetails!.querySelector("summary")?.textContent).toBe(
+      "Edited in the log but not changed in git (21)",
+    );
+    expect(closedView.querySelectorAll("li")).toHaveLength(21);
+  });
 });

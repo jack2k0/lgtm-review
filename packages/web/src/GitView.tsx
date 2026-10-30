@@ -109,15 +109,20 @@ export function GitView({
         </>
       )}
 
-      <h3>Edited in the log but not changed in git ({data.notInGit.length})</h3>
       {data.notInGit.length === 0 ? (
-        <p className="muted">Nothing.</p>
+        <>
+          <h3>Edited in the log but not changed in git (0)</h3>
+          <p className="muted">Nothing.</p>
+        </>
       ) : (
-        <ul>
-          {data.notInGit.map((path, i) => (
-            <li key={i}>{path}</li>
-          ))}
-        </ul>
+        <details open={data.notInGit.length <= 20}>
+          <summary>Edited in the log but not changed in git ({data.notInGit.length})</summary>
+          <ul>
+            {data.notInGit.map((path, i) => (
+              <li key={i}>{path}</li>
+            ))}
+          </ul>
+        </details>
       )}
 
       <p>{inBoth.size} files appear in both.</p>
