@@ -16,4 +16,4 @@ Cross-verification: the orchestrator (opus) reran every accepted finding's input
 | 8 | Important | redact.ts (redactAssign) | unquoted minimum is 4 after `:`, plan says 3 | haiku | opus: probe | deferred | see note; `=` keeps 3, `password: abc` stays unredacted |
 | 9 | Nit | redact.ts (SECRET_WORD) | `const pass = foo;` is redacted | haiku | opus | rejected | same as `password = foo`; fails closed |
 
-Note on 8: see the worker's report in the merge body; a 3-character value after `:` is left for a later round because YAML and prose values collide.
+Note on 8: raising coverage to 3 after `:` breaks the existing expectation `["key value short", "token: abc"]` in `redact.test.ts`, which the plan says not to edit, so the minimum stays 4 after `:` as the plan allowed. A secret of exactly 3 characters after `:` stays unredacted.
