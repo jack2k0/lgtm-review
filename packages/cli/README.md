@@ -175,6 +175,8 @@ Privacy: prompt titles and file paths can still reveal internal names, so read t
 npx lgtm-review --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]
 ```
 
+Set `SOURCE_DATE_EPOCH` for a reproducible export date.
+
 Writes one session as a single self-contained HTML file (default `lgtm-review-<first 8 chars of the id>.html` in the current directory) and prints its path and the number of redactions. `<id-prefix>` must match exactly one session. An existing output file is not overwritten unless you pass `--force`. `--no-diffs` leaves the file diffs out, `--no-titles` prints "Prompt N" instead of prompt titles. `--export` cannot be combined with `--list`, `--json`, `--summary` or `--session`.
 
 The file contains the prompt table with statuses and review hints, the steps of every prompt and (unless `--no-diffs`) the file diffs. It has no JavaScript and makes no external requests (a Content-Security-Policy meta tag forbids them), so it can be opened offline and attached to a PR or a chat.

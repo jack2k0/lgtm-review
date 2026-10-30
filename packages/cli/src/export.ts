@@ -65,6 +65,16 @@ export function osUsernames(env: NodeJS.ProcessEnv = process.env): string[] {
   return [...new Set(names)];
 }
 
+/**
+ * The exported banner date (`YYYY-MM-DD`, UTC). `SOURCE_DATE_EPOCH` (the reproducible-builds.org convention, an
+ * integer of seconds since the epoch) is used when `env` holds one, today otherwise; an invalid value is ignored.
+ */
+export function exportDate(env: NodeJS.ProcessEnv = process.env): string {
+  const ms = /^\d+$/.test(env.SOURCE_DATE_EPOCH ?? "") ? Number(env.SOURCE_DATE_EPOCH) * 1000 : NaN;
+  // 8640000000000 ms is the largest moment a Date can hold; anything past it is ignored like any other invalid value
+  return ms >= 0 && ms <= 8640000000000 ? new Date(ms).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+}
+
 export interface ExportCommand {
   dir: string;
   projectsDir: string;
@@ -231,7 +241,7 @@ export async function runExport(cmd: ExportCommand): Promise<number> {
     result = renderExport(input, {
       titles: cmd.titles,
       diffs: cmd.diffs,
-      exportedAt: new Date().toISOString().slice(0, 10),
+      exportedAt: exportDate(),
       redact: { usernames: osUsernames(), repoDir: file.root ?? cmd.dir },
       diffsCapped: capped,
     });
