@@ -6,15 +6,31 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./node": { "types": "./dist/node/index.d.ts", "default": "./dist/node/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "default": "./dist/node/index.js"
+    }
   },
   "scripts": {
     "build": "tsup src/index.ts src/node/index.ts --format esm --dts",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude '**/*.perf.test.ts'",
+    "test:coverage": "vitest run --coverage --exclude '**/*.perf.test.ts'",
     "test:perf": "vitest run perf.test"
   },
-  "dependencies": { "zod": "^4.6.6" },
-  "devDependencies": { "@types/node": "^22.0.0", "tsup": "^9.0.0", "vitest": "^4.1.12", "typescript": "^5.8.0" }
+  "dependencies": {
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.1.12",
+    "tsup": "^9.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.12"
+  }
 }
