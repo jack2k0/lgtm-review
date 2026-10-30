@@ -219,7 +219,9 @@ test.describe("E2E browser walkthrough", () => {
         setTimeout(() => {
           try {
             child.kill("SIGKILL");
-          } catch {}
+          } catch {
+            // Process might have already exited before SIGKILL.
+          }
           resolve();
         }, 3000);
       });

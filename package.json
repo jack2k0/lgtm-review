@@ -13,7 +13,7 @@
     "typecheck": "turbo run typecheck",
     "smoke": "turbo run smoke",
     "demo": "node scripts/build-demo.mjs",
-    "check": "turbo run typecheck test build smoke && turbo run test:perf --concurrency=1"
+    "check": "eslint . && turbo run typecheck test build smoke && turbo run test:perf --concurrency=1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
