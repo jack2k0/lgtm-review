@@ -378,6 +378,18 @@ Follow-up rule rounds on real logs after S-20 (round 2), merged into main; track
 
 Order: S-22 → S-23 → S-24 → S-25 → S-26 ‖ S-27 → S-28 → S-29 → S-30. At most two in flight. S-30 is last so a refactor never mixes with rule fixes; it is dropped if its PRE/POST audit is not byte-identical.
 
+### S-31: Windows support (proposed, owner decision)
+
+CI run 41141126575: 15 tests fail on `windows-latest` (the job is non-blocking; none of this is in the product's stated support today).
+
+- **Separators:** `projectDirFor` (6 tests in `node.test.ts`), `archiveDirFor`, `sessionRoots` (2 in `worktrees.test.ts`). Some may be real: Claude Code's project directory name on Windows must be checked before changing code.
+- **Real git:** `git.test.ts` (2 symlink tests, a tab in a file name, the crosscheck), `listWorktrees`. Tabs are not legal in Windows file names, and symlinks need privileges, so several are test assumptions.
+- **Timeouts:** `subagents.test.ts` (100 files) hits the 5 s test timeout.
+
+Options: **A** declare Linux and macOS only, in the README and `engines`-style note, drop `windows-latest` and the win32 branches in `open.ts` (S, recommended until someone asks for Windows, because nobody has run the product there). **B** full support: fix paths, skip impossible tests on win32, make the job blocking (M, needs a Windows machine for a real run; CI alone does not prove the UI works).
+
+The macOS failure is one test: `worktrees.test.ts:75` hard-codes `../../elsewhere/wt`. Proposed: expect `relative(tmp, "/elsewhere/wt")`. It needs the owner's OK because it changes an existing expectation.
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
