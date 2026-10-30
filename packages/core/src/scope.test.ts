@@ -145,3 +145,8 @@ describe("scopeGaps", () => {
     expect(scopeGaps(files, [])).toEqual(["/r/z.ts", "/r/a.ts"]);
   });
 });
+
+test("a dotted directory root is treated like a file root (fails towards a gap, never towards covered)", () => {
+  expect(scopeCovers("/r/packages/web/api.v2", "/r/packages/web/src/api/x.ts")).toBe(false);
+  expect(scopeCovers("/r/packages/web/api.v2", "/r/packages/web/api.v2/x.ts")).toBe(true);
+});

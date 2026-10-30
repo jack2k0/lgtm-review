@@ -1493,3 +1493,8 @@ describe("status-accuracy-7 heredoc forms", () => {
     expect(files("pnpm test > out.json && echo done > done.json")).toEqual(["done.json"]);
   });
 });
+
+test("an autofix run is an opaque write, not a check", () => {
+  expect(classifyShellMutation("pnpm exec eslint . --fix", null, ["/r"]).opaque).toBe(true);
+  expect(classifyShellMutation("biome check --write .", null, ["/r"]).opaque).toBe(true);
+});
