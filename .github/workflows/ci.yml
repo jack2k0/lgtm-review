@@ -52,6 +52,20 @@ jobs:
             packages/core/coverage
             packages/cli/coverage
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm --filter @lgtm/web test:e2e
+
   other-os:
     # Removed when the job is green
     continue-on-error: true
