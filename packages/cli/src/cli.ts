@@ -23,7 +23,9 @@ import { createTitler, defaultTitleCacheDir, parseLlmUrl, resolveTitleCacheDir }
 import { createLauncher, openBrowser, type Launcher } from "./open.js";
 import { startServer } from "./server.js";
 
-const VERSION = "0.0.0";
+declare const __LGTM_VERSION__: string;
+
+const VERSION = __LGTM_VERSION__;
 
 /** Real path of `p`; when it does not exist yet, the real path of its nearest existing parent plus the rest. */
 function realResolve(p: string): string {
