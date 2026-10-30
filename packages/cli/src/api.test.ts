@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { FileDiff, PromptDetail, SessionAnalysis, SessionsResponse, type PromptAnalysis } from "@lgtm/core";
+import { projectDirFor } from "@lgtm/core/node";
 import { summarize } from "./api.js";
 import { startServer, type RunningServer } from "./server.js";
 
@@ -17,9 +18,14 @@ let pdir: string;
 let srv: RunningServer;
 let empty: RunningServer;
 
-function get(s: RunningServer, path: string, token: string | null = s.token): Promise<{ status: number; headers: Record<string, unknown>; json: any }> {
+function get(
+  s: RunningServer,
+  path: string,
+  token: string | null = s.token,
+  extraHeaders?: Record<string, string>,
+): Promise<{ status: number; headers: Record<string, unknown>; json: any }> {
   return new Promise((resolve, reject) => {
-    const headers: Record<string, string> = { Host: `127.0.0.1:${s.port}` };
+    const headers: Record<string, string> = { Host: `127.0.0.1:${s.port}`, ...(extraHeaders ?? {}) };
     if (token !== null) headers["X-Lgtm-Token"] = token;
     request({ host: "127.0.0.1", port: s.port, path, headers }, (res) => {
       let b = "";
@@ -413,6 +419,72 @@ describe("cache", () => {
     expect(r.json.sessions.length).toBeGreaterThanOrEqual(ids.length);
     expect((await get(srv, "/api/sessions/garbage")).status).toBeLessThan(500);
     rmSync(join(pdir, "garbage.jsonl"));
+  });
+
+  test("editing a fixture repo's package.json script between two requests changes the ETag (no 304) and the status in the response; an unchanged repo still gives 304", async () => {
+    const repoDir = join(tmp, "repo-scripts-test");
+    mkdirSync(repoDir, { recursive: true });
+    writeFileSync(join(repoDir, "package.json"), JSON.stringify({ name: "test-repo", scripts: {} }));
+    const projDir = projectDirFor(repoDir, join(tmp, "projects"));
+    mkdirSync(projDir, { recursive: true });
+
+    const sess = [
+      { type: "user", cwd: repoDir, message: { content: "verify task" } },
+      { type: "assistant", cwd: repoDir, message: { content: [{ type: "tool_use", id: "e1", name: "Edit", input: { file_path: join(repoDir, "src/a.ts"), old_string: "1", new_string: "2" } }] } },
+      {
+        type: "user",
+        cwd: repoDir,
+        message: { content: [{ type: "tool_result", tool_use_id: "e1", content: "ok" }] },
+        toolUseResult: { type: "update", filePath: join(repoDir, "src/a.ts"), oldString: "1", newString: "2", structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-1", "+2"] }] },
+      },
+      { type: "assistant", cwd: repoDir, message: { content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "pnpm verify" } }] } },
+      { type: "user", cwd: repoDir, message: { content: [{ type: "tool_result", tool_use_id: "b1", content: "ok" }] } },
+    ].map((l) => JSON.stringify(l)).join("\n");
+    writeFileSync(join(projDir, "session-pkg.jsonl"), sess);
+
+    const repoSrv = await startServer({ dir: repoDir, projectsDir: join(tmp, "projects"), webRoot: join(tmp, "no-web") });
+    try {
+      const r1 = await get(repoSrv, "/api/sessions/session-pkg");
+      expect(r1.status).toBe(200);
+      const etag1 = r1.headers.etag as string;
+      expect(etag1).toBeDefined();
+      expect(r1.json.prompts[0].status).toBe("unchecked");
+
+      // Unchanged repo gives 304
+      const r2 = await get(repoSrv, "/api/sessions/session-pkg", repoSrv.token, { "If-None-Match": etag1 });
+      expect(r2.status).toBe(304);
+
+      // Edit package.json to add the verify script
+      writeFileSync(join(repoDir, "package.json"), JSON.stringify({ name: "test-repo", scripts: { verify: "exit 0" } }));
+
+      // Changed package.json: ETag changes, no 304, status changes to checked
+      const r3 = await get(repoSrv, "/api/sessions/session-pkg", repoSrv.token, { "If-None-Match": etag1 });
+      expect(r3.status).toBe(200);
+      expect(r3.headers.etag).not.toBe(etag1);
+      expect(r3.json.prompts[0].status).toBe("checked");
+
+      // Unchanged after edit gives 304
+      const r4 = await get(repoSrv, "/api/sessions/session-pkg", repoSrv.token, { "If-None-Match": r3.headers.etag as string });
+      expect(r4.status).toBe(304);
+
+      // Unreadable file fails closed: changing stamp, no 304
+      if (process.getuid?.() !== 0) {
+        try {
+          chmodSync(join(repoDir, "package.json"), 0);
+          const rUnreadable1 = await get(repoSrv, "/api/sessions/session-pkg");
+          expect(rUnreadable1.status).toBe(200);
+          const rUnreadable2 = await get(repoSrv, "/api/sessions/session-pkg", repoSrv.token, {
+            "If-None-Match": rUnreadable1.headers.etag as string,
+          });
+          expect(rUnreadable2.status).toBe(200);
+          expect(rUnreadable2.headers.etag).not.toBe(rUnreadable1.headers.etag);
+        } finally {
+          chmodSync(join(repoDir, "package.json"), 0o644);
+        }
+      }
+    } finally {
+      await repoSrv.close();
+    }
   });
 
   test("fixture files untouched", () => {

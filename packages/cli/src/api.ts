@@ -1,6 +1,7 @@
-import { realpathSync } from "node:fs";
-import { stat } from "node:fs/promises";
+import { constants, realpathSync } from "node:fs";
+import { access, stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { join } from "node:path";
 import { analyzeFile, analyzeFileDetail, discoverRootSessions, gitCrosscheck, loadRepoScripts, projectDirFor, subagentStamp, type SessionFile, type SessionRoot } from "@lgtm/core/node";
 import { buildBeats, condenseForTitle, inheritedSource, markInherited, needsAttention, ownershipRanks } from "@lgtm/core";
 import type { Analyzer, GitCrosscheckResponse, ImportMapResponse, PlayResponse, PromptDetail, SessionAnalysis, SessionSummary, Status } from "@lgtm/core";
@@ -113,6 +114,26 @@ export function createApi(opts: ServerOptions): ApiHandler {
     }
   }
 
+  /** mtime:size from stat if readable, '-' if missing, or a changing error token if unreadable (fail closed). */
+  async function statFingerprint(path: string): Promise<string> {
+    try {
+      await access(path, constants.R_OK);
+      const st = await stat(path);
+      return `${st.mtimeMs}:${st.size}`;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return "-";
+      return `err:${Date.now()}:${Math.random()}`;
+    }
+  }
+
+  /** Cheap fingerprint of the exact inputs loadRepoScripts reads: package.json, Makefile, and scripts/ */
+  async function repoScriptsStamp(root: string): Promise<string> {
+    const pkg = await statFingerprint(join(root, "package.json"));
+    const mk = await statFingerprint(join(root, "Makefile"));
+    const sc = await statFingerprint(join(root, "scripts"));
+    return `${root}:${pkg}:${mk}:${sc}`;
+  }
+
   async function detailFor(f: SessionFile): Promise<DetailEntry | null> {
     let size: number;
     try {
@@ -120,7 +141,8 @@ export function createApi(opts: ServerOptions): ApiHandler {
     } catch {
       return null;
     }
-    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}\0${f.worktree ?? ""}`;
+    const repoStamp = await repoScriptsStamp(f.root ?? opts.dir);
+    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}:${repoStamp}\0${f.worktree ?? ""}`;
     let hit = detailCache.get(f.path);
     if (hit && hit.key === key) {
       detailCache.delete(f.path); // refresh recency
@@ -160,7 +182,8 @@ export function createApi(opts: ServerOptions): ApiHandler {
     } catch {
       return null;
     }
-    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}\0${f.worktree ?? ""}`;
+    const repoStamp = await repoScriptsStamp(f.root ?? opts.dir);
+    const key = `${f.mtimeMs}:${size}:${await subagentStamp(f.path)}:${repoStamp}\0${f.worktree ?? ""}`;
     let entry = cache.get(f.path);
     if (!entry || entry.key !== key) {
       const analysis = loadRepoScripts(f.root ?? opts.dir).then(async (repo) => {
@@ -199,6 +222,10 @@ export function createApi(opts: ServerOptions): ApiHandler {
     for (const f of files) {
       const v = await versionOf(f); // a file that vanished since discovery is skipped
       if (v !== null) versions.push(v);
+    }
+    const rootDirs = [...new Set([opts.dir, ...roots.map((r) => r.dir), ...files.map((f) => f.root ?? opts.dir)])].sort();
+    for (const r of rootDirs) {
+      versions.push(await repoScriptsStamp(r));
     }
     return versions.join("\0");
   }
