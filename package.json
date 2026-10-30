@@ -2,16 +2,24 @@
   "name": "lgtm-review-monorepo",
   "private": true,
   "packageManager": "pnpm@11.2.2",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
     "test:perf": "turbo run test:perf --concurrency=1",
-    "lint": "turbo run lint",
+    "lint": "eslint .",
     "typecheck": "turbo run typecheck",
     "smoke": "turbo run smoke",
     "demo": "node scripts/build-demo.mjs",
     "check": "turbo run typecheck test build smoke && turbo run test:perf --concurrency=1"
   },
-  "devDependencies": { "turbo": "^2.5.0", "typescript": "^5.8.0" }
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.72.1"
+  }
 }

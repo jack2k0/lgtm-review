@@ -13,15 +13,32 @@
   },
   "type": "module",
   "license": "Apache-2.0",
-  "bin": { "lgtm-review": "dist/cli.js" },
-  "files": ["dist", "README.md", "LICENSE"],
-  "engines": { "node": ">=22" },
+  "bin": {
+    "lgtm-review": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsup && node ../../scripts/copy-web.mjs",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "smoke": "node ../../scripts/smoke-pack.mjs",
     "test": "vitest run --exclude '**/*.perf.test.ts'",
+    "test:coverage": "vitest run --coverage --exclude '**/*.perf.test.ts'",
     "test:perf": "vitest run perf.test"
   },
-  "devDependencies": { "@lgtm/core": "workspace:*", "@types/node": "^22.0.0", "tsup": "^9.0.0", "typescript": "^5.8.0", "vitest": "^4.1.12" }
+  "devDependencies": {
+    "@lgtm/core": "workspace:*",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.1.12",
+    "tsup": "^9.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.12"
+  }
 }

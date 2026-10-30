@@ -6,6 +6,7 @@
     "typecheck": { "dependsOn": ["^build"] },
     "test": { "dependsOn": ["^build", "build"] },
     "test:perf": { "dependsOn": ["^build", "build"], "cache": false },
+    "test:coverage": { "dependsOn": ["^build", "build"] },
     "smoke": { "dependsOn": ["build"], "cache": false },
     "lint": {}
   }
