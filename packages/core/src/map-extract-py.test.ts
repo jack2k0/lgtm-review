@@ -285,7 +285,7 @@ describe("extractPythonImports", () => {
   });
 
   test("deeply nested f-strings hit the nesting cap instead of overflowing the stack (review)", () => {
-    // CPython rejects anything far below 5000 nested f-strings; the only guarantee is that the
+    // CPython rejects 150 or more nested f-strings; the only guarantee is that the
     // scan returns instead of throwing RangeError (a hostile file could abort a map build).
     let src = "x";
     for (let k = 0; k < 5000; k++) src = `f"{${src}}"`;

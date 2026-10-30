@@ -76,8 +76,8 @@ function lineAtOffset(lineStarts: readonly number[], offset: number): number {
  * f-string body or field a backslash escapes just the quote character, another backslash or
  * `\r`/`\n` (a line continuation); before any other character only the backslash is consumed, so
  * `\{` still opens a field exactly as in Python 3.12+ (CPython warns there about the invalid
- * escape). Nested f-strings and spec parts are followed up to a fixed nesting cap (far above any
- * valid Python nesting); beyond it a string is scanned like a plain one, so that invalid or
+ * escape). Nested f-strings and spec parts are followed up to a fixed nesting cap (above CPython's
+ * limit of 150 nested f-strings); beyond it a string is scanned like a plain one, so that invalid or
  * hostile input can never grow the recursion without bound.
  */
 function blankCommentsAndStrings(src: string): string {
@@ -95,8 +95,8 @@ function blankCommentsAndStrings(src: string): string {
     (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "_";
 
   /**
-   * Cap on how deeply the scanner follows nested f-strings and spec parts. Python rejects
-   * nesting far below this ("too many nested f-strings"), so reaching the cap means invalid or
+   * Cap on how deeply the scanner follows nested f-strings and spec parts. CPython rejects
+   * 150 or more nested f-strings ("too many nested f-strings"), so reaching the cap means invalid or
    * hostile input: the deeper string is then scanned like a plain one (see `blankString`), which
    * keeps the bound on recursion instead of overflowing the call stack.
    */
