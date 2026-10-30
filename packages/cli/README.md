@@ -4,7 +4,7 @@ Review what a coding agent did in a Claude Code session without reading every li
 
 The package is not on npm yet. After the first release, it can be run directly with `npx lgtm-review`. Until then, run it from a checkout (requires Node >= 22).
 
-See [CHANGELOG.md](../../CHANGELOG.md) for version history and release notes.
+See [CHANGELOG.md](https://github.com/jack2k0/lgtm-review/blob/main/CHANGELOG.md) for version history and release notes.
 
 ## Installation and running
 

@@ -32,7 +32,7 @@ The package is not on npm yet. After the first release, you will be able to run 
 git clone https://github.com/jack2k0/lgtm-review.git
 cd lgtm-review
 corepack pnpm install --frozen-lockfile
-corepack pnpm check                 # typecheck, tests, build and the pack smoke test
+corepack pnpm check                 # typecheck, tests, build, pack smoke test, perf suite
 node packages/cli/dist/cli.js       # starts the local UI for the current repo
 ```
 
