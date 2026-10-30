@@ -291,7 +291,7 @@ test.describe("E2E browser walkthrough", () => {
     const mapLink = page.getByRole("link", { name: "Map" }).first();
     await expect(mapLink).toBeVisible();
     await mapLink.click();
-    await expect(page.locator(".import-map, svg").first()).toBeVisible();
+    await expect(page.locator(".map-scroll").first()).toBeVisible();
     await checkNoHorizontalScroll();
 
     // No console or page errors throughout the walk
