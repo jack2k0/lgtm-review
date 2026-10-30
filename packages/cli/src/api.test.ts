@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { FileDiff, PromptDetail, SessionAnalysis, SessionsResponse } from "@lgtm/core";
+import { FileDiff, PromptDetail, SessionAnalysis, SessionsResponse, type PromptAnalysis } from "@lgtm/core";
 import { summarize } from "./api.js";
 import { startServer, type RunningServer } from "./server.js";
 
@@ -208,23 +208,38 @@ describe("GET /api/sessions/:id", () => {
 
 const enc = encodeURIComponent;
 
+async function mapConcurrent<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let idx = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (idx < items.length) {
+      const cur = idx++;
+      results[cur] = await fn(items[cur]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 describe("GET /api/sessions/:id/prompts/:index", () => {
   test("every fixture prompt validates against PromptDetail and matches the analysis", async () => {
-    for (const id of ids) {
+    const pairs: Array<{ id: string; p: PromptAnalysis }> = [];
+    await mapConcurrent(ids, 16, async (id) => {
       const full = SessionAnalysis.parse((await get(srv, `/api/sessions/${id}`)).json);
-      for (const p of full.prompts) {
-        const r = await get(srv, `/api/sessions/${id}/prompts/${p.index}`);
-        expect(r.status, `${id}#${p.index}`).toBe(200);
-        expect(r.headers["cache-control"]).toBe("no-cache, private");
-        const d = PromptDetail.parse(r.json);
-        expect(d.index).toBe(p.index);
-        expect(d.status).toBe(p.status);
-        expect(d.activeMs).toBe(p.activeMs);
-        // every file of every step is a diff-able file of the prompt
-        const files = new Set(p.files.map((f) => f.path));
-        for (const st of d.steps) for (const f of st.files) expect(files.has(f), f).toBe(true);
-      }
-    }
+      for (const p of full.prompts) pairs.push({ id, p });
+    });
+    await mapConcurrent(pairs, 16, async ({ id, p }) => {
+      const r = await get(srv, `/api/sessions/${id}/prompts/${p.index}`);
+      expect(r.status, `${id}#${p.index}`).toBe(200);
+      expect(r.headers["cache-control"]).toBe("no-cache, private");
+      const d = PromptDetail.parse(r.json);
+      expect(d.index).toBe(p.index);
+      expect(d.status).toBe(p.status);
+      expect(d.activeMs).toBe(p.activeMs);
+      // every file of every step is a diff-able file of the prompt
+      const files = new Set(p.files.map((f) => f.path));
+      for (const st of d.steps) for (const f of st.files) expect(files.has(f), f).toBe(true);
+    });
   }, 20_000);
 
   test("requires the token", async () => {
