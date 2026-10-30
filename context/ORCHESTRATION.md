@@ -131,4 +131,5 @@ Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-li
 - Env (2026-10-26): domyślny node to 20; `pnpm check` wymaga PATH=<scratchpad>/bin:$HOME/.local/opt/node22/bin, gdzie `bin/pnpm` to wrapper `exec corepack pnpm "$@"` (turbo szuka binarki pnpm w PATH). Env (2026-10-25): shim /tmp/claude-1000/shim zniknął; pnpm przez corepack. Wcześniej: node 22 + pnpm przez PATH=/tmp/claude-1000/shim:$HOME/.local/opt/node22/bin. git user nie ustawiony: commity z GIT_AUTHOR_*/GIT_COMMITTER_* (jack / bogatyszejksponsor2@gmail.com). Narzędzia quoty niesprawdzone.
 
 ## Otwarte problemy
+- Odłożone z S-22/S-23: sekret 3-znakowy po `:` (test `token: abc` tego pilnuje); core ucina tekst promptu do 200 znaków przed redakcją, więc token na granicy cięcia zostawia krótki prefiks (także w `--summary`).
 brak (S-04 import-map zmergowane i zarchiwizowane 2026-10-23; audyt realnych logów S-14 zrobiony)
