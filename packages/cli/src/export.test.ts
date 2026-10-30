@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import type { SessionRoot } from "@lgtm/core/node";
-import { runExport, type ExportCommand } from "./export.js";
+import { exportDate, runExport, type ExportCommand } from "./export.js";
 
 /** Synthetic session (no secrets), one user prompt that edits a file: same record shapes as in e2e.test.ts. */
 const PROJECT = "/home/user/project";
@@ -147,5 +147,35 @@ describe("runExport --out guard", () => {
     expect(readFileSync(out, "utf8")).toMatch(/^<!doctype html>/);
     expect(readFileSync(out, "utf8")).toContain('class="diff"');
     expect(readdirSync(tmp).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+});
+
+describe("exportDate: SOURCE_DATE_EPOCH", () => {
+  /** Asserts the value is the current date, accepting either side of a UTC midnight in between. */
+  const expectToday = (env: NodeJS.ProcessEnv) => {
+    const before = new Date().toISOString().slice(0, 10);
+    const d = exportDate(env);
+    expect([before, new Date().toISOString().slice(0, 10)]).toContain(d);
+  };
+
+  test("SOURCE_DATE_EPOCH=0 gives 1970-01-01 (UTC)", () => {
+    expect(exportDate({ SOURCE_DATE_EPOCH: "0" })).toBe("1970-01-01");
+  });
+
+  test("a date after year 2243 is still honoured (the cap is the Date maximum, not 8.64e12 ms)", () => {
+    expect(exportDate({ SOURCE_DATE_EPOCH: "10000000000" })).toBe("2286-11-20");
+  });
+
+  test("a valid value gives its date in UTC YYYY-MM-DD", () => {
+    const start = Date.parse("2026-03-02T09:00:00.000Z") / 1000; // the demo session start
+    expect(exportDate({ SOURCE_DATE_EPOCH: String(start) })).toBe("2026-03-02");
+  });
+
+  test("an invalid value is ignored: today's date", () => {
+    for (const bad of ["", "2026-03-02", "12.5", "-1", "+1", " 1", "1e3", "99999999999999999999"]) expectToday({ SOURCE_DATE_EPOCH: bad });
+  });
+
+  test("unset gives today's date", () => {
+    expectToday({});
   });
 });

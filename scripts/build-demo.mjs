@@ -332,7 +332,9 @@ try {
   execFileSync(
     process.execPath,
     [cli, "--dir", repo, "--projects-dir", projects, "--export", "demo", "--out", outFile, "--force"],
-    { cwd: root, stdio: "inherit" },
+    // The export date comes from SOURCE_DATE_EPOCH (reproducible-builds.org), set here to the session start in
+    // seconds so the banner says the session date and a rebuild never changes with the day.
+    { cwd: root, stdio: "inherit", env: { ...process.env, SOURCE_DATE_EPOCH: String(Math.floor(SESSION_START / 1000)) } },
   );
 
   privacyCheck(readFileSync(outFile, "utf8"));
