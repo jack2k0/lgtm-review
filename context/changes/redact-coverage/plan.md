@@ -30,3 +30,15 @@ allow: ^context/(changes|archive)/redact-coverage/
 deps: no
 schema: no
 ```
+
+## Review fixes (round 1)
+
+Same two files. Each fix gets a test that fails on the current branch. Do not edit existing expectations.
+
+- R1: the mysql attached flag is case-sensitive: `mysql -P3306 -h x` stays unchanged, `mysql -pabc123` is still redacted.
+- R2: curl/wget partial quoting loses the value: `curl -u bob:'hunter2xyz' x`, `curl -u 'bob':hunter2xyz x`, `curl -u "bob":hunter2xyz x`.
+- R3: combined short flags: `curl -su bob:hunter2xyz x`, `curl -fsSu bob:hunter2xyz x`.
+- R4: backslash-escaped quotes lose the whole value for mysql and sshpass: `mysql -p\"hunter2xyz\"`, `sshpass -p \"hunter2xyz\" ssh x`. The output must not contain `hunter2xyz`.
+- R5: sshpass reads `-p` only among its own options, before the wrapped command: `sshpass -e ssh x -p 22` and `sshpass -f file ssh -p 2222 host` stay unchanged; `sshpass -v -p hunter2xyz ssh x` is redacted.
+- R6: a key that is exactly `pwd` (any case) with a value starting with `/`, `~` or `.` is a working directory, not a secret: `PWD=/home/u/app` must behave as on main (`PWD=~/app`); `pwd: /srv` stays. `pwd=hunter2xyz` stays redacted.
+- R7: the unquoted minimum is 3 for `:` too, as the plan says: `password: abc` is redacted. If this breaks an existing expectation, keep 4 for `:`, do not edit the expectation, and name the test in your report.
