@@ -26,6 +26,8 @@ Reguły: `AGENTS.md` (wszyscy agenci), `REVIEW.md` (tiery, uwagi, rejestr, maks.
 - Pilot: następne 2 zmiany; metryki na merge (tier, liczba uwag, werdykty, rundy) w rejestrze `reviews/findings.md`.
 
 ## Faza łańcucha
+v0.4 (2026-10-30, polecenie właściciela: wdrożyć listę z review wg 10xDevs; Opus koordynuje i decyduje; oszczędzać tokeny): S-22..S-30 w roadmapie. Skille /10x-* nie są zainstalowane, proces ręczny wg `docs/prompts/01-orchestrator-kickoff.md`. Bramki plan/merge u Opusa; push i publikacja npm u właściciela. Routing: Agy implementuje, OpenCode po resecie (31.10 01:10), recenzenci Haiku/Sonnet/OpenCode, Grok tylko krytyczne.
+
 Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-lite (live-refresh, FR-011) S-06 (html-export z redakcją, FR-008) i S-11 (status-accuracy, audyt realnych logów: status 97.1% bez subagentów) zmergowane (+ S-12 subagent-prompts, + S-13 fork-dedupe 2026-10-23): F-01, S-01, S-02, S-03 zmergowane lokalnie na main i zarchiwizowane (2026-10-23). Czeka na właściciela: nazwa/trademark, kredyt autora pomysłu, publikacja npm; PRD v2 dodaje FR-009/010 (zrobione w S-05). + S-14 bg-checks (zmergowane, audyt realnych logów zrobiony) + S-09 python-map (2026-10-23). Brak kolejnych slice'ów bez decyzji produktowych. Zaparkowane: S-04 import map, S-07 Play the change, S-08 LLM, S-10 demo page (wymagają decyzji produktowych/rozszerzenia PRD). Procedura: plan Opus -> plan-review agy -> impl Sonnet -> weryfikacja Opus.
 
 ## Decyzje właściciela (2026-10-28)

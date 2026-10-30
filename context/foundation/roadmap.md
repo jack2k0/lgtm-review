@@ -358,6 +358,26 @@ Follow-up rule rounds on real logs after S-20 (round 2), merged into main; track
 | S-21       | git-crosscheck    | Git cross-check of a session's edits                           | done                                     | wave 3                                  |
 | S-08       | llm-titles        | Opt-in local LLM titles                                        | done (2026-10-28)                        | gated                                   |
 
+## v0.4 extension: quality and release (2026-10-30)
+
+> From the four-agent project review (`docs/review-2026-10-30.md`); the owner asked for this list to be implemented on 2026-10-30 and delegated decisions to the orchestrator. No new product requirements: every slice hardens an existing FR, guardrail or NFR. Publishing to npm and pushing stay the owner's.
+
+**Sequencing goal:** trust first (secrets, then false `checked`), then the release path, then tooling, code and UI. Decisions: the name stays `lgtm-review` until the owner's trademark check (Open Question 1); `--list` and `--json` redact by default, with `--raw` as the explicit opt-out; a breaking output change is acceptable because nothing is published yet.
+
+| ID   | Change ID          | Outcome (user can …)                                                                                     | Size | Tier | Prerequisites | PRD refs                       | Status  |
+| ---- | ------------------ | -------------------------------------------------------------------------------------------------------- | ---- | ---- | ------------- | ------------------------------ | ------- |
+| S-22 | redact-coverage    | rely on redaction for common secret spellings (`DB_PASS=`, `MYSQL_PWD=`, `curl -u`, `xai-`, webhooks)    | S    | High | —             | FR-008, Guardrail no secrets   | planned |
+| S-23 | redact-terminal    | run `--list` and `--json` without printing secrets; `--raw` opts out                                     | S    | High | S-22          | FR-008, Guardrail no secrets   | planned |
+| S-24 | status-autofix     | trust `checked`: autofix runs are edits, a source file covers only itself, relative `cd` to the gate works | M    | High + audit | —     | FR-002, FR-004, FR-017         | planned |
+| S-25 | release-path       | see one version source, a correct package name, a release workflow and a clean-install smoke test        | M    | High | —             | NFR packaging                  | planned |
+| S-26 | ci-hardening       | rely on CI for macOS/Windows, lint, the merge gate on pull requests and a coverage report                | M    | High | S-25          | NFR reproducible statuses      | planned |
+| S-27 | docs-refresh       | read a current README (status, Map, Play, install truth) and grouped `--help`                            | S    | Medium | S-25        | NFR docs match behaviour       | planned |
+| S-28 | cli-dedupe         | (internal) one shared session-analysis path, a smaller `main()`, shared path helpers                     | S    | High | S-23          | Maintainability                | planned |
+| S-29 | ui-browser         | use the UI on narrow screens, with Esc going back, less cross-check noise, highlighted diffs; browser tests | L  | Medium | S-26        | FR-005, FR-006, FR-019         | planned |
+| S-30 | rule-files-split   | (internal) `shell-edits.ts` and `check-patterns.ts` split into modules with no behaviour change          | L    | High + audit | S-24, S-28 | Maintainability              | planned |
+
+Order: S-22 → S-23 → S-24 → S-25 → S-26 ‖ S-27 → S-28 → S-29 → S-30. At most two in flight. S-30 is last so a refactor never mixes with rule fixes; it is dropped if its PRE/POST audit is not byte-identical.
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
