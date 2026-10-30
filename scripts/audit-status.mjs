@@ -95,7 +95,7 @@ function main() {
     return 0;
   }
   const cli = resolve(values.cli ?? join(here, "../packages/cli/dist/cli.js"));
-  const args = [cli, "--list", "--json"];
+  const args = [cli, "--list", "--json", "--raw"];
   if (values.dir !== undefined) args.push("--dir", values.dir);
   if (values["projects-dir"] !== undefined) args.push("--projects-dir", values["projects-dir"]);
   const r = spawnSync(process.execPath, args, { encoding: "utf8", maxBuffer: 1 << 30 });

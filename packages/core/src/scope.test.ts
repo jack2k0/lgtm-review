@@ -84,6 +84,7 @@ describe("scopeCovers", () => {
     expect(scopeCovers("/r/packages/web/src/index.ts", "/r/packages/web/src/index.tsx")).toBe(false);
     expect(scopeCovers("/r/packages/web/src/index.ts", "/r/packages/core/src/index.ts")).toBe(false);
     expect(scopeCovers("/r/scripts/deploy.sh", "/r/src/deploy.ts")).toBe(false);
+    expect(scopeCovers("/repo/packages/core/src/node/lines.ts", "/repo/packages/core/src/text/lines/formatter.ts")).toBe(false);
   });
 
   test("the stem rule does not cross package boundaries", () => {

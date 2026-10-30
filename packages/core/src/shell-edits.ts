@@ -1361,6 +1361,15 @@ function isGateScript(words: Word[], dir: Dir, repoRoots: readonly string[]): bo
     if (!repoRoots.some((root) => gateDirTrusted(dir.path, root))) return false;
     return isScriptsGateFile(dir.path, op.text);
   }
+  if (dir.k === "rel" && dir.path.startsWith("../")) {
+    for (const root of repoRoots) {
+      const resolved = normalizePath(`${root}/${dir.path}`);
+      if (gateDirTrusted(resolved, root) && isScriptsGateFile(resolved, op.text)) {
+        return true;
+      }
+    }
+    return false;
+  }
   const joined = dir.k === "rel" ? `${dir.path}/${op.text}` : op.text;
   return normalizePath(joined) === "scripts/gate.mjs";
 }

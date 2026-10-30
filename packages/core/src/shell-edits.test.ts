@@ -949,6 +949,10 @@ describe("C17: python -c withdrawn, cd only on && / || exit, exact gate, temp cl
     const repo = "/abs/repo";
     expect(classifyShellMutation(mixed("cd /abs/repo && node scripts/gate.mjs"), undefined, repo).opaque).toBe(false);
     expect(classifyShellMutation(mixed("cd /abs/repo-x && node scripts/gate.mjs"), undefined, repo).opaque).toBe(false);
+    expect(classifyShellMutation(mixed("cd ../repo-x && node scripts/gate.mjs"), undefined, repo).opaque).toBe(false);
+    expect(classifyShellMutation("cd ../lgtm-review-x && node scripts/gate.mjs --base main && git merge --no-ff change/x", undefined, ["/home/jack/git/lgtm-review"]).opaque).toBe(false);
+    expect(classifyShellMutation(mixed("cd ../other-repo && node scripts/gate.mjs"), undefined, repo).opaque).toBe(true);
+    expect(classifyShellMutation(mixed("cd ../repo-x/sub && node scripts/gate.mjs"), undefined, repo).opaque).toBe(true);
     expect(classifyShellMutation(mixed("cd /abs/repo/pkg && node ./scripts/validate_all.py"), undefined, repo).opaque).toBe(true);
     expect(classifyShellMutation("NODE_OPTIONS=--require=/x node scripts/gate.mjs").opaque).toBe(true);
     expect(classifyShellMutation("node scripts/check.mjs").opaque).toBe(true);

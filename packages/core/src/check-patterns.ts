@@ -876,6 +876,15 @@ function isDryRun(toks: string[]): boolean {
 
 /** `gh run watch` only fails the command with `--exit-status`; `ruff check --fix` edits files instead of checking. */
 function isExcludedForm(s: string, toks: string[]): boolean {
+  const eslintIdx = toks.indexOf("eslint");
+  if (eslintIdx !== -1 && (eslintIdx === 0 || /^(?:pnpm|npm|yarn|bun|npx|bunx)$/.test(toks[0]!))) {
+    if (toks.some((t) => t === "--fix" || t.startsWith("--fix=") || t.startsWith("--fix-type"))) return true;
+  }
+  const biomeIdx = toks.indexOf("biome");
+  if (biomeIdx !== -1 && (biomeIdx === 0 || /^(?:pnpm|npm|yarn|bun|npx|bunx)$/.test(toks[0]!))) {
+    const BIOME_FIX = new Set(["--write", "--fix", "--apply", "--apply-unsafe", "--unsafe"]);
+    if (toks.some((t) => BIOME_FIX.has(t) || BIOME_FIX.has(t.split("=")[0]!))) return true;
+  }
   if (/^(?:python3?(?:\.\d+)?\s+(?:-\S+\s+)*-m\s+)?ruff\s+check\b/.test(s)) return toks.some((t) => t === "--fix" || t.startsWith("--fix-only") || t.startsWith("--fix="));
   if (/^deno\s+lint\b/.test(s)) return toks.includes("--fix");
   // Listing and collecting commands do not run any test.
