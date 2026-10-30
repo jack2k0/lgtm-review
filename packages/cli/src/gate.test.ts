@@ -181,6 +181,8 @@ describe("scripts/gate.mjs", () => {
     expect(tier({ "README.md": "y\n", "scripts/x.mjs": "1\n" })).toBe("Medium");
     expect(tier({ "packages/web/src/ui.tsx": "1\n", "scripts/x.mjs": "1\n" })).toBe("Medium");
     expect(tier({ "docs/a.md": "y\n", "packages/cli/src/server.ts": "1\n" })).toBe("High");
+    expect(tier({ "packages/core/src/check-patterns-segments.ts": "1\n" })).toBe("High");
+    expect(tier({ "packages/core/src/shell-edits-redirects.ts": "1\n" })).toBe("High");
     expect(tier({ ".github/workflows/ci.yml": "1\n" })).toBe("High");
     expect(tier({ "scripts/smoke-pack.mjs": "1\n" })).toBe("High");
     expect(tier({ "REVIEW.md": "1\n" })).toBe("High");

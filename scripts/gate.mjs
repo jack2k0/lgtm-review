@@ -28,7 +28,7 @@ import { parseArgs } from "node:util";
 /** Risk tier table. First match wins, High before Low before Medium; no match = Medium. Edit here only. */
 export const TIERS = {
   High: [
-    /^packages\/core\/src\/(analyze|check-patterns|shell-edits|parse|subagents|redact|schema|inherit|hints|scope)\.ts$/,
+    /^packages\/core\/src\/(analyze|(check-patterns|shell-edits)(-[a-z-]+)?|parse|subagents|redact|schema|inherit|hints|scope)\.ts$/,
     /^packages\/cli\/src\/(server|security|export|export-html|summary|api)\.ts$/,
     /^packages\/core\/src\/node\/(git|archive|read|subagents)\.ts$/,
     /^packages\/web\/src\/token\.ts$/,
