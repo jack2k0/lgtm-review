@@ -245,9 +245,13 @@ function redactInner(g: Groups, st: State): string | null {
 }
 
 function redactAssign(g: Groups, st: State): string | null {
-  if (!isSecretKey(g[2] as string)) return redactInner(g, st);
+  const ident = g[2] as string;
+  if (!isSecretKey(ident)) return redactInner(g, st);
+  const k = ident.toLowerCase().replace(/^-+/, "");
+  const rawVal = (g[4] ?? g[5] ?? g[6]) as string;
+  if (k === "pwd" && /^[.~/]/.test(rawVal)) return null;
   const q = g[1] as string;
-  const head = q + (g[2] as string) + q + (g[3] as string);
+  const head = q + ident + q + (g[3] as string);
   if (g[4] !== undefined) return isNonLiteral(g[4], true, true) || g[4].length < 3 ? null : `${head}"${ph("secret")}"`;
   if (g[5] !== undefined) return isNonLiteral(g[5], true, true) || g[5].length < 3 ? null : `${head}'${ph("secret")}'`;
   const v = g[6] as string;
@@ -269,48 +273,64 @@ function redactFlag(g: Groups): string | null {
   return `${g[1]}${q}${ph("secret")}${q}`;
 }
 
-/** `mysql -u root -phunter2xyz` style attached password flag. */
+/** `mysql -u root -phunter2xyz` style attached password flag (case-sensitive flag `-p`). */
 const MYSQL_ATTACHED_P =
-  /(?<![A-Za-z0-9_.-])(mysql(?:dump)?|mariadb)(?:\.exe)?\b([^\r\n;|&]{0,500}?[ \t]+-p)(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"'\-][^\s"';&|]{0,300}))/gi;
+  /(?<![A-Za-z0-9_.-])([mM][yY][sS][qQ][lL](?:[dD][uU][mM][pP])?|[mM][aA][rR][iI][aA][dD][bB])(?:\.exe)?\b([^\r\n;|&]{0,500}?[ \t]+-p)(?:\\"([^"\r\n]{1,300})\\"|\\'([^'\r\n]{1,300})\\'|"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"'\-][^\s"';&|]{0,300}))/g;
 
 function redactMysql(text: string, st: State): string {
   const hay = text.toLowerCase();
-  if (!hay.includes("-p") || (!hay.includes("mysql") && !hay.includes("mariadb"))) return text;
-  return pass(text, st, MYSQL_ATTACHED_P, ["-p"], true, (g) => {
-    const v = (g[3] ?? g[4] ?? g[5]) as string;
-    if (isPlaceholder(v) || isNonLiteral(v, g[5] === undefined, true)) return null;
-    const q = g[3] !== undefined ? '"' : g[4] !== undefined ? "'" : "";
+  if (!text.includes("-p") || (!hay.includes("mysql") && !hay.includes("mariadb"))) return text;
+  return pass(text, st, MYSQL_ATTACHED_P, ["-p"], false, (g) => {
+    const v = (g[3] ?? g[4] ?? g[5] ?? g[6] ?? g[7]) as string;
+    if (isPlaceholder(v) || isNonLiteral(v, g[7] === undefined, true)) return null;
+    const q = g[3] !== undefined ? '\\"' : g[4] !== undefined ? "\\'" : g[5] !== undefined ? '"' : g[6] !== undefined ? "'" : "";
     return `${g[1]}${g[2]}${q}${ph("secret")}${q}`;
   });
 }
 
 /** `sshpass -p hunter2xyz` style password flag. */
 const SSHPASS =
-  /(?<![A-Za-z0-9_.-])sshpass(?:\.exe)?\b([^\r\n;|&]{0,500}?[ \t]+-p[ \t]*)(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"'\-][^\s"';&|]{0,300}))/gi;
+  /(?<![A-Za-z0-9_.-])sshpass(?:\.exe)?\b((?:(?!\b(?:ssh|scp|sftp|rsync)\b)[^\r\n;|&]){0,500}?[ \t]+-p[ \t]*)(?:\\"([^"\r\n]{1,300})\\"|\\'([^'\r\n]{1,300})\\'|"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"'\-][^\s"';&|]{0,300}))/gi;
 
 function redactSshpass(text: string, st: State): string {
   if (!text.toLowerCase().includes("sshpass")) return text;
   return pass(text, st, SSHPASS, ["sshpass"], true, (g) => {
-    const v = (g[2] ?? g[3] ?? g[4]) as string;
-    if (isPlaceholder(v) || isNonLiteral(v, g[4] === undefined, true)) return null;
-    const q = g[2] !== undefined ? '"' : g[3] !== undefined ? "'" : "";
-    return `sshpass${g[1]}${q}${ph("secret")}${q}`;
+    const prefix = g[1] as string;
+    if (/-[efd]\b/.test(prefix)) return null;
+    const v = (g[2] ?? g[3] ?? g[4] ?? g[5] ?? g[6]) as string;
+    if (isPlaceholder(v) || isNonLiteral(v, g[6] === undefined, true)) return null;
+    const q = g[2] !== undefined ? '\\"' : g[3] !== undefined ? "\\'" : g[4] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
+    return `sshpass${prefix}${q}${ph("secret")}${q}`;
   });
 }
 
 /** `curl -u user:password` and `wget --user=user:password` flags. */
 const CURL_USER =
-  /(?<![A-Za-z0-9_.-])(curl|wget)(?:\.exe)?\b([^\r\n;|&]{0,500}?[ \t]+(?:-u[ \t]*|--user[ \t]+|--user=))(?:"([^":\r\n]{0,100}):([^"\r\n]{1,300})"|'([^':\r\n]{0,100}):([^'\r\n]{1,300})'|([^\s"':;&|]{0,100}):([^\s"';&|]{1,300}))/gi;
+  /(?<![A-Za-z0-9_.-])(curl|wget)(?:\.exe)?\b([^\r\n;|&]{0,500}?[ \t]+(?:-[A-Za-z0-9]*u[ \t]*|--user[ \t]+|--user=))(?:\\"(.*?):(.*?)\\"|"([^":\r\n]{0,100}):([^"\r\n]{1,300})"|'([^':\r\n]{0,100}):([^'\r\n]{1,300})'|(?:\\"([^":\r\n]{0,100})\\"|"([^":\r\n]{0,100})"|'([^':\r\n]{0,100})'|([^\s"':;&|]{0,100})):(?:\\"([^"\r\n]{1,300})\\"|"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"';&|]{1,300})))/gi;
 
 function redactCurl(text: string, st: State): string {
   const hay = text.toLowerCase();
-  if ((!hay.includes("curl") && !hay.includes("wget")) || (!hay.includes("-u") && !hay.includes("--user"))) return text;
+  if (!hay.includes("curl") && !hay.includes("wget")) return text;
   return pass(text, st, CURL_USER, ["curl", "wget"], true, (g) => {
-    const user = (g[3] ?? g[5] ?? g[7] ?? "") as string;
-    const passVal = (g[4] ?? g[6] ?? g[8]) as string;
-    if (isPlaceholder(passVal) || isNonLiteral(passVal, g[8] === undefined, true)) return null;
-    const q = g[3] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
-    return `${g[1]}${g[2]}${q}${user}:${ph("secret")}${q}`;
+    const cmd = g[1] as string;
+    const flag = g[2] as string;
+    if (g[4] !== undefined) {
+      if (isPlaceholder(g[4])) return null;
+      return `${cmd}${flag}\\"${g[3]}:${ph("secret")}\\"`;
+    }
+    if (g[6] !== undefined) {
+      if (isPlaceholder(g[6])) return null;
+      return `${cmd}${flag}"${g[5]}:${ph("secret")}"`;
+    }
+    if (g[8] !== undefined) {
+      if (isPlaceholder(g[8])) return null;
+      return `${cmd}${flag}'${g[7]}:${ph("secret")}'`;
+    }
+    const uStr = g[9] !== undefined ? `\\"${g[9]}\\"` : g[10] !== undefined ? `"${g[10]}"` : g[11] !== undefined ? `'${g[11]}'` : (g[12] ?? "");
+    const passVal = (g[13] ?? g[14] ?? g[15] ?? g[16]) as string;
+    if (isPlaceholder(passVal) || isNonLiteral(passVal, g[16] === undefined, true)) return null;
+    const pStr = g[13] !== undefined ? `\\"${ph("secret")}\\"` : g[14] !== undefined ? `"${ph("secret")}"` : g[15] !== undefined ? `'${ph("secret")}'` : ph("secret");
+    return `${cmd}${flag}${uStr}:${pStr}`;
   });
 }
 

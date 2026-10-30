@@ -151,6 +151,15 @@ const POSITIVES: Sample[] = [
   sample("groq key", "gsk_" + b(35, 111), id, "groq-key"),
   sample("digitalocean token", "dop_v1_" + b(40, 112, HEXCH), id, "digitalocean-token"),
   sample("slack webhook", "https://hooks.slack.com/services/T000/B000/" + b(24, 113), id, "slack-webhook"),
+  // review 2026-10-30 (round 1 fixes)
+  sample("curl partial quotes pass", "hun" + "ter2xyz", (s) => `curl -u bob:'${s}' x`, "secret"),
+  sample("curl partial quotes user single", "hun" + "ter2xyz", (s) => `curl -u 'bob':${s} x`, "secret"),
+  sample("curl partial quotes user double", "hun" + "ter2xyz", (s) => `curl -u "bob":${s} x`, "secret"),
+  sample("curl combined flags su", "hun" + "ter2xyz", (s) => `curl -su bob:${s} x`, "secret"),
+  sample("curl combined flags fsSu", "hun" + "ter2xyz", (s) => `curl -fsSu bob:${s} x`, "secret"),
+  sample("mysql escaped quotes", "hun" + "ter2xyz", (s) => `mysql -p\\"${s}\\"`, "secret"),
+  sample("sshpass escaped quotes", "hun" + "ter2xyz", (s) => `sshpass -p \\"${s}\\" ssh x`, "secret"),
+  sample("sshpass flag after verbose", "hun" + "ter2xyz", (s) => `sshpass -v -p ${s} ssh x`, "secret"),
 ];
 
 describe("redact: positive samples", () => {
@@ -199,6 +208,10 @@ describe("redact: positive samples", () => {
   test("isEnvFilePath", () => {
     for (const p of [".env", "a/b/.env.local", ".env.production", "C:\\x\\.env", "prod.env"]) expect(isEnvFilePath(p), p).toBe(true);
     for (const p of ["environment.ts", "src/env.ts", "a/.envrc", "README.md"]) expect(isEnvFilePath(p), p).toBe(false);
+  });
+
+  test("PWD as working directory behaves as on main", () => {
+    expect(redact("PWD=/home/u/app").text).toBe("PWD=~/app");
   });
 });
 
@@ -263,6 +276,10 @@ const NEGATIVES: [string, string][] = [
   ["subshell pwd", "cd $(pwd)"],
   ["curl -u without colon", "curl -u bob https://x.io"],
   ["mysql -p without password", "mysql -p"],
+  ["mysql uppercase port", "mysql -P3306 -h x"],
+  ["sshpass ssh port", "sshpass -e ssh x -p 22"],
+  ["sshpass -f ssh port", "sshpass -f file ssh -p 2222 host"],
+  ["pwd srv directory", "pwd: /srv"],
 ];
 
 describe("redact: negative samples", () => {
