@@ -123,6 +123,10 @@ const TOKEN_PATTERNS: { re: RegExp; gate: string[]; kind: string; guard?: (m: st
   { re: new RegExp(`${NB}[sr]k_(?:live|test)_[A-Za-z0-9]{10,}`, "g"), gate: ["k_live_", "k_test_"], kind: "stripe-key" },
   { re: new RegExp(`${NB}whsec_[A-Za-z0-9]{10,}`, "g"), gate: ["whsec_"], kind: "stripe-webhook" },
   { re: new RegExp(`${NB}eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]*`, "g"), gate: ["eyJ"], kind: "jwt" },
+  { re: new RegExp(`${NB}xai-[A-Za-z0-9_-]{20,}`, "g"), gate: ["xai-"], kind: "xai-key" },
+  { re: new RegExp(`${NB}gsk_[A-Za-z0-9_-]{20,}`, "g"), gate: ["gsk_"], kind: "groq-key" },
+  { re: new RegExp(`${NB}dop_v1_[A-Za-z0-9_-]{20,}`, "g"), gate: ["dop_v1_"], kind: "digitalocean-token" },
+  { re: /(?:https?:\/\/)?hooks\.slack\.com\/services\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+/g, gate: ["hooks.slack.com/services/"], kind: "slack-webhook" },
 ];
 
 // ---------------------------------------------------------------- headers, URLs, cookies
@@ -196,9 +200,9 @@ function redactAuthHeader(g: Groups): string | null {
 // ---------------------------------------------------------------- key = value assignments
 
 const ASSIGN =
-  /(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|((?:[^\s"',;)}\]]|;(?=\S)){6,300}))/gi;
+  /(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|((?:[^\s"',;)}\]]|;(?=\S)){3,300}))/gi;
 const SECRET_WORD =
-  /token(?!s|iz)|secret|passw(?:or)?d|api[_-]?key|credential|private[_-]?key|(?:stripe|webhook|signing)[_-]?(?:key|secret|token|signature)/;
+  /token(?!s|iz)|secret|passw(?:or)?d|pass[_-]?phrase|access[_-]?key|auth[_-]?key|api[_-]?key|credential|private[_-]?key|(?:stripe|webhook|signing)[_-]?(?:key|secret|token|signature)|(?:^|[_.-])(?:pass|pwd|passwd)(?=$|[_.-])/;
 const NOT_SECRET_SUFFIX = /[_.-](?:file|path|dir|name|url|uri|type|count|limit|length|len|id|ttl|usage|budget|expires?|expiry)$/;
 const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VALUE_STOPLIST = new Set([
@@ -207,7 +211,7 @@ const VALUE_STOPLIST = new Set([
 ]);
 
 function isSecretKey(ident: string): boolean {
-  const k = ident.toLowerCase();
+  const k = ident.toLowerCase().replace(/^-+/, "");
   return SECRET_WORD.test(k) && !NOT_SECRET_SUFFIX.test(k);
 }
 
@@ -241,13 +245,20 @@ function redactInner(g: Groups, st: State): string | null {
 }
 
 function redactAssign(g: Groups, st: State): string | null {
-  if (!isSecretKey(g[2] as string)) return redactInner(g, st);
+  const ident = g[2] as string;
+  if (!isSecretKey(ident)) return redactInner(g, st);
+  const k = ident.toLowerCase().replace(/^-+/, "");
+  const rawVal = (g[4] ?? g[5] ?? g[6]) as string;
+  if (k === "pwd" && /^[.~/]/.test(rawVal)) return null;
   const q = g[1] as string;
-  const head = q + (g[2] as string) + q + (g[3] as string);
+  const head = q + ident + q + (g[3] as string);
   if (g[4] !== undefined) return isNonLiteral(g[4], true, true) || g[4].length < 3 ? null : `${head}"${ph("secret")}"`;
   if (g[5] !== undefined) return isNonLiteral(g[5], true, true) || g[5].length < 3 ? null : `${head}'${ph("secret")}'`;
   const v = g[6] as string;
-  return isNonLiteral(v, false, true) ? null : head + ph("secret");
+  const sep = g[3] as string;
+  const minLen = sep.includes("=") ? 3 : 4;
+  if (v.length < minLen || isNonLiteral(v, false, true)) return null;
+  return head + ph("secret");
 }
 
 /** `--password hunter2xyz` style flags (space separated). */
@@ -260,6 +271,67 @@ function redactFlag(g: Groups): string | null {
   if (isNonLiteral(v, g[4] === undefined, true)) return null;
   const q = g[2] !== undefined ? '"' : g[3] !== undefined ? "'" : "";
   return `${g[1]}${q}${ph("secret")}${q}`;
+}
+
+/** `mysql -u root -phunter2xyz` style attached password flag (case-sensitive flag `-p`). */
+const MYSQL_ATTACHED_P =
+  /(?<![A-Za-z0-9_.-])([mM][yY][sS][qQ][lL](?:[dD][uU][mM][pP])?|[mM][aA][rR][iI][aA][dD][bB])(?:\.exe)?\b([^\r\n;|&]{0,500}?[ \t]+-p)(?:\\"([^"\r\n]{1,300})\\"|\\'([^'\r\n]{1,300})\\'|"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"'\-][^\s"';&|]{0,300}))/g;
+
+function redactMysql(text: string, st: State): string {
+  const hay = text.toLowerCase();
+  if (!text.includes("-p") || (!hay.includes("mysql") && !hay.includes("mariadb"))) return text;
+  return pass(text, st, MYSQL_ATTACHED_P, ["-p"], false, (g) => {
+    const v = (g[3] ?? g[4] ?? g[5] ?? g[6] ?? g[7]) as string;
+    if (isPlaceholder(v) || isNonLiteral(v, g[7] === undefined, true)) return null;
+    const q = g[3] !== undefined ? '\\"' : g[4] !== undefined ? "\\'" : g[5] !== undefined ? '"' : g[6] !== undefined ? "'" : "";
+    return `${g[1]}${g[2]}${q}${ph("secret")}${q}`;
+  });
+}
+
+/** `sshpass -p hunter2xyz` style password flag. */
+const SSHPASS =
+  /(?<![A-Za-z0-9_.-])sshpass(?:\.exe)?\b((?:(?!\b(?:ssh|scp|sftp|rsync)\b)[^\r\n;|&]){0,500}?[ \t]+-p[ \t]*)(?:\\"([^"\r\n]{1,300})\\"|\\'([^'\r\n]{1,300})\\'|"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"'\-][^\s"';&|]{0,300}))/gi;
+
+function redactSshpass(text: string, st: State): string {
+  if (!text.toLowerCase().includes("sshpass")) return text;
+  return pass(text, st, SSHPASS, ["sshpass"], true, (g) => {
+    const prefix = g[1] as string;
+    if (/-[efd]\b/.test(prefix)) return null;
+    const v = (g[2] ?? g[3] ?? g[4] ?? g[5] ?? g[6]) as string;
+    if (isPlaceholder(v) || isNonLiteral(v, g[6] === undefined, true)) return null;
+    const q = g[2] !== undefined ? '\\"' : g[3] !== undefined ? "\\'" : g[4] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
+    return `sshpass${prefix}${q}${ph("secret")}${q}`;
+  });
+}
+
+/** `curl -u user:password` and `wget --user=user:password` flags. */
+const CURL_USER =
+  /(?<![A-Za-z0-9_.-])(curl|wget)(?:\.exe)?\b([^\r\n;|&]{0,500}?[ \t]+(?:-[A-Za-z0-9]*u[ \t]*|--user[ \t]+|--user=))(?:\\"(.*?):(.*?)\\"|"([^":\r\n]{0,100}):([^"\r\n]{1,300})"|'([^':\r\n]{0,100}):([^'\r\n]{1,300})'|(?:\\"([^":\r\n]{0,100})\\"|"([^":\r\n]{0,100})"|'([^':\r\n]{0,100})'|([^\s"':;&|]{0,100})):(?:\\"([^"\r\n]{1,300})\\"|"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"';&|]{1,300})))/gi;
+
+function redactCurl(text: string, st: State): string {
+  const hay = text.toLowerCase();
+  if (!hay.includes("curl") && !hay.includes("wget")) return text;
+  return pass(text, st, CURL_USER, ["curl", "wget"], true, (g) => {
+    const cmd = g[1] as string;
+    const flag = g[2] as string;
+    if (g[4] !== undefined) {
+      if (isPlaceholder(g[4])) return null;
+      return `${cmd}${flag}\\"${g[3]}:${ph("secret")}\\"`;
+    }
+    if (g[6] !== undefined) {
+      if (isPlaceholder(g[6])) return null;
+      return `${cmd}${flag}"${g[5]}:${ph("secret")}"`;
+    }
+    if (g[8] !== undefined) {
+      if (isPlaceholder(g[8])) return null;
+      return `${cmd}${flag}'${g[7]}:${ph("secret")}'`;
+    }
+    const uStr = g[9] !== undefined ? `\\"${g[9]}\\"` : g[10] !== undefined ? `"${g[10]}"` : g[11] !== undefined ? `'${g[11]}'` : (g[12] ?? "");
+    const passVal = (g[13] ?? g[14] ?? g[15] ?? g[16]) as string;
+    if (isPlaceholder(passVal) || isNonLiteral(passVal, g[16] === undefined, true)) return null;
+    const pStr = g[13] !== undefined ? `\\"${ph("secret")}\\"` : g[14] !== undefined ? `"${ph("secret")}"` : g[15] !== undefined ? `'${ph("secret")}'` : ph("secret");
+    return `${cmd}${flag}${uStr}:${pStr}`;
+  });
 }
 
 /** `KEY=value` lines of an `.env` file (also diff lines starting with `+`, `-` or a space). */
@@ -532,6 +604,9 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
 
   t = pass(t, st, ASSIGN, [":", "="], false, (g) => redactAssign(g, st));
   t = pass(t, st, CLI_FLAG, ["--", " -"], false, redactFlag);
+  t = redactMysql(t, st);
+  t = redactSshpass(t, st);
+  t = redactCurl(t, st);
 
   t = pass(t, st, EMAIL, ["@"], false, redactEmail);
 

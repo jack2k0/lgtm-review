@@ -135,6 +135,31 @@ const POSITIVES: Sample[] = [
   sample("long random free", b(48, 67), (s) => `the value ${s} appeared`, "high-entropy"),
   sample("long random base64", b(44, 68, ALNUM + "+/"), (s) => `blob ${s}==`, "high-entropy"),
   sample("long random in quotes", b(52, 69, B64URL), (s) => `x = "${s}"`, "high-entropy"),
+  // review 2026-10-30 (redact-coverage)
+  sample("db pass", "hun" + "ter2secret", (s) => `DB_PASS=${s}`, "secret"),
+  sample("mysql pwd", "hun" + "ter2xyz", (s) => `MYSQL_PWD=${s}`, "secret"),
+  sample("pwd assignment", "hun" + "ter2xyz", (s) => `pwd=${s}`, "secret"),
+  sample("passphrase", "correct" + "horse", (s) => `passphrase=${s}`, "secret"),
+  sample("access key", "ab" + "cd1234efgh", (s) => `ACCESS_KEY=${s}`, "secret"),
+  sample("auth key", "ab" + "cd1234efgh", (s) => `AUTH_KEY=${s}`, "secret"),
+  sample("short password", "ab" + "c12", (s) => `password=${s}`, "secret"),
+  sample("pass flag", "hun" + "ter2xyz", (s) => `--pass ${s}`, "secret"),
+  sample("mysql attached pass", "hun" + "ter2xyz", (s) => `mysql -u root -p${s}`, "secret"),
+  sample("sshpass flag", "hun" + "ter2xyz", (s) => `sshpass -p ${s} ssh x`, "secret"),
+  sample("curl user pass", "hun" + "ter2xyz", (s) => `curl -u bob:${s} https://x.io`, "secret"),
+  sample("xai key", "xai-" + b(35, 110), id, "xai-key"),
+  sample("groq key", "gsk_" + b(35, 111), id, "groq-key"),
+  sample("digitalocean token", "dop_v1_" + b(40, 112, HEXCH), id, "digitalocean-token"),
+  sample("slack webhook", "https://hooks.slack.com/services/T000/B000/" + b(24, 113), id, "slack-webhook"),
+  // review 2026-10-30 (round 1 fixes)
+  sample("curl partial quotes pass", "hun" + "ter2xyz", (s) => `curl -u bob:'${s}' x`, "secret"),
+  sample("curl partial quotes user single", "hun" + "ter2xyz", (s) => `curl -u 'bob':${s} x`, "secret"),
+  sample("curl partial quotes user double", "hun" + "ter2xyz", (s) => `curl -u "bob":${s} x`, "secret"),
+  sample("curl combined flags su", "hun" + "ter2xyz", (s) => `curl -su bob:${s} x`, "secret"),
+  sample("curl combined flags fsSu", "hun" + "ter2xyz", (s) => `curl -fsSu bob:${s} x`, "secret"),
+  sample("mysql escaped quotes", "hun" + "ter2xyz", (s) => `mysql -p\\"${s}\\"`, "secret"),
+  sample("sshpass escaped quotes", "hun" + "ter2xyz", (s) => `sshpass -p \\"${s}\\" ssh x`, "secret"),
+  sample("sshpass flag after verbose", "hun" + "ter2xyz", (s) => `sshpass -v -p ${s} ssh x`, "secret"),
 ];
 
 describe("redact: positive samples", () => {
@@ -183,6 +208,10 @@ describe("redact: positive samples", () => {
   test("isEnvFilePath", () => {
     for (const p of [".env", "a/b/.env.local", ".env.production", "C:\\x\\.env", "prod.env"]) expect(isEnvFilePath(p), p).toBe(true);
     for (const p of ["environment.ts", "src/env.ts", "a/.envrc", "README.md"]) expect(isEnvFilePath(p), p).toBe(false);
+  });
+
+  test("PWD as working directory behaves as on main", () => {
+    expect(redact("PWD=/home/u/app").text).toBe("PWD=~/app");
   });
 });
 
@@ -241,6 +270,16 @@ const NEGATIVES: [string, string][] = [
   ["code with colon", "const x: Record<string, number> = { a: 1 };"],
   ["private key mention", "rotate the private key regularly"],
   ["relative home mention", "~/projects/app/src/index.ts"],
+  ["compass assignment", "compass=northwest1"],
+  ["bypass assignment", "bypass=enabled123"],
+  ["pwd command alone", "pwd"],
+  ["subshell pwd", "cd $(pwd)"],
+  ["curl -u without colon", "curl -u bob https://x.io"],
+  ["mysql -p without password", "mysql -p"],
+  ["mysql uppercase port", "mysql -P3306 -h x"],
+  ["sshpass ssh port", "sshpass -e ssh x -p 22"],
+  ["sshpass -f ssh port", "sshpass -f file ssh -p 2222 host"],
+  ["pwd srv directory", "pwd: /srv"],
 ];
 
 describe("redact: negative samples", () => {
