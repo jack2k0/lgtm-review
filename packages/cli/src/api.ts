@@ -203,14 +203,24 @@ export function createApi(opts: ServerOptions): ApiHandler {
     return versions.join("\0");
   }
 
-  /** All readable sessions of the project with inheritance marked. */
-  async function allAnalyses(files: SessionFile[]): Promise<SessionAnalysis[]> {
-    const sessions: SessionAnalysis[] = [];
-    for (const f of files) {
-      const a = await analysisFor(f); // sequential on purpose
-      if (a) sessions.push(a);
-    }
-    return markInherited(sessions);
+  let allAnalysesCache: { stamp: string; result: Promise<SessionAnalysis[]> } | null = null;
+
+  /** All readable sessions of the project with inheritance marked, cached per project stamp. */
+  function allAnalyses(files: SessionFile[], stamp: string): Promise<SessionAnalysis[]> {
+    if (allAnalysesCache && allAnalysesCache.stamp === stamp) return allAnalysesCache.result;
+    const result = (async () => {
+      const sessions: SessionAnalysis[] = [];
+      for (const f of files) {
+        const a = await analysisFor(f); // sequential on purpose
+        if (a) sessions.push(a);
+      }
+      return markInherited(sessions);
+    })();
+    allAnalysesCache = { stamp, result };
+    result.catch(() => {
+      if (allAnalysesCache?.stamp === stamp) allAnalysesCache = null;
+    });
+    return result;
   }
 
   /**
@@ -294,7 +304,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
       return true;
     }
     if (!file || (await versionOf(file)) === null) return false;
-    const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
+    const analysis = (await allAnalyses(files, stamp)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     if (prompt !== null) {
       const p = analysis.prompts[prompt];
@@ -337,7 +347,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
     }
     const index = Number(rawIndex);
     if (!file || (await versionOf(file)) === null) return false;
-    const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
+    const analysis = (await allAnalyses(files, stamp)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     const prompt = analysis.prompts[index];
     if (!prompt) return false;
@@ -414,9 +424,9 @@ export function createApi(opts: ServerOptions): ApiHandler {
     return true;
   }
 
-  async function gitRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, files: SessionFile[]): Promise<boolean> {
+  async function gitRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, files: SessionFile[], stamp: string): Promise<boolean> {
     if (!file || (await versionOf(file)) === null) return false;
-    const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
+    const analysis = (await allAnalyses(files, stamp)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     const sessionFiles = [...new Set(analysis.prompts.filter((p) => p.inheritedFrom === undefined).flatMap((p) => p.files.map((f) => f.path)))];
     const result = await gitCrosscheck({ dir: file.root ?? opts.dir, branch: analysis.branch, startedAt: analysis.startedAt, endedAtMs: file.mtimeMs, sessionFiles });
@@ -430,14 +440,14 @@ export function createApi(opts: ServerOptions): ApiHandler {
    * Without a titler the body is `{enabled:false}` and no prompt is analysed.
    * With one, own prompts are enqueued; this handler does not build prompt details and does not wait.
    */
-  async function titlesRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, files: SessionFile[], projectStampValue: string): Promise<boolean> {
+  async function titlesRoute(req: IncomingMessage, res: ServerResponse, file: SessionFile | undefined, files: SessionFile[], stamp: string): Promise<boolean> {
     const version = file ? await versionOf(file) : null;
     if (!file || version === null) return false;
     if (opts.llm === undefined) {
       sendJson(req, res, 200, { enabled: false, titles: {}, pending: 0, error: null });
       return true;
     }
-    const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
+    const analysis = (await allAnalyses(files, stamp)).find((x) => x.sessionId === file.id);
     if (!analysis) return false;
     const own: number[] = [];
     for (let i = 0; i < analysis.prompts.length; i++) {
@@ -451,7 +461,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
       repoDir = rootDir;
     }
     const redactOpts = { repoDir, usernames: [...osUsernames()] };
-    opts.llm.enqueue(file.id, `${version}\0${projectStampValue}`, own, async (index) => {
+    opts.llm.enqueue(file.id, `${version}\0${stamp}`, own, async (index) => {
       const d = await detailFor(file);
       const prompt = d?.analysis.prompts[index];
       if (!d || !prompt || prompt.inheritedFrom !== undefined) return null;
@@ -473,7 +483,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
       if (match[1] === undefined) {
         const etag = etagFor(`list\0${stamp}`);
         if (notModifiedEarly(req, res, etag)) return true;
-        const sessions = await allAnalyses(files);
+        const sessions = await allAnalyses(files, stamp);
         reply(req, res, etag, { dir: opts.dir, sessions: sortSessions(sessions).map((x) => summarize(x, sessions)) });
         return true;
       }
@@ -486,14 +496,14 @@ export function createApi(opts: ServerOptions): ApiHandler {
       // The id is only ever compared against the discovered list; it never becomes a path.
       const file = files.find((f) => f.id === id);
       if (match[4] !== undefined) return await mapRoute(req, res, file, files, stamp);
-      if (match[5] !== undefined) return await gitRoute(req, res, file, files);
+      if (match[5] !== undefined) return await gitRoute(req, res, file, files, stamp);
       if (match[6] !== undefined) return await titlesRoute(req, res, file, files, stamp);
       if (match[3] === "/play") return await playRoute(req, res, file, files, stamp, match[2]);
       if (match[2] !== undefined) return await promptRoute(req, res, file, file ? stamp : null, match[2], match[3] === "/diff");
       if (!file || (await versionOf(file)) === null) return false;
       const etag = etagFor(`session\0${file.id}\0${stamp}`);
       if (notModifiedEarly(req, res, etag)) return true;
-      const analysis = (await allAnalyses(files)).find((x) => x.sessionId === file.id);
+      const analysis = (await allAnalyses(files, stamp)).find((x) => x.sessionId === file.id);
       if (!analysis) return false;
       reply(req, res, etag, analysis);
       return true;
