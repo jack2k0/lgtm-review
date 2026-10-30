@@ -84,6 +84,7 @@ describe("scopeCovers", () => {
     expect(scopeCovers("/r/packages/web/src/index.ts", "/r/packages/web/src/index.tsx")).toBe(false);
     expect(scopeCovers("/r/packages/web/src/index.ts", "/r/packages/core/src/index.ts")).toBe(false);
     expect(scopeCovers("/r/scripts/deploy.sh", "/r/src/deploy.ts")).toBe(false);
+    expect(scopeCovers("/repo/packages/core/src/node/lines.ts", "/repo/packages/core/src/text/lines/formatter.ts")).toBe(false);
   });
 
   test("the stem rule does not cross package boundaries", () => {
@@ -143,4 +144,9 @@ describe("scopeGaps", () => {
     ];
     expect(scopeGaps(files, [])).toEqual(["/r/z.ts", "/r/a.ts"]);
   });
+});
+
+test("a dotted directory root is treated like a file root (fails towards a gap, never towards covered)", () => {
+  expect(scopeCovers("/r/packages/web/api.v2", "/r/packages/web/src/api/x.ts")).toBe(false);
+  expect(scopeCovers("/r/packages/web/api.v2", "/r/packages/web/api.v2/x.ts")).toBe(true);
 });

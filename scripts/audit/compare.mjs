@@ -209,7 +209,7 @@ function main() {
       }
       if (!dir) continue;
       projects++;
-      const r = spawnSync(process.execPath, [cli, "--dir", dir, "--projects-dir", projectsDir, "--archive-dir", emptyArchive, "--no-worktrees", "--list", "--json"], { encoding: "utf8", maxBuffer: 1 << 30 });
+      const r = spawnSync(process.execPath, [cli, "--dir", dir, "--projects-dir", projectsDir, "--archive-dir", emptyArchive, "--no-worktrees", "--list", "--json", "--raw"], { encoding: "utf8", maxBuffer: 1 << 30 });
       if (r.status !== 0) {
         console.error(`compare: the CLI failed for one project (exit ${r.status}); is it built (pnpm build)?`);
         return 1;

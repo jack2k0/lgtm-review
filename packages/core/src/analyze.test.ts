@@ -33,6 +33,13 @@ describe("status rule", () => {
     });
   });
 
+  test("edit, 'pnpm eslint --fix .' => unchecked", () => {
+    expect(one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm eslint --fix .")])).toMatchObject({
+      status: "unchecked",
+      reason: "no checks ran",
+    });
+  });
+
   test("edit, failing check => failing with single-line output", () => {
     const p = one([prompt("q"), ...edit("e1"), ...bash("b1", "pytest -q", { exit: 1, output: "line one\n\nline   two" })]);
     expect(p).toMatchObject({ status: "failing", reason: "pytest -q failed: line one line two" });

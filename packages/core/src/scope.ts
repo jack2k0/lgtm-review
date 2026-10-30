@@ -133,6 +133,12 @@ function keyOf(root: string): string | null {
   return null;
 }
 
+function hasExtension(path: string): boolean {
+  const segs = path.split("/").filter((s) => s !== "");
+  const last = segs[segs.length - 1];
+  return last !== undefined && last.includes(".");
+}
+
 /** Does a check that ran on `root` cover the edited `file`? Both absolute. */
 export function scopeCovers(root: string, file: string): boolean {
   if (file === root || file.startsWith(childPrefix(root))) return true;
@@ -144,7 +150,10 @@ export function scopeCovers(root: string, file: string): boolean {
   if (segs.length === 0) return false;
   const name = segs[segs.length - 1] as string;
   if (isTestRoot(root) && stemOf(name) === key) return true;
-  return segs.slice(0, -1).some((d) => d.toLowerCase() === key);
+  if (!hasExtension(root) || isTestRoot(root)) {
+    return segs.slice(0, -1).some((d) => d.toLowerCase() === key);
+  }
+  return false;
 }
 
 export interface ScopeCheck {

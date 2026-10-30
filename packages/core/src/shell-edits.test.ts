@@ -949,6 +949,10 @@ describe("C17: python -c withdrawn, cd only on && / || exit, exact gate, temp cl
     const repo = "/abs/repo";
     expect(classifyShellMutation(mixed("cd /abs/repo && node scripts/gate.mjs"), undefined, repo).opaque).toBe(false);
     expect(classifyShellMutation(mixed("cd /abs/repo-x && node scripts/gate.mjs"), undefined, repo).opaque).toBe(false);
+    expect(classifyShellMutation(mixed("cd ../repo-x && node scripts/gate.mjs"), undefined, repo).opaque).toBe(false);
+    expect(classifyShellMutation("cd ../lgtm-review-x && node scripts/gate.mjs --base main && git merge --no-ff change/x", undefined, ["/home/jack/git/lgtm-review"]).opaque).toBe(false);
+    expect(classifyShellMutation(mixed("cd ../other-repo && node scripts/gate.mjs"), undefined, repo).opaque).toBe(true);
+    expect(classifyShellMutation(mixed("cd ../repo-x/sub && node scripts/gate.mjs"), undefined, repo).opaque).toBe(true);
     expect(classifyShellMutation(mixed("cd /abs/repo/pkg && node ./scripts/validate_all.py"), undefined, repo).opaque).toBe(true);
     expect(classifyShellMutation("NODE_OPTIONS=--require=/x node scripts/gate.mjs").opaque).toBe(true);
     expect(classifyShellMutation("node scripts/check.mjs").opaque).toBe(true);
@@ -1488,4 +1492,9 @@ describe("status-accuracy-7 heredoc forms", () => {
     expect(files("pnpm test > results.json 2>&1")).toEqual([]);
     expect(files("pnpm test > out.json && echo done > done.json")).toEqual(["done.json"]);
   });
+});
+
+test("an autofix run is an opaque write, not a check", () => {
+  expect(classifyShellMutation("pnpm exec eslint . --fix", undefined, ["/r"]).opaque).toBe(true);
+  expect(classifyShellMutation("biome check --write .", undefined, ["/r"]).opaque).toBe(true);
 });
