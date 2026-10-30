@@ -197,6 +197,57 @@ describe("extractPythonImports", () => {
     expect(extractPythonImports("   \n\n  ")).toEqual([]);
     expect(extractPythonImports("x = 10\nprint('hello')")).toEqual([]);
   });
+
+  test("ignores import text inside a nested same-quote f-string spanning lines (PEP 701, L2)", () => {
+    const src = ["x = f\"\"\"{f\"\"\"", "import fake", "\"\"\"}\"\"\"", "import os"].join("\n");
+
+    expect(extractPythonImports(src)).toEqual([{ module: "os", names: [], line: 4 }]);
+  });
+
+  test("ignores import text in a nested f-string on its own field lines (PEP 701, L2)", () => {
+    const src = ["x = f\"\"\"", "{f\"\"\"import fake\"\"\"}", "\"\"\"", "import os"].join("\n");
+
+    expect(extractPythonImports(src)).toEqual([{ module: "os", names: [], line: 4 }]);
+  });
+
+  test("keeps imports after PEP 701 nested and escaped-brace f-strings (L2)", () => {
+    // Each line is a statement on its own; compare with python3: only the `import` after the
+    // f-string is real, the text inside the f-string never is.
+    expect(extractPythonImports("f\"{x + f'{y}'}\"; import re")).toEqual([
+      { module: "re", names: [], line: 1 },
+    ]);
+    expect(extractPythonImports(["f\"{'a' if b else \"c\"}\"", "import sys"].join("\n"))).toEqual([
+      { module: "sys", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports(["f\"{f\"{y}\"}\"", "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports("f\"{{}}\"; import os")).toEqual([
+      { module: "os", names: [], line: 1 },
+    ]);
+    expect(extractPythonImports("f\"{v:{w}}\"; import os")).toEqual([
+      { module: "os", names: [], line: 1 },
+    ]);
+    expect(extractPythonImports("x = f\"{v:{'import fake'}}\"\nimport os")).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports(["x = f\"\"\"{f\"\"\"a\"\"\"}{f\"\"\"b\"\"\"}\"\"\"", "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+  });
+
+  test("comment shapes stay comments even with string markers (L1)", () => {
+    expect(extractPythonImports(["s = 'x'  # '''", "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports(["'''doc'''  # \"\"\" docstring-like", "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports(["from django.db.models import (", "    CharField,  # \"\"\"", ")", "import os"].join("\n"))).toEqual([
+      { module: "django.db.models", names: ["CharField"], line: 1 },
+      { module: "os", names: [], line: 4 },
+    ]);
+  });
 });
 
 describe("createPythonResolver", () => {
