@@ -41,6 +41,10 @@ It checks freshness, scope (a fenced `gate` block in the plan: `allow`, `goldens
 
 The server listens on 127.0.0.1 only, is read-only and requires the per-run token in the printed URL. See packages/cli/README.md for options, the Steps/Diff views and their limits.
 
+## Keeping old sessions
+
+Claude Code deletes session logs older than `cleanupPeriodDays` (a setting in `~/.claude/settings.json`, default 30 days), so lgtm-review can only show sessions whose logs still exist, and a session reviewed last month can disappear. Run `npx lgtm-review --archive` regularly to keep copies, or raise `cleanupPeriodDays`. `--archive` mirrors the repository's session logs to a private local archive (`--archive-dir <path>`, else `$LGTM_REVIEW_ARCHIVE`, else `~/.lgtm-review/archive`) and refuses, with exit 1, when the archive directory would lie inside the repository or the Claude Code projects directory. Every reader — `--list`, `--json`, `--summary`, `--export` and the web UI — lists archived sessions alongside live ones, marked `(archived)`, and prefers the live log when both exist. Details are in [packages/cli/README.md](packages/cli/README.md).
+
 ## Local LLM titles (optional)
 
 Opt in with both `--llm-url` and `--llm-model` (no default model). The web UI then shows a one-sentence title above each of the session's own prompts, labelled "generated". Nothing is rendered and no model connection is made without the flags.

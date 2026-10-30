@@ -201,6 +201,16 @@ Known gaps (these can stay in the file):
 
 Limits: diffs are included up to 5 MB of text in total (later diffs are left out and the file says so), each step lists at most 200 actions, and a session log larger than 10 MB prints a warning because the export can be large and slow.
 
+## Keeping old sessions
+
+Claude Code deletes session logs older than `cleanupPeriodDays` (a setting in `~/.claude/settings.json`, default 30 days), so lgtm-review can only show sessions whose logs still exist, and a session reviewed last month can disappear. Run `npx lgtm-review --archive` regularly to keep copies, or raise `cleanupPeriodDays`. `--archive` mirrors the repository's session logs (all its git worktrees, unless `--no-worktrees`) to a private local archive:
+
+- It goes to `--archive-dir <path>`, else `$LGTM_REVIEW_ARCHIVE`, else `~/.lgtm-review/archive`, in a private per-repository subdirectory there.
+- It exits 1 with "choose another --archive-dir" when the archive directory would lie inside the repository of `--dir` (including its worktrees) or the Claude Code projects directory.
+- Every reader (`--list`, `--json`, `--summary`, `--export`, the web UI) lists archived sessions alongside live ones, marked `(archived)` / a badge, and prefers the live log when both exist.
+
+Details are in [Archive](#archive).
+
 ## Archive
 
 Claude Code automatically deletes session logs older than `cleanupPeriodDays` (default 30 days). A review from last month then disappears. `lgtm-review --archive` mirrors the current repository's session logs and their subagent transcripts into a private local archive:
