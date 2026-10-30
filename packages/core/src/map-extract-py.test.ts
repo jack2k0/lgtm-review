@@ -248,6 +248,49 @@ describe("extractPythonImports", () => {
       { module: "os", names: [], line: 4 },
     ]);
   });
+
+  test("treats any f/F anywhere in the string prefix run as an f-string (review)", () => {
+    // Both snippets parse in python3 3.14 with only the trailing import: the Rf f-string hides
+    // `import fake` behind a nested spanning-lines triple f-string, the rf f-string must not
+    // swallow `import m1` behind it.
+    expect(extractPythonImports(['x = Rf"{f"""', "import fake", '"""}"', "import m3"].join("\n"))).toEqual([
+      { module: "m3", names: [], line: 4 },
+    ]);
+    expect(extractPythonImports(['x = rf"import fake}}{f"""', "", '"""=:}"', "import m1"].join("\n"))).toEqual([
+      { module: "m1", names: [], line: 4 },
+    ]);
+  });
+
+  test("an escaped backslash cannot swallow the closing quote of an f-string (review)", () => {
+    // Both snippets parse in python3 3.14 (os@2 / os@1): `\\` is one escape consuming the second
+    // backslash, so the next quote still closes the string (regression vs main).
+    expect(extractPythonImports(['x = f"""a\\\\"""', "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 2 },
+    ]);
+    expect(extractPythonImports('x = f"abc\\\\" ; import os')).toEqual([
+      { module: "os", names: [], line: 1 },
+    ]);
+  });
+
+  test("an aborted triple-quoted f-string keeps blanking inside it (review)", () => {
+    // Syntax errors in CPython; the scanner keeps main's behaviour: an unterminated field or
+    // nested string never re-enters code state inside the still-open triple f-string, so string
+    // text (`fake@2`) is never reported and the rest of the string stays blanked.
+    expect(extractPythonImports(['x = f"""{\'abc', "import fake", '"""', "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 4 },
+    ]);
+    expect(extractPythonImports(["s = f\"\"\"{x", "import fake", '"""', "import os"].join("\n"))).toEqual([
+      { module: "os", names: [], line: 4 },
+    ]);
+  });
+
+  test("deeply nested f-strings hit the nesting cap instead of overflowing the stack (review)", () => {
+    // CPython rejects anything far below 5000 nested f-strings; the only guarantee is that the
+    // scan returns instead of throwing RangeError (a hostile file could abort a map build).
+    let src = "x";
+    for (let k = 0; k < 5000; k++) src = `f"{${src}}"`;
+    expect(() => extractPythonImports(`y = ${src}\nimport os\n`)).not.toThrow();
+  });
 });
 
 describe("createPythonResolver", () => {

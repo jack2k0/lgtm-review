@@ -51,6 +51,13 @@ without PEP 701 (≤ 3.11) the nested shapes are syntax errors, where the extrac
   with an import after the line and import-like text inside the string; comment shapes
   (`# """`, `# '''`, hash inside strings, triple quotes inside comments) as tested by S-20.
 
+## Review fixes
+
+- F1: `isFstring` checks any `f`/`F` anywhere in the prefix run (`rf"`, `Rf"`, `fR`, `rF`, etc.).
+- F2: In `blankFstringBody` and `blankField`, backslash escape consumes the next char even when it is another backslash (`\\`).
+- F3: An unterminated field or nested string inside a triple-quoted f-string continues blanking to the end of the outer triple-quoted string instead of dropping into code state.
+- F4: Bounded recursion with a nesting depth cap (`MAX_NESTING = 200`); deeper nesting is treated as an unterminated plain string without throwing `RangeError`.
+
 ```gate
 allow: ^packages/core/src/map-extract-py\.ts$
 allow: ^packages/core/src/map-extract-py\.test\.ts$

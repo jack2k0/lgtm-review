@@ -59,19 +59,26 @@ function lineAtOffset(lineStarts: readonly number[], offset: number): number {
  * Every character of a comment or string, including its quotes, becomes a space, except `\r` and
  * `\n`. String prefixes (`r`, `b`, `f`, `u` and combinations) stay as code before the quote.
  *
- * A quote directly preceded by an `f`/`F` prefix is an f-string and is scanned with its braces
- * (PEP 701, Python 3.12+): `{{` and `}}` are literal braces; a `{` opens a field whose expression is
- * scanned with `(`,`[`,`{` nesting, the first top-level `:` switches to the format spec, and `}`
- * at depth 0 ends the field. Inside a field a string of any quoting — including the outer quote
- * type, which PEP 701 allows to be reused — is scanned as a string, so nested f-strings spanning
- * lines cannot close the outer string early. `#` and stray quotes inside a field or spec are
- * literal (Python has no comments there). An unescaped newline inside a field of a single-quoted
- * f-string, or an unterminated nested string, aborts the f-string at the line like a plain string.
+ * A quote whose attached prefix run contains an `f`/`F` (as in `f"`, `F'''`, `rf"`, `Rf'''`,
+ * `fR`; not `abf"x"`) is an f-string and is scanned with its braces (PEP 701, Python 3.12+):
+ * `{{` and `}}` are literal braces; a `{` opens a field whose expression is scanned with
+ * `(`,`[`,`{` nesting, the first top-level `:` switches to the format spec, and `}` at depth 0
+ * ends the field. Inside a field a string of any quoting — including the outer quote type, which
+ * PEP 701 allows to be reused — is scanned as a string, so nested f-strings spanning lines cannot
+ * close the outer string early. `#` and stray quotes inside a field or spec are literal (Python
+ * has no comments there). An unescaped newline inside a field of a single-quoted f-string, or an
+ * unterminated nested string, aborts the f-string at the line like a plain string; when the
+ * aborted f-string is triple-quoted the scanner keeps blanking the rest of that same string (its
+ * opening quote to the first closing `"""` or end of source) so an abort can never re-enter code
+ * state.
  *
  * Backslashes are only "live" in a plain string, where they skip the next character. In an
- * f-string body or field a backslash escapes just the quote character and `\r`/`\n` (a line
- * continuation); before any other character only the backslash is consumed, so `\{` still opens
- * a field exactly as in Python 3.12+ (CPython warns there about the invalid escape).
+ * f-string body or field a backslash escapes just the quote character, another backslash or
+ * `\r`/`\n` (a line continuation); before any other character only the backslash is consumed, so
+ * `\{` still opens a field exactly as in Python 3.12+ (CPython warns there about the invalid
+ * escape). Nested f-strings and spec parts are followed up to a fixed nesting cap (far above any
+ * valid Python nesting); beyond it a string is scanned like a plain one, so that invalid or
+ * hostile input can never grow the recursion without bound.
  */
 function blankCommentsAndStrings(src: string): string {
   const out = src.split("");
@@ -87,14 +94,71 @@ function blankCommentsAndStrings(src: string): string {
   const isWordChar = (ch: string): boolean =>
     (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "_";
 
-  /** True when the quote at `at` carries an attached `f`/`F` prefix; `abf"x"` is no f-string. */
+  /**
+   * Cap on how deeply the scanner follows nested f-strings and spec parts. Python rejects
+   * nesting far below this ("too many nested f-strings"), so reaching the cap means invalid or
+   * hostile input: the deeper string is then scanned like a plain one (see `blankString`), which
+   * keeps the bound on recursion instead of overflowing the call stack.
+   */
+  const MAX_NESTING = 200;
+  let nesting = 0;
+
+  /** True when the prefix run attached to the quote at `at` contains an `f`/`F` (`rf"x"`,
+   * `Rf'''`, `fR` are f-strings; `abf"x"` is not). */
   const isFstring = (at: number): boolean => {
     let p = at - 1;
     while (p >= 0 && isPrefixChar(src[p]!)) p--;
     if (p >= 0 && isWordChar(src[p]!)) return false;
-    const last = src[p + 1]!;
-    return last === "f" || last === "F";
+    for (let q = p + 1; q < at; q++) {
+      const prefixChar = src[q]!;
+      if (prefixChar === "f" || prefixChar === "F") return true;
+    }
+    return false;
   };
+
+  /**
+   * Blanks a string body with non-f string semantics, starting just after its opening quote(s):
+   * a backslash skips the next character (a backslash-newline keeps the newline); a triple-quoted
+   * string ends at the same three characters, a single-line one at the same quote or at the end
+   * of the line. Returns whether the closing delimiter was consumed. Never recurses, so it is
+   * also the fallback for a nesting-aborted f-string and for strings beyond the nesting cap.
+   */
+  function blankPlainBody(quote: string, triple: boolean): boolean {
+    const width = triple ? 3 : 1;
+    while (i < n) {
+      const c = src[i]!;
+      if (c === "\\") {
+        blank(i);
+        i++;
+        if (i < n) {
+          if (src[i] === "\r" && src[i + 1] === "\n") {
+            i += 2;
+          } else {
+            blank(i);
+            i++;
+          }
+        }
+        continue;
+      }
+      if (triple) {
+        if (src.startsWith(quote.repeat(width), i)) {
+          for (let k = 0; k < width; k++) blank(i + k);
+          i += width;
+          return true;
+        }
+      } else if (c === quote) {
+        blank(i);
+        i++;
+        return true;
+      } else if (c === "\r" || c === "\n") {
+        // An unterminated single-line string ends at the end of its line.
+        break;
+      }
+      blank(i);
+      i++;
+    }
+    return false;
+  }
 
   /**
    * Blanks a string starting at `i` (position of the opening quote). Returns whether the closing
@@ -107,42 +171,20 @@ function blankCommentsAndStrings(src: string): string {
     const width = triple ? 3 : 1;
     for (let k = 0; k < width; k++) blank(at + k);
     i = at + width;
-    if (!isFstring(at)) {
-      while (i < n) {
-        const c = src[i]!;
-        if (c === "\\") {
-          blank(i);
-          i++;
-          if (i < n) {
-            if (src[i] === "\r" && src[i + 1] === "\n") {
-              i += 2;
-            } else {
-              blank(i);
-              i++;
-            }
-          }
-          continue;
-        }
-        if (triple) {
-          if (src.startsWith(quote.repeat(3), i)) {
-            for (let k = 0; k < 3; k++) blank(i + k);
-            i += 3;
-            return true;
-          }
-        } else if (c === quote) {
-          blank(i);
-          i++;
-          return true;
-        } else if (c === "\r" || c === "\n") {
-          // An unterminated single-line string ends at the end of its line.
-          break;
-        }
-        blank(i);
-        i++;
-      }
+    if (nesting >= MAX_NESTING) {
+      // Nesting is exhausted (MAX_NESTING): nothing can be valid Python at this depth, so the
+      // string is scanned like a plain one — its text stays blanked, but no fields or nested
+      // f-strings are followed and no further recursion happens.
+      blankPlainBody(quote, triple);
       return false;
     }
-    return blankFstringBody(quote, triple);
+    if (!isFstring(at)) return blankPlainBody(quote, triple);
+    nesting++;
+    try {
+      return blankFstringBody(quote, triple);
+    } finally {
+      nesting--;
+    }
   }
 
   /**
@@ -158,7 +200,7 @@ function blankCommentsAndStrings(src: string): string {
         i++;
         if (i < n) {
           const d = src[i]!;
-          if (d === quote || d === "\r" || d === "\n") {
+          if (d === quote || d === "\\" || d === "\r" || d === "\n") {
             if (d === "\r" && src[i + 1] === "\n") {
               i += 2;
             } else {
@@ -180,7 +222,10 @@ function blankCommentsAndStrings(src: string): string {
         }
         blank(i);
         i++;
-        if (!blankField(quote, triple)) return false;
+        if (!blankField(quote, triple)) {
+          if (triple) return blankPlainBody(quote, true);
+          return false;
+        }
         continue;
       }
       if (c === "}") {
@@ -231,7 +276,7 @@ function blankCommentsAndStrings(src: string): string {
         i++;
         if (i < n) {
           const d = src[i]!;
-          if (d === quote || d === "\r" || d === "\n") {
+          if (d === quote || d === "\\" || d === "\r" || d === "\n") {
             if (d === "\r" && src[i + 1] === "\n") {
               i += 2;
             } else {
@@ -248,7 +293,13 @@ function blankCommentsAndStrings(src: string): string {
           // Nested dynamic part of the spec (f"{v:{w}}", f"{5:'^10}").
           blank(i);
           i++;
-          if (!blankField(quote, outerTriple)) return false;
+          if (nesting >= MAX_NESTING) return false;
+          nesting++;
+          try {
+            if (!blankField(quote, outerTriple)) return false;
+          } finally {
+            nesting--;
+          }
           continue;
         }
         if (c === "}") {
@@ -260,6 +311,11 @@ function blankCommentsAndStrings(src: string): string {
         blank(i);
         i++;
         continue;
+      }
+      if (outerTriple && src.startsWith(quote.repeat(3), i)) {
+        if (src.indexOf(quote.repeat(3), i + 3) === -1) {
+          return false;
+        }
       }
       if (c === "'" || c === '"') {
         // Nested string of any quoting (PEP 701): scanned on its own so it cannot close the outer
