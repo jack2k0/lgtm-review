@@ -300,6 +300,23 @@ Files each slice is expected to touch (for the parallel check):
 - **Risk:** low–medium; every case gets a synthetic fixture; the real-log audit stays orchestrator-only (no external models, aggregate counts only).
 - **Status:** done (2026-10-25; phases OpenCode x4, 0 fixes; real logs: no status change, >= 97% not re-measured — `context/archive/status-accuracy-2/reviews/audit-2026-10-25.md`)
 
+### Status accuracy rounds (v0.3+)
+
+Follow-up rule rounds on real logs after S-20 (round 2), merged into main; tracked in `context/ORCHESTRATION.md` ("Aktywne slice'y"). None of them is a separate roadmap slice; one line each, what changed:
+
+- **status-accuracy-3 (2026-10-26):** checks wrapped in `flock`/`ionice`/`setsid`/`stdbuf` count; files attributed to git in mixed command lists (with a cautious fallback to the old rule when a segment may write); heredoc/`$VAR` write targets recognized — audit A 74.0% → 90.8%, B 68.9% → 90.2%.
+- **status-accuracy-4 (2026-10-28):** approach changed twice (C16 allow-lists, then narrowing C17–C19b) — audit B 86.1% → 97.5%, A 85.3% → 96.6%, 0 regressions.
+- **status-accuracy-5 (2026-10-28, evening):** review gaps R1–R3 closed and R4 became owner decision Q3 — full caution: a `cd X && a; b` command no longer assumes the `cd` succeeded outside the `&&` chain — audit B 97.5% → 84.8% (20 changes toward caution, 0 hidden edits).
+- **status-accuracy-6 (2026-10-28, evening):** heredoc, `case` and Python allow-list handling; 0 status changes on real logs.
+- **status-accuracy-7 (2026-10-28, night):** a CRLF regression found in review was fixed.
+- **status-accuracy-8 (2026-10-28, night):** the heredoc delimiter is now a whole shell word, plus arithmetic `<<` and comments; a `$((1<<2))` regression found in review was fixed.
+- **status-accuracy-9 (2026-10-29):** several heredocs in one line — bodies form a queue, stdin is the last heredoc of the segment.
+- **status-accuracy-10 (2026-10-29):** `<<` inside quotes/`$'…'` is not a heredoc; arithmetic `$((`/`((`/`$[` counts only when closed by `))`/`]` — otherwise the bash fallback to substitution/subshell; unquoted `let x=1<<2` is a heredoc as in bash; `#` after an escaped space and `\<<` fixed.
+- **status-accuracy-11 (2026-10-29):** carried over from round 10 — `( ((`/`{ ((`/`! ((` arithmetic, `$'…'` in the delimiter with `\x`/octal/`\u`, `(( x > 1 ))` without target `1`, arithmetic across a newline, `"$((cmd) ; …)"`.
+- **status-accuracy-12 (2026-10-29):** option B approved by the owner — redirects with a file descriptor (`2>`, `&>`, `>|`) and unspecified targets count as edits; 3 expectations changed with the owner's consent.
+- **status-accuracy-13 (2026-10-29):** the check log is freed only for log targets, also inside `( )`/`{ }`; code written "as a log" counts as an edit; `: ${X:=src}` poisons a name; `local`/`declare`/`readonly T=$(mktemp)` and `${TMPDIR:=/tmp}` count as scratch.
+- **gate-each (2026-10-29):** not a status rule — gate tooling: the removed-expectations check now sees removed rows of `test.each`/`it.each`/`describe.each` tables and tables by name (`const cases = [...]`), moves within the same table/test allowed, fails closed.
+
 ### S-21: Git cross-check ("what landed vs what the log shows")
 
 - **Outcome:** Developer opens a session's **Git cross-check** (web view and API) and sees which files git reports for the session's directory (uncommitted changes, and files changed by commits on the session's branch between its first and last record) that no prompt edited ("not in the log": formatter, generator, a shell edit the log missed, or a person), and which edited files git shows neither as uncommitted nor in those commits ("not in git": reverted, deleted again, outside the repository). Read-only git; statuses and hints never change.
@@ -339,26 +356,26 @@ Files each slice is expected to touch (for the parallel check):
 | S-19       | worktree-sessions | One session list for all git worktrees                         | done                                     | wave 2, schema-first with S-18          |
 | S-20       | status-accuracy-2 | Status accuracy round 2 (real-log follow-ups)                  | done                                     | wave 3; the only wave-3 golden writer   |
 | S-21       | git-crosscheck    | Git cross-check of a session's edits                           | done                                     | wave 3                                  |
-| S-08       | llm-titles        | Opt-in local LLM titles                                        | no: owner decisions O-1..O-3             | gated                                   |
+| S-08       | llm-titles        | Opt-in local LLM titles                                        | done (2026-10-28)                        | gated                                   |
 
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
 | ---------- | -------------------- | ------------------------------------------------------------- | --------------------- | -------------------------------------- |
-| F-01       | foundation-scaffold  | Finish foundation: audit bump, CI Node 22+24, pack smoke, fixtures | yes                   | Run `/10x-plan foundation-scaffold`    |
-| S-01       | parser-statuses      | Parse sessions and show prompt statuses in the terminal       | no                    | After F-01                             |
-| S-02       | web-sessions-prompts | Browser view of sessions and prompts with statuses            | no                    | After S-01; north star                 |
-| S-03       | steps-and-diff       | Steps view and diff for a prompt                              | no                    | After S-02; closes MVP                 |
+| F-01       | foundation-scaffold  | Finish foundation: audit bump, CI Node 22+24, pack smoke, fixtures | done                  | Run `/10x-plan foundation-scaffold`    |
+| S-01       | parser-statuses      | Parse sessions and show prompt statuses in the terminal       | done                  | After F-01                             |
+| S-02       | web-sessions-prompts | Browser view of sessions and prompts with statuses            | done                  | After S-01; north star                 |
+| S-03       | steps-and-diff       | Steps view and diff for a prompt                              | done                  | After S-02; closes MVP                 |
 
 ## Open Roadmap Questions
 
 1. **Public repository name and trademark check for `lgtm-review`** — Owner: user. Block: first public release (post-MVP).
 2. **Credit / permission for the original idea author (prototype shown at the course live)** — Owner: user. Block: publishing the README.
-3. **Default LLM model for the summarizer** — Owner: user. Now part of question 7 (S-08 moved into the v0.3 extension as a gated slice). Block: S-08 only.
+3. **Default LLM model for the summarizer** — Owner: user. Now part of question 7 (S-08 moved into the v0.3 extension as a gated slice). Block: S-08 only. Answered 2026-10-27 with question 7 (owner decisions): no default model — the user names the model per invocation; generated titles stay out of `--summary`/`--export`.
 4. **Timeline acknowledgment** — MVP is 7 weeks at ~5 h/week after-hours (> 3-week default); owner accepted on 2026-10-23. Target: first browser view (S-02) by about week 4. Block: none.
 5. **Decisions delegated by owner to the orchestrator** (non-goals, product framing: cli / large / no deadline; this roadmap's framing) — assumptions, owner may correct at any time. Block: roadmap-wide (soft).
 6. **Should the PRD be extended with requirements for the parked post-MVP slices (S-04..S-10) before they are planned?** — Owner: user. Block: any parked slice. Answered for v0.3 by the orchestrator on delegation (2026-10-25): PRD v3 declares FR-015..FR-020 for the v0.3 slices; the isometric map and other agents stay parked.
-7. **LLM layer decisions for S-08 (owner only)** — O-1: allow an opt-in LLM layer at all (non-reproducible text in a deterministic tool)? O-2: backend: only a model server on the loopback interface (Ollama, llama.cpp, LM Studio; keeps "no data leaves the machine"), or also `claude -p` (sends condensed session content to Anthropic; needs a guardrail change)? O-3: default model (proposal: none, the user names it), and may generated titles appear in `--summary`/`--export` (proposal: no)? — Owner: user. Block: S-08 only.
+7. **LLM layer decisions for S-08 (owner only)** — O-1: allow an opt-in LLM layer at all (non-reproducible text in a deterministic tool)? O-2: backend: only a model server on the loopback interface (Ollama, llama.cpp, LM Studio; keeps "no data leaves the machine"), or also `claude -p` (sends condensed session content to Anthropic; needs a guardrail change)? O-3: default model (proposal: none, the user names it), and may generated titles appear in `--summary`/`--export` (proposal: no)? — Owner: user. Block: S-08 only. Answered 2026-10-27 (owner decisions): O-1 yes, an opt-in LLM layer is allowed; O-2 a loopback model server only (no `claude -p`, the "no data leaves the machine" guardrail stays); O-3 no default model, and generated titles do not appear in `--summary`/`--export`. Block cleared: S-08 done 2026-10-28.
 
 ## Parked
 
