@@ -1,26 +1,73 @@
 # lgtm-review
 
-CLI. Run `npx lgtm-review`.
+Review what a coding agent did in a Claude Code session without reading every line.
+
+The package is not on npm yet. After the first release, it can be run directly with `npx lgtm-review`. Until then, run it from a checkout (requires Node >= 22).
+
+See [CHANGELOG.md](../../CHANGELOG.md) for version history and release notes.
+
+## Installation and running
+
+### From a checkout (Node >= 22)
+
+```bash
+git clone https://github.com/jack2k0/lgtm-review.git
+cd lgtm-review
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+node packages/cli/dist/cli.js
+```
+
+### After the first release (`npx`)
+
+```bash
+npx lgtm-review
+```
 
 ## Usage
 
 ```
-npx lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--raw] [--no-open] [--port <n>] [--no-worktrees] [--llm-url <url> --llm-model <name> [--llm-cache-dir <dir>]] [--version] [--help]
+lgtm-review [mode] [options]
 ```
 
-Without flags the command starts a local web UI for the Claude Code sessions of the current repository, prints its URL and opens it in your browser. Press Ctrl+C to stop.
+Without a mode flag, the command starts a local web UI for the Claude Code sessions of the current repository, prints its URL and opens it in your browser. Press Ctrl+C to stop.
+
+### Modes
+
+- `--list` prints the sessions and their prompt statuses in the terminal instead of starting the UI (`--json` prints the analysis as JSON). Output is redacted best-effort.
+- `--json` prints the analysis as JSON (implies `--list`).
+- `--summary` prints a markdown review summary of one session (see Summary below); `--session <id-prefix>` picks the session (default: the newest), `--no-titles` leaves prompt titles out.
+- `--export <id-prefix>` writes one session as a self-contained HTML file (see Export below; no JavaScript, secrets redacted best-effort).
+- `--archive` mirrors new or updated session logs of this repository to a private local archive (see Archive below).
+
+### Selection
 
 - `--dir <path>` sets the repository to inspect (default: current directory).
 - `--projects-dir <path>` sets the Claude Code projects directory (default: `~/.claude/projects`).
-- `--archive` mirrors new or updated session logs of this repository to a private local archive (see Archive below).
 - `--archive-dir <path>` sets the local archive root directory (default: `$LGTM_REVIEW_ARCHIVE` or `~/.lgtm-review/archive`).
-- `--list` prints the sessions and their prompt statuses in the terminal instead of starting the UI (`--json` prints the analysis as JSON). Output is redacted best-effort.
-- `--raw` prints log text unredacted (only valid with `--list` or `--json`).
-- `--summary` prints a markdown review summary of one session (see below); `--session <id-prefix>` picks the session (default: the newest), `--no-titles` leaves prompt titles out.
-- `--no-open` prints the URL without opening a browser.
+- `--session <id-prefix>` picks the session for `--summary` (default: the newest).
 - `--no-worktrees` shows only the sessions of `--dir`, not of the repository's other git worktrees.
+
+### Export
+
+- `--out <file>` with `--export`: output file (default: `lgtm-review-<first 8 chars of the id>.html`).
+- `--force` with `--export`: overwrite an existing output file.
+- `--no-diffs` with `--export`: leave the file diffs out.
+- `--no-titles` with `--summary` or `--export`: leave prompt titles out ("Prompt N").
+
+### Server
+
+- `--no-open` prints the URL without opening a browser.
 - `--port <n>` listens on a fixed port instead of a free one.
-- `--llm-url <url>` and `--llm-model <name>` (both or neither) opt in to local prompt titles in the web UI. See Local LLM titles below. `--llm-cache-dir <dir>` overrides the title cache and is only valid with `--llm-url`.
+
+### Local titles
+
+- `--llm-url <url>` and `--llm-model <name>` (both or neither) opt in to local prompt titles in the web UI. Server mode only: http on the loopback interface, no default model. See Local LLM titles below.
+- `--llm-cache-dir <dir>` overrides the title cache (default: `~/.lgtm-review/cache/titles`) and is only valid with `--llm-url`.
+
+### Other
+
+- `--raw` prints log text unredacted (only valid with `--list` or `--json`; by default secrets, repo paths, and usernames are redacted best-effort).
 - `--version` prints the version.
 - `--help` prints usage help.
 

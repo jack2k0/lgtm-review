@@ -60,31 +60,42 @@ function unsafeArchiveDir(archiveDir: string, projectsDir: string, repoDirs: rea
 
 const HELP = `lgtm-review ${VERSION}
 
-Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--raw] [--no-open] [--port <n>] [--no-worktrees] [--llm-url <url> --llm-model <name> [--llm-cache-dir <dir>]]
+Usage: lgtm-review [mode] [options]
 
-Without --archive/--list/--json/--summary, starts a local web UI on 127.0.0.1 and prints its URL.
+Without a mode flag, starts a local web UI on 127.0.0.1 and prints its URL.
 --llm-url and --llm-model are server mode only (both or neither): http on the loopback interface, no default model.
 
+Modes:
+  --list                 print the sessions in the terminal instead of starting the UI
+  --json                 print the analysis as JSON (implies --list)
+  --summary              print a markdown review summary of one session (for a PR description)
+  --export <id-prefix>   write one session as a self-contained HTML file (no JavaScript, secrets redacted best-effort)
+  --archive              mirror this repo's Claude Code session logs to the local archive
+
+Selection:
   --dir <path>           repository to inspect (default: current directory)
   --projects-dir <path>  Claude Code projects dir (default: ~/.claude/projects)
   --archive-dir <path>   local archive root (default: $LGTM_REVIEW_ARCHIVE or ~/.lgtm-review/archive)
-  --archive              mirror this repo's Claude Code session logs to the local archive
-  --list                 print the sessions in the terminal instead of starting the UI
-  --json                 print the analysis as JSON (implies --list)
-  --raw                  print log text unredacted (only with --list or --json)
-  --summary              print a markdown review summary of one session (for a PR description)
   --session <id-prefix>  session for --summary (default: the newest)
-  --no-titles            with --summary or --export: leave prompt titles out ("Prompt N")
-  --export <id-prefix>   write one session as a self-contained HTML file (no JavaScript, secrets redacted best-effort)
+  --no-worktrees         only the sessions of --dir, not of the repository's other git worktrees
+
+Export:
   --out <file>           with --export: output file (default: lgtm-review-<first 8 chars of the id>.html)
   --force                with --export: overwrite an existing output file
   --no-diffs             with --export: leave the file diffs out
-  --no-worktrees         only the sessions of --dir, not of the repository's other git worktrees
+  --no-titles            with --summary or --export: leave prompt titles out ("Prompt N")
+
+Server:
   --no-open              do not open the browser
   --port <n>             port for the UI (default: a free port)
+
+Local titles:
   --llm-url <url>        local model server (http, loopback only: 127.0.0.0/8, ::1 or localhost); needs --llm-model
   --llm-model <name>     model name on that server (no default)
   --llm-cache-dir <dir>  title cache (default: ~/.lgtm-review/cache/titles); only with --llm-url
+
+Other:
+  --raw                  print log text unredacted (only with --list or --json)
   --version              print the version
   --help                 print this help
 `;
