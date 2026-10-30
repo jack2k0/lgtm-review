@@ -1495,6 +1495,6 @@ describe("status-accuracy-7 heredoc forms", () => {
 });
 
 test("an autofix run is an opaque write, not a check", () => {
-  expect(classifyShellMutation("pnpm exec eslint . --fix", null, ["/r"]).opaque).toBe(true);
-  expect(classifyShellMutation("biome check --write .", null, ["/r"]).opaque).toBe(true);
+  expect(classifyShellMutation("pnpm exec eslint . --fix", undefined, ["/r"]).opaque).toBe(true);
+  expect(classifyShellMutation("biome check --write .", undefined, ["/r"]).opaque).toBe(true);
 });
