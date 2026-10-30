@@ -5,13 +5,14 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
-import { lstatSync, realpathSync } from "node:fs";
+import { lstatSync } from "node:fs";
 import { chmod, lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises";
 import { Agent, request as httpRequest, type ClientRequest } from "node:http";
 import { homedir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { TITLE_PROMPT_VERSION, redact, sanitizeTitle, titleRequestBody } from "@lgtm/core";
 import type { RedactOptions } from "@lgtm/core";
+import { isInside, realResolve } from "./paths.js";
 
 /** Default title cache: `~/.lgtm-review/cache/titles`. Not created by reading this. */
 export function defaultTitleCacheDir(): string {
@@ -98,27 +99,6 @@ export function resolveTitleCacheDir(cacheDir: string, projectsDir: string, arch
   if (isInside(cache, realResolve(projectsDir))) return { error: `cache dir ${cacheDir} is inside the Claude Code projects dir ${projectsDir}` };
   if (isInside(cache, realResolve(archiveDir))) return { error: `cache dir ${cacheDir} is inside the archive dir ${archiveDir}` };
   return { dir: cache };
-}
-
-/** Real path of `p`; when it does not exist yet, the real path of its nearest existing parent plus the rest. */
-function realResolve(p: string): string {
-  let cur = resolve(p);
-  const rest: string[] = [];
-  for (;;) {
-    try {
-      return join(realpathSync(cur), ...rest.reverse());
-    } catch {
-      const parent = dirname(cur);
-      if (parent === cur) return resolve(p);
-      rest.push(basename(cur));
-      cur = parent;
-    }
-  }
-}
-
-function isInside(child: string, parent: string): boolean {
-  const rel = relative(parent, child);
-  return rel === "" || (!rel.startsWith("..") && !rel.startsWith("/") && !/^[A-Za-z]:/.test(rel));
 }
 
 /** Shown after three transport failures. Never includes a response body. */

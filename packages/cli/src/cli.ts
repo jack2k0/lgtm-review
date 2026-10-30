@@ -1,52 +1,29 @@
-import { existsSync, realpathSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { SessionFile, SessionRoot } from "@lgtm/core/node";
 import {
-  analyzeFile,
-  archiveDirFor,
   archiveSessions,
   defaultArchiveRoot,
   defaultProjectsDir,
   discoverRootSessions,
-  loadRepoScripts,
-  projectDirFor,
   sessionRoots,
 } from "@lgtm/core/node";
 import { markInherited } from "@lgtm/core";
-import type { Analysis, RepoScripts, SessionAnalysis } from "@lgtm/core";
+import type { Analysis } from "@lgtm/core";
 import { osUsernames, runExport } from "./export.js";
 import { formatText, redactAnalysis, sortSessions } from "./format.js";
 import { formatSummary } from "./summary.js";
 import { createTitler, defaultTitleCacheDir, parseLlmUrl, resolveTitleCacheDir } from "./llm.js";
 import { createLauncher, openBrowser, type Launcher } from "./open.js";
+import { isInside, realResolve } from "./paths.js";
 import { startServer } from "./server.js";
+import { analyzeSessions } from "./sessions.js";
 
 declare const __LGTM_VERSION__: string;
 
 const VERSION = __LGTM_VERSION__;
-
-/** Real path of `p`; when it does not exist yet, the real path of its nearest existing parent plus the rest. */
-function realResolve(p: string): string {
-  let cur = resolve(p);
-  const rest: string[] = [];
-  for (;;) {
-    try {
-      return join(realpathSync(cur), ...rest.reverse());
-    } catch {
-      const parent = dirname(cur);
-      if (parent === cur) return resolve(p);
-      rest.push(basename(cur));
-      cur = parent;
-    }
-  }
-}
-
-function isInside(child: string, parent: string): boolean {
-  const rel = relative(parent, child);
-  return rel === "" || (!rel.startsWith("..") && !rel.startsWith("/") && !/^[A-Za-z]:/.test(rel));
-}
 
 /** Error text when the archive dir would overlap a repository checkout or the Claude Code projects dir; else null. */
 function unsafeArchiveDir(archiveDir: string, projectsDir: string, repoDirs: readonly string[]): string | null {
@@ -174,26 +151,12 @@ async function summary(dir: string, files: SessionFile[], prefix: string | undef
       return 1;
     }
   }
-  const repos = new Map<string, Promise<RepoScripts>>();
-  const repoFor = (d: string) => {
-    let p = repos.get(d);
-    if (!p) repos.set(d, (p = loadRepoScripts(d)));
-    return p;
-  };
-  const rootOf = new Map<string, string>();
-  const sessions: SessionAnalysis[] = [];
-  for (const f of files) {
-    try {
-      rootOf.set(f.id, f.root ?? dir);
-      const repo = await repoFor(f.root ?? dir);
-      const a = await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
-      if (f.archived) a.archived = true;
-      if (f.worktree !== undefined) a.worktree = f.worktree;
-      sessions.push(a);
-    } catch (err) {
-      if (pool.includes(f)) console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
+  const rootOf = new Map<string, string>(files.map((f) => [f.id, f.root ?? dir]));
+  const sessions = await analyzeSessions(files, dir, (f, err) => {
+    if (pool.includes(f)) {
+      console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
     }
-  }
+  });
   // Inheritance depends on all sessions of the project, so all are analysed and only then narrowed to the prefix.
   const wanted = new Set(pool.map((f) => f.id));
   const chosen = sortSessions(markInherited(sessions).filter((x) => wanted.has(x.sessionId)))[0];
@@ -205,10 +168,40 @@ async function summary(dir: string, files: SessionFile[], prefix: string | undef
   return 0;
 }
 
-async function main(): Promise<number> {
-  let values;
+export type CliValues = {
+  dir?: string;
+  "projects-dir"?: string;
+  "archive-dir"?: string;
+  archive?: boolean;
+  json?: boolean;
+  list?: boolean;
+  raw?: boolean;
+  summary?: boolean;
+  session?: string;
+  "no-titles"?: boolean;
+  export?: string;
+  out?: string;
+  force?: boolean;
+  "no-diffs"?: boolean;
+  "no-open"?: boolean;
+  "no-worktrees"?: boolean;
+  port?: string;
+  "llm-url"?: string;
+  "llm-model"?: string;
+  "llm-cache-dir"?: string;
+  version?: boolean;
+  help?: boolean;
+};
+
+export type ParsedCli =
+  | { exitCode: number }
+  | { values: CliValues; port: number; llmEndpoint?: URL };
+
+export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
+  let values: CliValues;
   try {
     ({ values } = parseArgs({
+      args: argv,
       options: {
         dir: { type: "string" },
         "projects-dir": { type: "string" },
@@ -237,20 +230,20 @@ async function main(): Promise<number> {
     }));
   } catch (err) {
     console.error(`lgtm-review: ${err instanceof Error ? err.message : err}\n\n${HELP}`);
-    return 1;
+    return { exitCode: 1 };
   }
   if (values.version) {
     console.log(`lgtm-review ${VERSION}`);
-    return 0;
+    return { exitCode: 0 };
   }
   if (values.help) {
     console.log(HELP);
-    return 0;
+    return { exitCode: 0 };
   }
 
   if (values["archive-dir"] === "") {
     console.error("lgtm-review: --archive-dir needs a directory path");
-    return 1;
+    return { exitCode: 1 };
   }
 
   let port = 0;
@@ -258,7 +251,7 @@ async function main(): Promise<number> {
     port = /^\d{1,5}$/.test(values.port) ? Number(values.port) : NaN;
     if (!(port >= 0 && port <= 65535)) {
       console.error(`lgtm-review: invalid --port "${values.port}" (expected 0-65535)`);
-      return 1;
+      return { exitCode: 1 };
     }
   }
 
@@ -280,41 +273,41 @@ async function main(): Promise<number> {
     console.error(
       "lgtm-review: --archive cannot be combined with --list, --json, --summary, --export, --session, --out, --force, --no-diffs, --no-titles, --port or --no-open",
     );
-    return 1;
+    return { exitCode: 1 };
   }
 
   const exporting = values.export !== undefined;
   if (exporting && (values.list || values.json || values.summary || values.session !== undefined)) {
     console.error("lgtm-review: --export cannot be combined with --list, --json, --summary or --session");
-    return 1;
+    return { exitCode: 1 };
   }
   if (!exporting && (values.out !== undefined || values.force || values["no-diffs"])) {
     console.error("lgtm-review: --out, --force and --no-diffs only work with --export");
-    return 1;
+    return { exitCode: 1 };
   }
   if (exporting && !/^[A-Za-z0-9_-]+$/.test(values.export!)) {
     console.error(`lgtm-review: invalid --export "${values.export}" (expected the start of a session id)`);
-    return 1;
+    return { exitCode: 1 };
   }
   if (exporting && values.out === "") {
     console.error("lgtm-review: --out needs a file name");
-    return 1;
+    return { exitCode: 1 };
   }
   if (values.summary && (values.list || values.json)) {
     console.error("lgtm-review: --summary cannot be combined with --list or --json");
-    return 1;
+    return { exitCode: 1 };
   }
   if (!values.summary && !exporting && (values.session !== undefined || values["no-titles"])) {
     console.error("lgtm-review: --session and --no-titles only work with --summary (--no-titles also with --export)");
-    return 1;
+    return { exitCode: 1 };
   }
   if (values.session !== undefined && !/^[A-Za-z0-9_-]+$/.test(values.session)) {
     console.error(`lgtm-review: invalid --session "${values.session}" (expected the start of a session id)`);
-    return 1;
+    return { exitCode: 1 };
   }
   if (values.raw && ((!values.list && !values.json) || values.summary || exporting)) {
     console.error("lgtm-review: --raw only works with --list or --json");
-    return 1;
+    return { exitCode: 1 };
   }
 
   const llmUrl = values["llm-url"];
@@ -322,23 +315,23 @@ async function main(): Promise<number> {
   const llmCacheFlag = values["llm-cache-dir"];
   if (llmCacheFlag !== undefined && llmUrl === undefined) {
     console.error("lgtm-review: --llm-cache-dir only works with --llm-url");
-    return 1;
+    return { exitCode: 1 };
   }
   if ((llmUrl === undefined) !== (llmModel === undefined)) {
     console.error("lgtm-review: --llm-url and --llm-model must be given together");
-    return 1;
+    return { exitCode: 1 };
   }
   if (llmModel !== undefined && (llmModel.trim() === "" || /[\r\n]/.test(llmModel))) {
     console.error("lgtm-review: --llm-model needs a model name");
-    return 1;
+    return { exitCode: 1 };
   }
   if (llmCacheFlag === "") {
     console.error("lgtm-review: --llm-cache-dir needs a directory path");
-    return 1;
+    return { exitCode: 1 };
   }
   if (llmUrl !== undefined && (values.list || values.json || values.summary || exporting || archiving)) {
     console.error("lgtm-review: --llm-url cannot be combined with --list, --json, --summary, --export or --archive");
-    return 1;
+    return { exitCode: 1 };
   }
 
   let llmEndpoint: URL | undefined;
@@ -346,10 +339,71 @@ async function main(): Promise<number> {
     const parsed = parseLlmUrl(llmUrl);
     if (parsed instanceof Error) {
       console.error(`lgtm-review: ${parsed.message}`);
-      return 1;
+      return { exitCode: 1 };
     }
     llmEndpoint = parsed;
   }
+
+  return { values, port, llmEndpoint };
+}
+
+export async function runArchive(roots: readonly SessionRoot[], projectsDir: string): Promise<number> {
+  for (const root of roots) {
+    const bad = unsafeArchiveDir(root.archiveDir!, projectsDir, roots.map((r) => r.dir));
+    if (bad !== null) {
+      console.error(`lgtm-review: ${bad}; choose another --archive-dir`);
+      return 1;
+    }
+  }
+  const lines: { text: string; label: string }[] = [];
+  for (const [i, root] of roots.entries()) {
+    if (i > 0 && !existsSync(root.projectDir)) continue;
+    let res;
+    try {
+      res = await archiveSessions(root.projectDir, root.archiveDir!);
+    } catch (err) {
+      if (i === 0) {
+        console.error(`lgtm-review: cannot read ${root.projectDir}: ${err instanceof Error ? err.message : err}`);
+        return 1;
+      }
+      console.error(`warning: ${root.projectDir}: cannot archive (${err instanceof Error ? err.message : err})`);
+      continue;
+    }
+    const mb = (res.bytes / (1024 * 1024)).toFixed(1);
+    for (const w of res.warnings) console.error(`warning: ${w}`);
+    lines.push({ text: `archived ${res.copied} new or updated, ${res.unchanged} unchanged (${mb} MB) -> ${root.archiveDir}`, label: root.worktree });
+  }
+  for (const l of lines) console.log(lines.length > 1 ? `[worktree ${l.label}] ${l.text}` : l.text);
+  return 0;
+}
+
+export async function runListOrJson(
+  dir: string,
+  files: SessionFile[],
+  json: boolean,
+  raw?: boolean,
+): Promise<number> {
+  const analysed = await analyzeSessions(files, dir, (f, err) => {
+    console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
+  });
+  const rootOf = new Map<string, string>(files.map((f) => [f.id, f.root ?? dir]));
+  const sessions = markInherited(analysed);
+  if (json) {
+    const sorted = sortSessions(sessions);
+    const analysis: Analysis = { dir, sessions: sorted };
+    const output = raw ? analysis : redactAnalysis(analysis, { usernames: osUsernames(), repoDir: dir }, rootOf);
+    console.log(JSON.stringify(output, null, 2));
+  } else {
+    const color = process.stdout.isTTY === true && !process.env.NO_COLOR;
+    console.log(formatText(sessions, { color, dir, raw }));
+  }
+  return 0;
+}
+
+async function main(): Promise<number> {
+  const parsed = parseCli();
+  if ("exitCode" in parsed) return parsed.exitCode;
+  const { values, port, llmEndpoint } = parsed;
 
   const dir = resolve(values.dir ?? process.cwd());
   const projectsDir = values["projects-dir"] ?? defaultProjectsDir();
@@ -360,58 +414,33 @@ async function main(): Promise<number> {
 
   let llm: { endpoint: URL; model: string; cacheDir: string } | undefined;
   if (llmEndpoint !== undefined) {
-    const resolved = resolveTitleCacheDir(llmCacheFlag ?? defaultTitleCacheDir(), projectsDir, archiveRoot, roots.map((r) => r.dir));
+    const resolved = resolveTitleCacheDir(values["llm-cache-dir"] ?? defaultTitleCacheDir(), projectsDir, archiveRoot, roots.map((r) => r.dir));
     if ("error" in resolved) {
       console.error(`lgtm-review: ${resolved.error}; choose another --llm-cache-dir`);
       return 1;
     }
-    llm = { endpoint: llmEndpoint, model: llmModel!, cacheDir: resolved.dir };
+    llm = { endpoint: llmEndpoint, model: values["llm-model"]!, cacheDir: resolved.dir };
   }
 
-  if (archiving) {
-    for (const root of roots) {
-      const bad = unsafeArchiveDir(root.archiveDir!, projectsDir, roots.map((r) => r.dir));
-      if (bad !== null) {
-        console.error(`lgtm-review: ${bad}; choose another --archive-dir`);
-        return 1;
-      }
-    }
-    const lines: { text: string; label: string }[] = [];
-    for (const [i, root] of roots.entries()) {
-      if (i > 0 && !existsSync(root.projectDir)) continue;
-      let res;
-      try {
-        res = await archiveSessions(root.projectDir, root.archiveDir!);
-      } catch (err) {
-        if (i === 0) {
-          console.error(`lgtm-review: cannot read ${root.projectDir}: ${err instanceof Error ? err.message : err}`);
-          return 1;
-        }
-        console.error(`warning: ${root.projectDir}: cannot archive (${err instanceof Error ? err.message : err})`);
-        continue;
-      }
-      const mb = (res.bytes / (1024 * 1024)).toFixed(1);
-      for (const w of res.warnings) console.error(`warning: ${w}`);
-      lines.push({ text: `archived ${res.copied} new or updated, ${res.unchanged} unchanged (${mb} MB) -> ${root.archiveDir}`, label: root.worktree });
-    }
-    for (const l of lines) console.log(lines.length > 1 ? `[worktree ${l.label}] ${l.text}` : l.text);
-    return 0;
-  }
+  if (values.archive) return runArchive(roots, projectsDir);
 
-  if (exporting) {
+  if (values.export !== undefined) {
     return runExport({
       dir,
       projectsDir,
       archiveDir,
       roots,
-      prefix: values.export!,
+      prefix: values.export,
       ...(values.out !== undefined ? { out: values.out } : {}),
       force: values.force === true,
       diffs: values["no-diffs"] !== true,
       titles: values["no-titles"] !== true,
     });
   }
-  if (!values.list && !values.json && !values.summary) return serve(dir, projectsDir, roots, port, values["no-open"] === true, llm);
+
+  if (!values.list && !values.json && !values.summary) {
+    return serve(dir, projectsDir, roots, port, values["no-open"] === true, llm);
+  }
 
   const discoveryWarnings: string[] = [];
   let files: SessionFile[];
@@ -439,34 +468,7 @@ async function main(): Promise<number> {
 
   if (values.summary) return summary(dir, files, values.session, values["no-titles"] !== true);
 
-  const repos = new Map<string, Promise<RepoScripts>>();
-  const analysed: SessionAnalysis[] = [];
-  for (const f of files) {
-    try {
-      const rd = f.root ?? dir;
-      let rp = repos.get(rd);
-      if (!rp) repos.set(rd, (rp = loadRepoScripts(rd)));
-      const repo = await rp;
-      const a = await analyzeFile(f.path, { repo, sessionId: f.id, file: `${f.id}.jsonl` });
-      if (f.archived) a.archived = true;
-      if (f.worktree !== undefined) a.worktree = f.worktree;
-      analysed.push(a);
-    } catch (err) {
-      console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
-    }
-  }
-  const rootOf = new Map<string, string>(files.map((f) => [f.id, f.root ?? dir]));
-  const sessions = markInherited(analysed);
-  if (values.json) {
-    const sorted = sortSessions(sessions);
-    const analysis: Analysis = { dir, sessions: sorted };
-    const output = values.raw ? analysis : redactAnalysis(analysis, { usernames: osUsernames(), repoDir: dir }, rootOf);
-    console.log(JSON.stringify(output, null, 2));
-  } else {
-    const color = process.stdout.isTTY === true && !process.env.NO_COLOR;
-    console.log(formatText(sessions, { color, dir, raw: values.raw }));
-  }
-  return 0;
+  return runListOrJson(dir, files, values.json === true, values.raw === true);
 }
 
 main().then(
