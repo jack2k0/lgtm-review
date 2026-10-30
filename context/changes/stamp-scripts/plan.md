@@ -12,17 +12,22 @@ Additionally, in `packages/core/src/node/discover.ts`, `PKG_SCRIPTS` was limited
 
 ## Rules
 
-1. In `packages/cli/src/api.ts`, compute a cheap fingerprint of the exact inputs `loadRepoScripts` reads for a root directory (`package.json`, `Makefile`, and `scripts/`) using `access(R_OK)` + `stat` (`${st.mtimeMs}:${st.size}`).
+1. In `packages/cli/src/api.ts`, compute a cheap fingerprint of the exact inputs `loadRepoScripts` reads for a root directory (`package.json`, `Makefile`, and `scripts/`) using `access(R_OK)` + `stat` (`${st.mtimeMs}:${st.ctimeMs}:${st.size}`).
 2. Keep it cheap: no re-reading of file contents beyond `stat`.
 3. Fail closed: if a file or directory is unreadable (`EACCES` or non-ENOENT error), return a unique changing value (`err:${Date.now()}:${Math.random()}`) so the stamp changes and never produces a stale hit.
 4. Include the repo scripts stamp of all project roots (`opts.dir`, `roots`, and session `f.root`) in `projectStamp(files)` so all project ETags flip on script changes.
 5. Include the root's repo scripts stamp in the cache keys of `analysisFor` and `detailFor` so analyses are refreshed on script changes.
-6. In `packages/core/src/node/discover.ts`, include `ci` and `verify` in `PKG_SCRIPTS` so that `package.json` scripts named like a check toggle command status.
+
+## Review fixes
+
+- G1: Revert `packages/core/src/node/discover.ts` to leave `PKG_SCRIPTS` unchanged on main (`["test", "lint", "typecheck", "check", "build"]`). In `packages/cli/src/api.test.ts`, use a script name from `PKG_SCRIPTS` (`check`) rather than modifying core discover logic.
+- G2: Include `ctimeMs` in `statFingerprint` (`${st.mtimeMs}:${st.ctimeMs}:${st.size}`). A same-size rewrite with restored `mtime` (e.g. `touch -r` / `fs.utimesSync`) changes `ctimeMs`, invalidating 304 and serving 200 with the new ETag.
+- G3: Compute `repoScriptsStamp` once per distinct root per request in `projectStamp` and pass the root stamps map into `allAnalyses`, `detailFor`, and `promptRoute`/`mapRoute`/`playRoute`/`titlesRoute` instead of re-statting across session files.
+- Haiku Nits 3 and 5 left as they are per instructions.
 
 ## Gate
 ```gate
 allow: ^packages/cli/src/(api|api\.test)\.ts$
-allow: ^packages/core/src/node/discover\.ts$
 allow: ^context/(changes|archive)/stamp-scripts/
 deps: no
 schema: no

@@ -199,7 +199,7 @@ export async function discoverRootSessions(
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-const PKG_SCRIPTS = new Set(["test", "lint", "typecheck", "check", "build", "ci", "verify"]);
+const PKG_SCRIPTS = new Set(["test", "lint", "typecheck", "check", "build"]);
 const MAKE_TARGETS = new Set(["test", "check", "lint", "build"]);
 const SCRIPT_FILE_RE = /^(check|test|lint|ci|verify|validate|gate|mutation|smoke)[^/\s]*\.sh$/;
 

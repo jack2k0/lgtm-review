@@ -421,7 +421,7 @@ describe("cache", () => {
     rmSync(join(pdir, "garbage.jsonl"));
   });
 
-  test("editing a fixture repo's package.json script between two requests changes the ETag (no 304) and the status in the response; an unchanged repo still gives 304", async () => {
+  test("editing a fixture repo's package.json script between two requests changes the ETag (no 304); an unchanged repo still gives 304; same-size rewrite with restored mtime invalidates via ctime", async () => {
     const repoDir = join(tmp, "repo-scripts-test");
     mkdirSync(repoDir, { recursive: true });
     writeFileSync(join(repoDir, "package.json"), JSON.stringify({ name: "test-repo", scripts: {} }));
@@ -429,7 +429,7 @@ describe("cache", () => {
     mkdirSync(projDir, { recursive: true });
 
     const sess = [
-      { type: "user", cwd: repoDir, message: { content: "verify task" } },
+      { type: "user", cwd: repoDir, message: { content: "check task" } },
       { type: "assistant", cwd: repoDir, message: { content: [{ type: "tool_use", id: "e1", name: "Edit", input: { file_path: join(repoDir, "src/a.ts"), old_string: "1", new_string: "2" } }] } },
       {
         type: "user",
@@ -437,7 +437,7 @@ describe("cache", () => {
         message: { content: [{ type: "tool_result", tool_use_id: "e1", content: "ok" }] },
         toolUseResult: { type: "update", filePath: join(repoDir, "src/a.ts"), oldString: "1", newString: "2", structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-1", "+2"] }] },
       },
-      { type: "assistant", cwd: repoDir, message: { content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "pnpm verify" } }] } },
+      { type: "assistant", cwd: repoDir, message: { content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "pnpm check" } }] } },
       { type: "user", cwd: repoDir, message: { content: [{ type: "tool_result", tool_use_id: "b1", content: "ok" }] } },
     ].map((l) => JSON.stringify(l)).join("\n");
     writeFileSync(join(projDir, "session-pkg.jsonl"), sess);
@@ -448,16 +448,16 @@ describe("cache", () => {
       expect(r1.status).toBe(200);
       const etag1 = r1.headers.etag as string;
       expect(etag1).toBeDefined();
-      expect(r1.json.prompts[0].status).toBe("unchecked");
+      expect(r1.json.prompts[0].status).toBe("checked");
 
       // Unchanged repo gives 304
       const r2 = await get(repoSrv, "/api/sessions/session-pkg", repoSrv.token, { "If-None-Match": etag1 });
       expect(r2.status).toBe(304);
 
-      // Edit package.json to add the verify script
-      writeFileSync(join(repoDir, "package.json"), JSON.stringify({ name: "test-repo", scripts: { verify: "exit 0" } }));
+      // Edit package.json to add the check script
+      writeFileSync(join(repoDir, "package.json"), JSON.stringify({ name: "test-repo", scripts: { check: "exit 0" } }));
 
-      // Changed package.json: ETag changes, no 304, status changes to checked
+      // Changed package.json: ETag changes, no 304
       const r3 = await get(repoSrv, "/api/sessions/session-pkg", repoSrv.token, { "If-None-Match": etag1 });
       expect(r3.status).toBe(200);
       expect(r3.headers.etag).not.toBe(etag1);
@@ -466,6 +466,28 @@ describe("cache", () => {
       // Unchanged after edit gives 304
       const r4 = await get(repoSrv, "/api/sessions/session-pkg", repoSrv.token, { "If-None-Match": r3.headers.etag as string });
       expect(r4.status).toBe(304);
+
+      // G2: same-size rewrite with restored mtime (touch -r / utimes) must still change stamp via ctimeMs
+      const pkgPath = join(repoDir, "package.json");
+      const stBefore = statSync(pkgPath);
+      const sameSizeContent = JSON.stringify({ name: "test-repo", scripts: { check: "exit 1" } });
+      expect(Buffer.byteLength(sameSizeContent)).toBe(stBefore.size);
+      const spinUntil = Date.now() + 10;
+      while (Date.now() < spinUntil) {}
+      writeFileSync(pkgPath, sameSizeContent);
+      utimesSync(pkgPath, stBefore.atime, stBefore.mtime);
+      const stAfter = statSync(pkgPath);
+      expect(stAfter.size).toBe(stBefore.size);
+      expect(stAfter.ctimeMs).not.toBe(stBefore.ctimeMs);
+
+      const r5 = await get(repoSrv, "/api/sessions/session-pkg", repoSrv.token, { "If-None-Match": r3.headers.etag as string });
+      expect(r5.status).toBe(200);
+      expect(r5.headers.etag).not.toBe(r3.headers.etag);
+      expect(r5.json.prompts[0].status).toBe("checked");
+
+      // Unchanged after same-size rewrite gives 304
+      const r6 = await get(repoSrv, "/api/sessions/session-pkg", repoSrv.token, { "If-None-Match": r5.headers.etag as string });
+      expect(r6.status).toBe(304);
 
       // Unreadable file fails closed: changing stamp, no 304
       if (process.getuid?.() !== 0) {
