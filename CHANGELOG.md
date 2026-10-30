@@ -15,6 +15,7 @@ Initial release. Review what a coding agent did in a Claude Code session without
 - Step view showing actions, check results, and agent quotes per prompt.
 - Per-file diffs showing agent edits taken from session logs.
 - Review hints per prompt and heuristic recommendations (`skim`, `read-flagged`, `read-all`).
+- Import map of a session's or prompt's changes (TypeScript, Python) and Play, which replays the change step by step.
 - Git cross-check comparing session log edits with local git status and commit history.
 - Local private session archive (`--archive`) preserving copies of older Claude Code session logs.
 - Standalone HTML export (`--export <id-prefix>`) with embedded styling and best-effort secret redaction.
