@@ -302,7 +302,7 @@ Files each slice is expected to touch (for the parallel check):
 
 ### Status accuracy rounds (v0.3+)
 
-Follow-up rule rounds on real logs after S-20 (round 2), merged locally into main; tracked in `context/ORCHESTRATION.md` ("Aktywne slice'y"). None of them is a separate roadmap slice; one line each, what changed:
+Follow-up rule rounds on real logs after S-20 (round 2), merged into main; tracked in `context/ORCHESTRATION.md` ("Aktywne slice'y"). None of them is a separate roadmap slice; one line each, what changed:
 
 - **status-accuracy-3 (2026-10-26):** checks wrapped in `flock`/`ionice`/`setsid`/`stdbuf` count; files attributed to git in mixed command lists (with a cautious fallback to the old rule when a segment may write); heredoc/`$VAR` write targets recognized — audit A 74.0% → 90.8%, B 68.9% → 90.2%.
 - **status-accuracy-4 (2026-10-28):** approach changed twice (C16 allow-lists, then narrowing C17–C19b) — audit B 86.1% → 97.5%, A 85.3% → 96.6%, 0 regressions.
