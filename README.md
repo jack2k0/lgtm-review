@@ -17,7 +17,7 @@ Not in the MVP: syntax highlighting, split diffs.
 
 ```
 npx lgtm-review            # starts the local UI for the sessions of the current repo
-npx lgtm-review --list     # terminal output instead of the UI
+npx lgtm-review --list     # terminal output instead of the UI (redacted best-effort; --raw for unredacted)
 npx lgtm-review --summary  # markdown summary of a session for a PR description
 npx lgtm-review --export <id-prefix>  # self-contained HTML file of a session (redaction is best-effort: review it before sharing)
 ```
@@ -43,7 +43,7 @@ The server listens on 127.0.0.1 only, is read-only and requires the per-run toke
 
 ## Keeping old sessions
 
-Claude Code deletes session logs older than `cleanupPeriodDays` (a setting in `~/.claude/settings.json`, default 30 days), so lgtm-review can only show sessions whose logs still exist, and a session reviewed last month can disappear. Run `npx lgtm-review --archive` regularly to keep copies, or raise `cleanupPeriodDays`. `--archive` mirrors the repository's session logs to a private local archive (`--archive-dir <path>`, else `$LGTM_REVIEW_ARCHIVE`, else `~/.lgtm-review/archive`) and refuses, with exit 1, when the archive directory would lie inside the repository or the Claude Code projects directory. Every reader — `--list`, `--json`, `--summary`, `--export` and the web UI — lists archived sessions alongside live ones, marked `(archived)`, and reads the longer copy when a session exists in both. Details are in [packages/cli/README.md](packages/cli/README.md).
+Claude Code deletes session logs older than `cleanupPeriodDays` (a setting in `~/.claude/settings.json`, default 30 days), so lgtm-review can only show sessions whose logs still exist, and a session reviewed last month can disappear. Run `npx lgtm-review --archive` regularly to keep copies, or raise `cleanupPeriodDays`. `--archive` mirrors the repository's session logs to a private local archive (`--archive-dir <path>`, else `$LGTM_REVIEW_ARCHIVE`, else `~/.lgtm-review/archive`) and refuses, with exit 1, when the archive directory would lie inside the repository or the Claude Code projects directory. Every reader — `--list`, `--json`, `--summary`, `--export` and the web UI — lists archived sessions alongside live ones, marked `(archived)`, and reads the longer copy when a session exists in both. `--list` and `--json` redact log text best-effort by default; pass `--raw` to print it unredacted. Details are in [packages/cli/README.md](packages/cli/README.md).
 
 ## Local LLM titles (optional)
 

@@ -16,8 +16,8 @@ import {
 } from "@lgtm/core/node";
 import { markInherited } from "@lgtm/core";
 import type { Analysis, RepoScripts, SessionAnalysis } from "@lgtm/core";
-import { runExport } from "./export.js";
-import { formatText, sortSessions } from "./format.js";
+import { osUsernames, runExport } from "./export.js";
+import { formatText, redactAnalysis, sortSessions } from "./format.js";
 import { formatSummary } from "./summary.js";
 import { createTitler, defaultTitleCacheDir, parseLlmUrl, resolveTitleCacheDir } from "./llm.js";
 import { createLauncher, openBrowser, type Launcher } from "./open.js";
@@ -58,7 +58,7 @@ function unsafeArchiveDir(archiveDir: string, projectsDir: string, repoDirs: rea
 
 const HELP = `lgtm-review ${VERSION}
 
-Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--no-open] [--port <n>] [--no-worktrees] [--llm-url <url> --llm-model <name> [--llm-cache-dir <dir>]]
+Usage: lgtm-review [--dir <path>] [--projects-dir <path>] [--archive-dir <path>] [--archive | --list | --json | --summary [--session <id-prefix>] [--no-titles] | --export <id-prefix> [--out <file>] [--force] [--no-diffs] [--no-titles]] [--raw] [--no-open] [--port <n>] [--no-worktrees] [--llm-url <url> --llm-model <name> [--llm-cache-dir <dir>]]
 
 Without --archive/--list/--json/--summary, starts a local web UI on 127.0.0.1 and prints its URL.
 --llm-url and --llm-model are server mode only (both or neither): http on the loopback interface, no default model.
@@ -69,6 +69,7 @@ Without --archive/--list/--json/--summary, starts a local web UI on 127.0.0.1 an
   --archive              mirror this repo's Claude Code session logs to the local archive
   --list                 print the sessions in the terminal instead of starting the UI
   --json                 print the analysis as JSON (implies --list)
+  --raw                  print log text unredacted (only with --list or --json)
   --summary              print a markdown review summary of one session (for a PR description)
   --session <id-prefix>  session for --summary (default: the newest)
   --no-titles            with --summary or --export: leave prompt titles out ("Prompt N")
@@ -202,6 +203,7 @@ async function main(): Promise<number> {
         archive: { type: "boolean" },
         json: { type: "boolean" },
         list: { type: "boolean" },
+        raw: { type: "boolean" },
         summary: { type: "boolean" },
         session: { type: "string" },
         "no-titles": { type: "boolean" },
@@ -295,6 +297,10 @@ async function main(): Promise<number> {
   }
   if (values.session !== undefined && !/^[A-Za-z0-9_-]+$/.test(values.session)) {
     console.error(`lgtm-review: invalid --session "${values.session}" (expected the start of a session id)`);
+    return 1;
+  }
+  if (values.raw && !values.list && !values.json) {
+    console.error("lgtm-review: --raw only works with --list or --json");
     return 1;
   }
 
@@ -436,12 +442,16 @@ async function main(): Promise<number> {
       console.error(`warning: ${f.id}.jsonl: unreadable (${err instanceof Error ? err.message : "error"})`);
     }
   }
+  const rootOf = new Map<string, string>(files.map((f) => [f.id, f.root ?? dir]));
   const sessions = markInherited(analysed);
   if (values.json) {
-    console.log(JSON.stringify({ dir, sessions: sortSessions(sessions) } satisfies Analysis, null, 2));
+    const sorted = sortSessions(sessions);
+    const analysis: Analysis = { dir, sessions: sorted };
+    const output = values.raw ? analysis : redactAnalysis(analysis, { usernames: osUsernames(), repoDir: dir }, rootOf);
+    console.log(JSON.stringify(output, null, 2));
   } else {
     const color = process.stdout.isTTY === true && !process.env.NO_COLOR;
-    console.log(formatText(sessions, { color, dir }));
+    console.log(formatText(sessions, { color, dir, raw: values.raw }));
   }
   return 0;
 }
