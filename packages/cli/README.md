@@ -210,7 +210,8 @@ npx lgtm-review --archive [--dir <path>] [--projects-dir <path>] [--archive-dir 
 ```
 
 - **Where it goes:** `--archive-dir <path>`, else env `LGTM_REVIEW_ARCHIVE`, else `~/.lgtm-review/archive`. Sessions for the repository are stored under `<archiveRoot>/<project-dir-name>/`.
-- **Merged across all readers:** every reader (terminal `--list`, `--json`, `--summary`, `--export`, and the web UI) automatically reads from the archive for sessions whose live logs were deleted. Live sessions take precedence over archived copies. Sessions read from the archive are marked `(archived)` in the terminal list, carry `archived: true` in `--json` and the API, and show an "archived" badge in the web UI.
+- **Merged across all readers:** every reader (terminal `--list`, `--json`, `--summary`, `--export`, and the web UI) automatically reads from the archive for sessions whose live logs were deleted. When a session exists in both, the longer copy is read (a live log cut short by Claude Code loses to its fuller archived copy); otherwise the live log is used. Sessions read from the archive are marked `(archived)` in the terminal list, carry `archived: true` in `--json` and the API, and show an "archived" badge in the web UI.
+- **Refuses unsafe targets:** it exits 1 with "choose another --archive-dir" when the archive directory would lie inside the repository of `--dir` (including its worktrees) or the Claude Code projects directory.
 - **Privacy:** the archive is a private, unredacted copy of raw logs already stored on your machine (`~/.claude`), with the same trust level. It is never uploaded anywhere. The archive is opt-in: only `lgtm-review --archive` writes to it; all other commands and the local server treat it as read-only.
 - **Automation (optional):** you can mirror sessions automatically via a cron job or git hook:
   ```bash
