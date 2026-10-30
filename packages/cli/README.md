@@ -201,16 +201,6 @@ Known gaps (these can stay in the file):
 
 Limits: diffs are included up to 5 MB of text in total (later diffs are left out and the file says so), each step lists at most 200 actions, and a session log larger than 10 MB prints a warning because the export can be large and slow.
 
-## Keeping old sessions
-
-Claude Code deletes session logs older than `cleanupPeriodDays` (a setting in `~/.claude/settings.json`, default 30 days), so lgtm-review can only show sessions whose logs still exist, and a session reviewed last month can disappear. Run `npx lgtm-review --archive` regularly to keep copies, or raise `cleanupPeriodDays`. `--archive` mirrors the repository's session logs (all its git worktrees, unless `--no-worktrees`) to a private local archive:
-
-- It goes to `--archive-dir <path>`, else `$LGTM_REVIEW_ARCHIVE`, else `~/.lgtm-review/archive`, in a private per-repository subdirectory there.
-- It exits 1 with "choose another --archive-dir" when the archive directory would lie inside the repository of `--dir` (including its worktrees) or the Claude Code projects directory.
-- Every reader (`--list`, `--json`, `--summary`, `--export`, the web UI) lists archived sessions alongside live ones, marked `(archived)` / a badge, and prefers the live log when both exist.
-
-Details are in [Archive](#archive).
-
 ## Archive
 
 Claude Code automatically deletes session logs older than `cleanupPeriodDays` (default 30 days). A review from last month then disappears. `lgtm-review --archive` mirrors the current repository's session logs and their subagent transcripts into a private local archive:
@@ -220,7 +210,8 @@ npx lgtm-review --archive [--dir <path>] [--projects-dir <path>] [--archive-dir 
 ```
 
 - **Where it goes:** `--archive-dir <path>`, else env `LGTM_REVIEW_ARCHIVE`, else `~/.lgtm-review/archive`. Sessions for the repository are stored under `<archiveRoot>/<project-dir-name>/`.
-- **Merged across all readers:** every reader (terminal `--list`, `--json`, `--summary`, `--export`, and the web UI) automatically reads from the archive for sessions whose live logs were deleted. Live sessions take precedence over archived copies. Sessions read from the archive are marked `(archived)` in the terminal list, carry `archived: true` in `--json` and the API, and show an "archived" badge in the web UI.
+- **Merged across all readers:** every reader (terminal `--list`, `--json`, `--summary`, `--export`, and the web UI) automatically reads from the archive for sessions whose live logs were deleted. When a session exists in both, the longer copy is read (a live log cut short by Claude Code loses to its fuller archived copy); otherwise the live log is used. Sessions read from the archive are marked `(archived)` in the terminal list, carry `archived: true` in `--json` and the API, and show an "archived" badge in the web UI.
+- **Refuses unsafe targets:** it exits 1 with "choose another --archive-dir" when the archive directory would lie inside the repository of `--dir` (including its worktrees) or the Claude Code projects directory.
 - **Privacy:** the archive is a private, unredacted copy of raw logs already stored on your machine (`~/.claude`), with the same trust level. It is never uploaded anywhere. The archive is opt-in: only `lgtm-review --archive` writes to it; all other commands and the local server treat it as read-only.
 - **Automation (optional):** you can mirror sessions automatically via a cron job or git hook:
   ```bash
