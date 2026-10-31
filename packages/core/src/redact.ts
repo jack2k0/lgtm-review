@@ -360,6 +360,27 @@ function redactAssign(g: Groups, st: State): string | null {
   return head + ph("secret");
 }
 
+/**
+ * Like ASSIGN, but for a value whose opening `"` or `'` has no matching close before the end of the line (or text).
+ * The `m` flag lets `$` match end-of-line. Content is limited to 300 chars (same as ASSIGN) and must not contain
+ * the matching closing quote (guaranteed by `[^"\r\n]` / `[^'\r\n]`).
+ */
+const ASSIGN_OPEN_QUOTE =
+  /(?<![A-Za-z0-9_.-])(['"]?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})(?:"([^"\r\n]{1,300})|'([^'\r\n]{1,300}))$/gim;
+
+function redactAssignOpenQuote(g: Groups): string | null {
+  const ident = g[2] as string;
+  if (!isSecretKey(ident)) return null;
+  const k = ident.toLowerCase().replace(/^-+/, "");
+  const rawVal = (g[4] ?? g[5]) as string;
+  if (k === "pwd" && /^[.~/]/.test(rawVal)) return null;
+  if (rawVal.length < 3 || isNonLiteral(rawVal, true, true)) return null;
+  const q = g[1] as string;
+  const head = q + ident + q + (g[3] as string);
+  const vq = g[4] !== undefined ? '"' : "'";
+  return `${head}${vq}${ph("secret")}`;
+}
+
 /** `--password hunter2xyz` style flags (space separated). */
 const CLI_FLAG = /(?<![A-Za-z0-9-])(--?[A-Za-z][A-Za-z-]{0,30}[ \t]+)(?:"([^"\r\n]{4,300})"|'([^'\r\n]{4,300})'|([^\s"'\-/.~$<(\[{][^\s"']{3,200}))/g;
 
@@ -702,6 +723,7 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
   }
 
   t = pass(t, st, ASSIGN, [":", "="], false, (g) => redactAssign(g, st));
+  t = pass(t, st, ASSIGN_OPEN_QUOTE, [":", "="], false, redactAssignOpenQuote);
   t = pass(t, st, CLI_FLAG, ["--", " -"], false, redactFlag);
   t = redactMysql(t, st);
   t = redactSshpass(t, st);
