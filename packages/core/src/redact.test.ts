@@ -634,3 +634,88 @@ describe("redact: open-quote values (no closing quote before end of line)", () =
   });
 });
 
+describe("redact: long quoted values and escaped quotes", () => {
+  /** `n` characters, not hex, so only the assignment rule can hide it. */
+  const filler = (n: number) => "z".repeat(n - 1) + "7";
+
+  test.each([
+    ["double", '"'],
+    ["single", "'"],
+  ] as const)("closed %s value of 370 and of 4000 characters", (_name, q) => {
+    for (const n of [370, 4000]) {
+      const secret = filler(n);
+      const r = redact(`password=${q}${secret}${q}`);
+      expect(r.text, String(n)).toBe(`password=${q}[redacted:secret]${q}`);
+      expect(r.text, String(n)).not.toContain(secret);
+      expect(r.count, String(n)).toBe(1);
+    }
+  });
+
+  test.each([
+    ["double", '"'],
+    ["single", "'"],
+  ] as const)("open %s value of 370 and of 4000 characters", (_name, q) => {
+    for (const n of [370, 4000]) {
+      const secret = filler(n);
+      const r = redact(`password=${q}${secret}`);
+      expect(r.text, String(n)).toBe(`password=${q}[redacted:secret]`);
+      expect(r.text, String(n)).not.toContain(secret);
+      expect(r.count, String(n)).toBe(1);
+    }
+  });
+
+  test("an escaped quote does not end a closed value", () => {
+    const r = redact('password="abc\\"def ghi"');
+    expect(r.text).toBe('password="[redacted:secret]"');
+    expect(r.text).not.toContain("def ghi");
+    expect(r.count).toBe(1);
+  });
+
+  test("an escaped quote does not end an open value", () => {
+    const r = redact('password="abc\\"def ghi');
+    expect(r.text).toBe('password="[redacted:secret]');
+    expect(r.text).not.toContain("def ghi");
+    expect(r.count).toBe(1);
+  });
+
+  test("the JSON-escaped form of an escaped quote hides the tail", () => {
+    // JSON.stringify of the raw value: `\"` for each quote and `\\` for the backslash before the inner quote.
+    const closed = JSON.stringify('password="abc\\"def ghi"').slice(1, -1);
+    const open = JSON.stringify('password="abc\\"def ghi').slice(1, -1);
+    for (const input of [closed, open]) {
+      const r = redact(input);
+      expect(r.text, JSON.stringify(input)).not.toContain("def ghi");
+      expect(r.text, JSON.stringify(input)).toContain("[redacted:secret]");
+      expect(r.count, JSON.stringify(input)).toBeGreaterThanOrEqual(1);
+      const again = redact(r.text);
+      expect(again.text, JSON.stringify(input)).toBe(r.text);
+      expect(again.count, JSON.stringify(input)).toBe(0);
+    }
+  });
+
+  test("a quoted value longer than 4096 characters stays visible", () => {
+    const secret = "z".repeat(4097);
+    const input = `password="${secret}"`;
+    expect(redact(input)).toEqual({ text: input, count: 0 });
+  });
+
+  test("short closed values, a long non-secret, a reference, a windows path and a trailing escaped backslash", () => {
+    expect(redact('password="cat123"').text).toBe('password="[redacted:secret]"');
+    const title = `title="${"hello world ".repeat(30)}"`;
+    expect(redact(title)).toEqual({ text: title, count: 0 });
+    expect(redact('password="$VAR')).toEqual({ text: 'password="$VAR', count: 0 });
+    expect(redact('password="C:\\tmp\\x"').text).toBe('password="[redacted:secret]"');
+    expect(redact('password="a b\\\\"').text).toBe('password="[redacted:secret]"');
+  });
+
+  test("idempotent on long values and escaped quotes", () => {
+    const secret = filler(4000);
+    for (const input of [`password="${secret}"`, `password='${secret}`, 'password="abc\\"def ghi"', 'password="abc\\"def ghi', 'password="cat123"', 'password="$VAR']) {
+      const once = redact(input);
+      const twice = redact(once.text);
+      expect(twice.text, input).toBe(once.text);
+      expect(twice.count, input).toBe(0);
+    }
+  });
+});
+

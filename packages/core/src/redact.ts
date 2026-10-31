@@ -211,8 +211,22 @@ function redactAuthHeader(g: Groups): string | null {
 
 // ---------------------------------------------------------------- key = value assignments
 
+/**
+ * One piece of a quoted assignment value: a backslash and the next character (other than a line break),
+ * or any character that is not a quote, a backslash or a line break. An escaped quote is therefore inside
+ * the value. A value that ends in an escaped backslash (`password="a b\\"`) still closes on the quote,
+ * because that backslash is consumed as a pair and the following quote is free. The cap is 4096 pieces
+ * (a plain value longer than 4096 characters does not match). The unquoted alternative keeps its own cap.
+ */
+const QUOTED_PIECE_DQ = '(?:\\\\[^\\r\\n]|[^"\\\\\\r\\n])';
+const QUOTED_PIECE_SQ = "(?:\\\\[^\\r\\n]|[^'\\\\\\r\\n])";
+const QUOTED_CAP = 4096;
+
 const ASSIGN =
-  /(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|((?:[^\s"',;)}\]]|;(?=\S)){3,300}))/gi;
+  new RegExp(
+    `(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\\1([ \\t]{0,3}(?::=|[:=])[ \\t]{0,8})(?:"(${QUOTED_PIECE_DQ}{1,${QUOTED_CAP}})"|'(${QUOTED_PIECE_SQ}{1,${QUOTED_CAP}})'|((?:[^\\s"',;)}\\]]|;(?=\\S)){3,300}))`,
+    "gi",
+  );
 const SECRET_WORD =
   /token(?!s|iz)|secret|passw(?:or)?d|pass[_-]?phrase|access[_-]?key|auth[_-]?key|api[_-]?key|credential|private[_-]?key|(?:stripe|webhook|signing)[_-]?(?:key|secret|token|signature)|(?:^|[_.-])(?:pass|pwd|passwd)(?=$|[_.-])/;
 const NOT_SECRET_SUFFIX = /[_.-](?:file|path|dir|name|url|uri|type|count|limit|length|len|id|ttl|usage|budget|expires?|expiry)$/;
@@ -322,7 +336,7 @@ function isNonLiteral(v: string, quoted: boolean, secretContext = false): boolea
 
 /**
  * A value that belongs to a harmless key can itself hold an assignment (`cmd = "PASSWORD=..."`); the outer match has
- * consumed it, so the inner text is scanned again here (values are at most 300 characters, so this stays cheap).
+ * consumed it, so the inner text is scanned again here (a quoted value is at most 4096 pieces, so this stays cheap).
  */
 function redactInner(g: Groups, st: State): string | null {
   const q = g[4] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
@@ -361,12 +375,15 @@ function redactAssign(g: Groups, st: State): string | null {
 }
 
 /**
- * Like ASSIGN, but for a value whose opening `"` or `'` has no matching close before the end of the line (or text).
- * The `m` flag lets `$` match end-of-line. Content is limited to 300 chars (same as ASSIGN) and must not contain
- * the matching closing quote (guaranteed by `[^"\r\n]` / `[^'\r\n]`).
+ * Like ASSIGN, but for a value whose opening `"` or `'` has no unescaped close before the end of the line (or text).
+ * The `m` flag lets `$` match end-of-line. Content is limited to 4096 pieces (same as ASSIGN). A backslash escapes
+ * the next character, so an escaped quote does not end the value; a final backslash with nothing after it is kept
+ * (`password="abc\`). The piece itself excludes the closing quote.
  */
-const ASSIGN_OPEN_QUOTE =
-  /(?<![A-Za-z0-9_.-])(['"]?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})(?:"([^"\r\n]{1,300})|'([^'\r\n]{1,300}))$/gim;
+const ASSIGN_OPEN_QUOTE = new RegExp(
+  `(?<![A-Za-z0-9_.-])(['"]?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\\1([ \\t]{0,3}(?::=|[:=])[ \\t]{0,8})(?:"(${QUOTED_PIECE_DQ}{1,${QUOTED_CAP}}\\\\?)|'(${QUOTED_PIECE_SQ}{1,${QUOTED_CAP}}\\\\?))$`,
+  "gim",
+);
 
 function redactAssignOpenQuote(g: Groups): string | null {
   const ident = g[2] as string;
@@ -660,11 +677,11 @@ function redactEntropy(text: string, st: State): string {
 // ---------------------------------------------------------------- entry point
 
 /**
- * JSON escaping hides secrets from every rule (`\"`, `\u0022`, `\u005f`). Decodes the printable-ASCII JSON escapes in
- * one linear pass; control escapes such as `\n` and `\r` stay so line structure is preserved. Used only on a copy:
- * `redact` keeps the original spelling unless the decoded copy reveals more secrets.
+ * JSON escaping hides secrets from every rule (`\"`, `\\`, `\u0022`, `\u005f`). Decodes those printable-ASCII JSON
+ * escapes in one linear pass; control escapes such as `\n` and `\r` stay so line structure is preserved. Used only
+ * on a copy: `redact` keeps the original spelling unless the decoded copy reveals more secrets.
  */
-const JSON_PRINTABLE_ESCAPE = /\\(?:u00([2-7][0-9a-f])|(["\/]))/gi;
+const JSON_PRINTABLE_ESCAPE = /\\(?:u00([2-7][0-9a-f])|(["\/\\]))/gi;
 
 function normalizeJsonEscapes(text: string): string {
   if (!text.includes("\\")) return text;
