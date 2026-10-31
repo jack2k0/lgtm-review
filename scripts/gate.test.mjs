@@ -3,6 +3,15 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { removedLines, findTableLines } from "./gate.mjs";
 
+function hasHistory() {
+  try {
+    execFileSync("git", ["rev-parse", "--verify", "--quiet", "21416d7^^{commit}"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("removedLines and test.each table detection", () => {
   test("Case 1: exact sa12 diff shape (rows deleted from test.each table -> 3 removals; fails on old code)", () => {
     const oldContent = `
@@ -145,21 +154,30 @@ test("something", () => {});
     assert.deepEqual(removed, ["test.ts:1: const helper = (x) => x + 1;"]);
   });
 
-  test("Case 8: check against real history on commit 21416d7 (must report the 3 rows)", () => {
-    const diff = execFileSync(
-      "git",
-      ["diff", "-U0", "21416d7^", "21416d7", "--", "packages/core/src/shell-edits.test.ts"],
-      { encoding: "utf8" }
-    );
-    const removed = removedLines(diff, (p) =>
-      execFileSync("git", ["show", `21416d7^:${p}`], { encoding: "utf8" })
-    );
-    assert.deepEqual(removed, [
-      'packages/core/src/shell-edits.test.ts:81: "echo hi 2> err.txt",',
-      'packages/core/src/shell-edits.test.ts:84: "ls &> all.txt",',
-      'packages/core/src/shell-edits.test.ts:85: "cmd > \\"$OUT\\"",',
-    ]);
-  });
+  test(
+    "Case 8: check against real history on commit 21416d7 (must report the 3 rows)",
+    {
+      skip:
+        !process.env.CI && !hasHistory()
+          ? "commit 21416d7 is missing, this looks like a shallow clone, run `git fetch --unshallow` to run this test"
+          : false,
+    },
+    () => {
+      const diff = execFileSync(
+        "git",
+        ["diff", "-U0", "21416d7^", "21416d7", "--", "packages/core/src/shell-edits.test.ts"],
+        { encoding: "utf8" }
+      );
+      const removed = removedLines(diff, (p) =>
+        execFileSync("git", ["show", `21416d7^:${p}`], { encoding: "utf8" })
+      );
+      assert.deepEqual(removed, [
+        'packages/core/src/shell-edits.test.ts:81: "echo hi 2> err.txt",',
+        'packages/core/src/shell-edits.test.ts:84: "ls &> all.txt",',
+        'packages/core/src/shell-edits.test.ts:85: "cmd > \\"$OUT\\"",',
+      ]);
+    }
+  );
 
   test("F1: .each(cases) with external array is detected; fail closed if unresolved", () => {
     const oldContent = `
