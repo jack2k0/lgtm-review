@@ -538,3 +538,84 @@ describe("trimPartialSecret", () => {
   });
 });
 
+describe("redact: open-quote values (no closing quote before end of line)", () => {
+  // Tests that fail on the old code (the open-quote fix makes them pass):
+
+  test("probe 1: password with open double quote", () => {
+    const r = redact('password="hunter hei');
+    expect(r.text).toBe('password="[redacted:secret]');
+    expect(r.count).toBe(1);
+  });
+
+  test("probe 2: export API_KEY with open double quote", () => {
+    const r = redact('export API_KEY="my secret val');
+    expect(r.text).toBe('export API_KEY="[redacted:secret]');
+    expect(r.count).toBe(1);
+  });
+
+  test("probe 3: JSON-style password with open double quote", () => {
+    const r = redact('{"password": "two words her');
+    expect(r.text).toBe('{"password": "[redacted:secret]');
+    expect(r.count).toBe(1);
+  });
+
+  test("value cut through parse text limit", () => {
+    // Simulates a secret value being cut at a character limit before reaching the closing quote
+    const r = redact('token="abcdef123456 some more se');
+    expect(r.text).toBe('token="[redacted:secret]');
+    expect(r.count).toBe(1);
+  });
+
+  test("single-quoted open value", () => {
+    const r = redact("password='hunter hei");
+    expect(r.text).toBe("password='[redacted:secret]");
+    expect(r.count).toBe(1);
+  });
+
+  test("value ending in spaces", () => {
+    const r = redact('password="hunter heidi   ');
+    expect(r.text).toBe('password="[redacted:secret]');
+    expect(r.count).toBe(1);
+  });
+
+  test("second line after the open-quote value survives", () => {
+    const r = redact('password="hunter hei\nnext line is fine');
+    expect(r.text).toBe('password="[redacted:secret]\nnext line is fine');
+    expect(r.count).toBe(1);
+  });
+
+  // Tests that hold on both old and new code:
+
+  test("non-secret key with open quote is NOT redacted", () => {
+    expect(redact('title="hello wor')).toEqual({ text: 'title="hello wor', count: 0 });
+  });
+
+  test("reference exemptions stay unredacted (variable, env ref, template)", () => {
+    expect(redact('password="$VAR')).toEqual({ text: 'password="$VAR', count: 0 });
+    expect(redact('password="${VAR')).toEqual({ text: 'password="${VAR', count: 0 });
+    expect(redact('password="<placeholder')).toEqual({ text: 'password="<placeholder', count: 0 });
+    expect(redact("password='$VAR")).toEqual({ text: "password='$VAR", count: 0 });
+    expect(redact('password="{{TEMPLATE')).toEqual({ text: 'password="{{TEMPLATE', count: 0 });
+  });
+
+  test("closed-form values give exactly today's output", () => {
+    expect(redact('password="hunter heidi" x=1').text).toBe('password="[redacted:secret]" x=1');
+    expect(redact("password='hunter heidi' x=1").text).toBe("password='[redacted:secret]' x=1");
+  });
+
+  test("idempotent on open-quote values", () => {
+    for (const input of [
+      'password="hunter hei',
+      "password='hunter hei",
+      'API_KEY="my secret val',
+      '{"password": "two words her',
+      'password="hunter hei\nnext line stays',
+    ]) {
+      const once = redact(input);
+      const twice = redact(once.text);
+      expect(twice.text, input).toBe(once.text);
+      expect(twice.count, input).toBe(0);
+    }
+  });
+});
+
