@@ -907,3 +907,14 @@ describe("redact: nested escaping", () => {
     }
   });
 });
+
+describe("redact: structure after a redacted value survives", () => {
+  test("a JSON-escaped secret keeps the keys after it", () => {
+    const r = redact('\\"password\\": \\"Zq9Xv7Lm2P\\"}, \\"name\\": \\"keepme\\"');
+    expect(r.text).toBe('"password": "[redacted:secret]"}, "name": "keepme"');
+  });
+
+  test("a closed value keeps a following plain key", () => {
+    expect(redact('{"password":"[redacted:secret]","name":"keepme"}').text).toBe('{"password":"[redacted:secret]","name":"keepme"}');
+  });
+});

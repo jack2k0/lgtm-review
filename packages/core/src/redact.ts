@@ -450,8 +450,8 @@ function scanQuoted(text: string, open: number, quote: string, escapes: boolean)
 /** Old close-on-first-quote output glues the real tail on: `password="[redacted:secret]"def ghi"`. Drop that tail. */
 function leakedTailEnd(text: string, end: number, quote: string): number {
   if (end >= text.length) return end;
-  const c0 = text[end]!;
-  if (c0 === " " || c0 === "\t" || c0 === "\n" || c0 === "\r" || c0 === '"' || c0 === "'") return end;
+  // Only a word glued to the closing quote is a tail; `}, "name"` after a value is ordinary structure.
+  if (!/[A-Za-z0-9_]/.test(text[end]!)) return end;
   let i = end;
   while (i < text.length && i - end <= 300) {
     const c = text[i]!;
