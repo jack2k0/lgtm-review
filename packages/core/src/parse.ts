@@ -1,5 +1,6 @@
 import { createPatch, extractPatch, type RawPatch } from "./diff.js";
 import { emptyStats, EVIDENCE_LINES_MAX, scanContent, scanDiffLines, type EditStats } from "./hints.js";
+import { trimPartialSecret } from "./redact.js";
 import type { Warning } from "./schema.js";
 
 /**
@@ -194,6 +195,13 @@ export function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) : s;
 }
 
+function truncateText(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  if (!/\s/.test(s[max]!)) return trimPartialSecret(cut);
+  return cut;
+}
+
 function countLines(s: string): number {
   if (s === "") return 0;
   let n = 1;
@@ -218,7 +226,8 @@ function countDiffLines(lines: unknown): { added: number; removed: number } {
 
 /** Text of a message `content` (string, or list of text blocks), truncated to `max`. */
 function blocksText(content: unknown, max: number, sep: string): string {
-  if (typeof content === "string") return truncate(content, max);
+  const tr = max === PROMPT_TEXT_MAX || max === QUOTE_MAX || max === HINT_MAX ? truncateText : truncate;
+  if (typeof content === "string") return tr(content, max);
   if (!Array.isArray(content)) return "";
   let out = "";
   let first = true;
@@ -228,7 +237,7 @@ function blocksText(content: unknown, max: number, sep: string): string {
     first = false;
     if (out.length >= max) break;
   }
-  return truncate(out, max);
+  return tr(out, max);
 }
 
 /** Last `max` characters of a message `content` (string, or list of text blocks). */
@@ -264,13 +273,13 @@ function slashPromptText(raw: string): string | null {
   if (SKIPPED_COMMANDS.has(key)) return null;
   if (key === "goal" && args.toLowerCase() === "clear") return null;
   const flat = args.replace(/\s+/g, " ");
-  return truncate(flat === "" ? `/${name}` : `/${name} ${flat}`, PROMPT_TEXT_MAX);
+  return truncateText(flat === "" ? `/${name}` : `/${name} ${flat}`, PROMPT_TEXT_MAX);
 }
 
 function hintOf(input: Record<string, unknown>): string | undefined {
   for (const k of ["pattern", "url", "query", "description", "path"]) {
     const v = input[k];
-    if (typeof v === "string" && v !== "") return truncate(v.replace(/\s+/g, " ").trim(), HINT_MAX);
+    if (typeof v === "string" && v !== "") return truncateText(v.replace(/\s+/g, " ").trim(), HINT_MAX);
   }
   return undefined;
 }
@@ -545,7 +554,7 @@ export function createParser(opts: ParserOptions = {}): Parser {
     for (const b of message.content) {
       if (detail && isObj(b) && b.type === "text" && typeof b.text === "string") {
         const t = b.text.trim();
-        if (t !== "") out.push(agentTag !== undefined ? { type: "text", text: truncate(t, QUOTE_MAX), agentId: agentTag } : { type: "text", text: truncate(t, QUOTE_MAX) });
+        if (t !== "") out.push(agentTag !== undefined ? { type: "text", text: truncateText(t, QUOTE_MAX), agentId: agentTag } : { type: "text", text: truncateText(t, QUOTE_MAX) });
         continue;
       }
       if (!isObj(b) || b.type !== "tool_use") continue;

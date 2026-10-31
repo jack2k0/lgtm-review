@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { createParser, parseLines } from "./parse.js";
+import { redact } from "./redact.js";
 import { bash, bgBash, edit, notificationBlock, prompt, rec, resetIds, taskNotification, toolResult, toolUse } from "./testing/records.js";
 
 beforeEach(resetIds);
@@ -57,6 +58,53 @@ describe("prompt detection", () => {
     const { events } = parseLines([prompt("x".repeat(500))]);
     expect(events[0]).toMatchObject({ type: "prompt" });
     expect((events[0] as { text: string }).text).toHaveLength(200);
+  });
+
+  test("a 300-character prompt with a real-shaped token across character 200 leaves no part of the token after redact", () => {
+    const prefix = "a".repeat(190) + " ";
+    const token = "sk_live_" + "123456789012345678901234";
+    const raw = (prefix + token).padEnd(300, "b");
+    expect(raw.length).toBe(300);
+    const { events } = parseLines([prompt(raw)]);
+    const text = (events[0] as { text: string }).text;
+    const redacted = redact(text).text;
+    expect(redacted).not.toContain("sk_live_");
+    expect(redacted).not.toContain("sk_");
+    expect(redacted).toBe(prefix.trimEnd());
+  });
+
+  test("a 300-character prompt with password=hunter2xyz across character 200 leaves no part of the secret after redact", () => {
+    const prefix = "a".repeat(188) + " ";
+    const secret = "password=hunter2xyz";
+    const raw = (prefix + secret).padEnd(300, "b");
+    expect(raw.length).toBe(300);
+    const { events } = parseLines([prompt(raw)]);
+    const text = (events[0] as { text: string }).text;
+    const redacted = redact(text).text;
+    expect(redacted).not.toContain("hunter");
+    expect(redacted).not.toContain("password");
+    expect(redacted).toBe(prefix.trimEnd());
+  });
+
+  test("a 300-character prompt with --password hunter2xyz across character 200 leaves no part of the secret after redact", () => {
+    const prefix = "a".repeat(187) + " ";
+    const secret = "--password hunter2xyz";
+    const raw = (prefix + secret).padEnd(300, "b");
+    expect(raw.length).toBe(300);
+    const { events } = parseLines([prompt(raw)]);
+    const text = (events[0] as { text: string }).text;
+    const redacted = redact(text).text;
+    expect(redacted).not.toContain("hunter");
+    expect(redacted).toBe(prefix + "--password");
+  });
+
+  test("ordinary prose over the limit keeps exactly the first 200 characters", () => {
+    const prose = "The quick brown fox jumps over the lazy dog and runs through the forest again and again. ".repeat(4);
+    expect(prose.length).toBeGreaterThan(300);
+    const { events } = parseLines([prompt(prose)]);
+    const text = (events[0] as { text: string }).text;
+    expect(text).toHaveLength(200);
+    expect(text).toBe(prose.slice(0, 200));
   });
 
   test("empty prompt is ignored", () => {
