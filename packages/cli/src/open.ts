@@ -15,7 +15,6 @@ export interface OpenOptions {
 /** argv for the platform's "open this URL" helper. No shell is involved anywhere. */
 export function openCommand(url: string, platform: NodeJS.Platform): [string, string[]] {
   if (platform === "darwin") return ["open", [url]];
-  if (platform === "win32") return ["rundll32", ["url.dll,FileProtocolHandler", url]];
   return ["xdg-open", [url]];
 }
 

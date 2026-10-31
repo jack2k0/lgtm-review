@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { discoverRootSessions, projectDirFor, type SessionRoot } from "./discover.js";
 import { listWorktrees, parseWorktreeList, sessionRoots } from "./worktrees.js";
@@ -72,7 +72,7 @@ describe("sessionRoots", () => {
     });
     mkdirSync(sub, { recursive: true });
     const r = await sessionRoots(sub, pd, "/arch", { worktrees: true }, list);
-    expect(r.map((x) => [x.dir, x.worktree])).toEqual([[sub, "."], ["/elsewhere/wt", "../../elsewhere/wt"]]);
+    expect(r.map((x) => [x.dir, x.worktree])).toEqual([[sub, "."], ["/elsewhere/wt", relative(tmp, "/elsewhere/wt")]]);
     expect(r[0]?.archiveDir).toBe("/arch/" + r[0]?.projectDir.split("/").pop());
   });
   it("falls back to a single root", async () => {

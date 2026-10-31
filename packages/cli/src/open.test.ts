@@ -19,7 +19,6 @@ describe("openBrowser", () => {
   test("argv per platform, URL as a single argument", () => {
     expect(openCommand(URL_, "linux")).toEqual(["xdg-open", [URL_]]);
     expect(openCommand(URL_, "darwin")).toEqual(["open", [URL_]]);
-    expect(openCommand(URL_, "win32")).toEqual(["rundll32", ["url.dll,FileProtocolHandler", URL_]]);
   });
   test("spawns without a shell, detached, output ignored", () => {
     const s = fakeSpawn();

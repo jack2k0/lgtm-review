@@ -24,7 +24,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
 ## Installation and running
 
-The package is not on npm yet. After the first release, you will be able to run it with `npx lgtm-review`. Until then, run it from a checkout (requires Node >= 22).
+The package is not on npm yet. After the first release, you will be able to run it with `npx lgtm-review`. Until then, run it from a checkout (requires Node >= 22). Linux and macOS are supported; Windows is not.
 
 ### From a checkout
 
