@@ -378,7 +378,7 @@ Follow-up rule rounds on real logs after S-20 (round 2), merged into main; track
 
 Order: S-22 → S-23 → S-24 → S-25 → S-26 ‖ S-27 → S-28 → S-29 → S-30. At most two in flight. S-30 is last so a refactor never mixes with rule fixes; it is dropped if its PRE/POST audit is not byte-identical.
 
-### S-31: Windows support (proposed, owner decision)
+### S-31: Windows support (owner chose option A, 2026-10-31; done in `linux-macos-only`)
 
 CI run 41141126575: 15 tests fail on `windows-latest` (the job is non-blocking; none of this is in the product's stated support today).
 
