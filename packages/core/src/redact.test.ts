@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { isEnvFilePath, redact } from "./redact.js";
 import { trimPartialSecret } from "./redact.js";
+import { PROMPT_TEXT_MAX, parseLines } from "./parse.js";
+import { prompt } from "./testing/records.js";
 
 // Every secret below is assembled at test time from fragments and a deterministic pseudo-random body, so that no file
 // of the repository contains a complete realistic secret (fixture secret scan, push protection).
@@ -564,6 +566,19 @@ describe("redact: open-quote values (no closing quote before end of line)", () =
     const r = redact('token="abcdef123456 some more se');
     expect(r.text).toBe('token="[redacted:secret]');
     expect(r.count).toBe(1);
+  });
+
+  test("a value cut by parse's prompt limit is redacted", () => {
+    const head = 'x '.repeat(PROMPT_TEXT_MAX / 2 - 12) + 'password="hunter ';
+    const { events } = parseLines([prompt(`${head}heidi tail" and more`)]);
+    const ev = events[0];
+    if (ev?.type !== "prompt") throw new Error("no prompt event");
+    expect(ev.text.length).toBeLessThanOrEqual(PROMPT_TEXT_MAX);
+    expect(ev.text).toContain('password="hunter');
+    expect(ev.text.slice(ev.text.indexOf('password="') + 10)).not.toContain('"');
+    const r = redact(ev.text);
+    expect(r.text).toContain('password="[redacted:secret]');
+    expect(r.text).not.toContain("hunter");
   });
 
   test("single-quoted open value", () => {
