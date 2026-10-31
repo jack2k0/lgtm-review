@@ -26,6 +26,8 @@ Reguły: `AGENTS.md` (wszyscy agenci), `REVIEW.md` (tiery, uwagi, rejestr, maks.
 - Pilot: następne 2 zmiany; metryki na merge (tier, liczba uwag, werdykty, rundy) w rejestrze `reviews/findings.md`.
 
 ## Faza łańcucha
+Po v0.4 (2026-10-31, decyzje właściciela): S-31 wariant A (tylko Linux i macOS), oczekiwanie testu macOS zmienione; `redact-edges` i `status-script-autofix` zamykają odłożone uwagi. Zadanie macOS w CI nadal `continue-on-error`, dopóki nie przejdzie na GitHubie. Otwarte z rejestrów: wartość ze spacjami przecięta przez limit tekstu, `pnpm test -u` i `cargo clippy --fix` liczone jako check.
+
 v0.4 S-22..S-30 ZMERGOWANE lokalnie 2026-10-30 (Agy implementuje, Haiku/Sonnet + Opus recenzują). Czeka na właściciela: push, pierwsze uruchomienie nowych zadań CI, sprawdzenie nazwy, publikacja.
 
 v0.4 (2026-10-30, polecenie właściciela: wdrożyć listę z review wg 10xDevs; Opus koordynuje i decyduje; oszczędzać tokeny): S-22..S-30 w roadmapie. Skille /10x-* nie są zainstalowane, proces ręczny wg `docs/prompts/01-orchestrator-kickoff.md`. Bramki plan/merge u Opusa; push i publikacja npm u właściciela. Routing: Agy implementuje, OpenCode po resecie (31.10 01:10), recenzenci Haiku/Sonnet/OpenCode, Grok tylko krytyczne.
