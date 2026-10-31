@@ -31,6 +31,7 @@ allow: ^packages/core/src/check-patterns-classify\.ts$
 allow: ^packages/core/src/shell-edits[a-z-]*\.ts$
 allow: ^packages/core/src/check-patterns\.test\.ts$
 allow: ^packages/core/src/analyze\.test\.ts$
+allow: ^packages/core/src/shell-edits\.test\.ts$
 allow: ^context/(changes|archive)/status-script-autofix/
 deps: no
 schema: no

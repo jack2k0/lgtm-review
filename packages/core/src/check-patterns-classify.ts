@@ -48,6 +48,25 @@ export const PM_VALUE_OPTS: Record<string, Set<string>> = {
   bun: new Set(["--cwd", "--filter"]),
 };
 
+/** Options of the task runners that take a value (needed to find tasks and their scopes). */
+export const TURBO_VALUE_OPTS = new Set([
+  "--filter",
+  "-F",
+  "--concurrency",
+  "--cache-dir",
+  "--cache-workers",
+  "--log-order",
+  "--output-logs",
+  "--pkg-inference-root",
+  "--env-mode",
+  "--framework-inference",
+  "--global-deps",
+  "--remote-cache-timeout",
+  "--token",
+  "--team",
+  "--api",
+]);
+
 
 export interface ParsedArgs {
   pos: string[];
@@ -226,8 +245,103 @@ function isDryRun(toks: string[]): boolean {
   return toks.some((t) => t === "--dry-run" || t === "--dryrun" || t === "--just-print") || (toks[0] === "make" && toks.includes("-n"));
 }
 
+const SCRIPT_RUNNERS = new Set(["pnpm", "npm", "yarn", "bun", "turbo"]);
+const SCRIPT_FIX_NAMES = new Set(["lint:fix", "lint-fix", "fix:lint"]);
+
+function findTurboScript(toks: readonly string[]): string | null {
+  const opts = parseArgs(toks, 1, TURBO_VALUE_OPTS);
+  const tasks = opts.pos[0] === "run" ? opts.pos.slice(1) : opts.pos;
+  return tasks[0] ?? null;
+}
+
+function findPackageManagerScript(pm: string, toks: readonly string[]): { script: string; scriptIndex: number } | null {
+  const valueOpts = PM_VALUE_OPTS[pm] ?? new Set<string>();
+  let i = 1;
+  const skipOptions = (): void => {
+    while (i < toks.length) {
+      const t = toks[i]!;
+      if (t === "--") {
+        i++;
+        break;
+      }
+      if (t.startsWith("-") && t !== "-") {
+        const eq = t.indexOf("=");
+        if (t.startsWith("--") && eq > 0) {
+          i++;
+        } else if (valueOpts.has(t)) {
+          i += 2;
+        } else {
+          i++;
+        }
+      } else {
+        break;
+      }
+    }
+  };
+  skipOptions();
+  const word = toks[i];
+  if (word === undefined) return null;
+  if (word === "run" || word === "run-script") {
+    i++;
+    skipOptions();
+    const script = toks[i];
+    return script !== undefined ? { script, scriptIndex: i } : null;
+  }
+  return { script: word, scriptIndex: i };
+}
+
+function getRunnerScript(toks: readonly string[]): string | null {
+  const head = toks[0] as string;
+  if (head === "turbo") return findTurboScript(toks);
+  if (head === "pnpm" || head === "npm" || head === "yarn" || head === "bun") {
+    const res = findPackageManagerScript(head, toks);
+    if (!res) return null;
+    if (res.script === "turbo") return findTurboScript(toks.slice(res.scriptIndex));
+    return res.script;
+  }
+  return null;
+}
+
+function isFixerFlag(t: string): boolean {
+  if (t === "--fix-dry-run" || t.startsWith("--fix-dry-run=")) return false;
+  return (
+    t === "--fix" ||
+    t.startsWith("--fix=") ||
+    t.startsWith("--fix-type") ||
+    t === "--fix-only" ||
+    t.startsWith("--fix-only=") ||
+    t === "--write" ||
+    t.startsWith("--write=") ||
+    t === "--apply" ||
+    t.startsWith("--apply=") ||
+    t === "--apply-unsafe" ||
+    t.startsWith("--apply-unsafe=") ||
+    t === "--unsafe" ||
+    t.startsWith("--unsafe=")
+  );
+}
+
+function isScriptAutofix(toks: readonly string[]): boolean {
+  if (toks.length < 2) return false;
+  const head = toks[0] as string;
+  if (!SCRIPT_RUNNERS.has(head)) return false;
+  if (toks.some((t) => t === "--fix-dry-run" || t.startsWith("--fix-dry-run="))) return false;
+
+  const script = getRunnerScript(toks);
+  if (script === null) return false;
+
+  if (SCRIPT_FIX_NAMES.has(script)) return true;
+
+  if (script === "lint" || script.startsWith("lint:") || script === "check") {
+    return toks.some(isFixerFlag);
+  }
+
+  return false;
+}
+
 /** `gh run watch` only fails the command with `--exit-status`; `ruff check --fix` edits files instead of checking. */
 function isExcludedForm(s: string, toks: string[]): boolean {
+  if (isScriptAutofix(toks)) return true;
   const eslintIdx = toks.indexOf("eslint");
   if (eslintIdx !== -1 && (eslintIdx === 0 || /^(?:pnpm|npm|yarn|bun|npx|bunx)$/.test(toks[0]!))) {
     if (toks.some((t) => t === "--fix" || t.startsWith("--fix=") || t.startsWith("--fix-type"))) return true;
@@ -259,24 +373,6 @@ function isCheckScriptName(name: string, repo: RepoScripts | undefined): boolean
   return CHECK_SCRIPT_NAMES.has(base);
 }
 
-/** Options of the task runners that take a value (needed to find tasks and their scopes). */
-export const TURBO_VALUE_OPTS = new Set([
-  "--filter",
-  "-F",
-  "--concurrency",
-  "--cache-dir",
-  "--cache-workers",
-  "--log-order",
-  "--output-logs",
-  "--pkg-inference-root",
-  "--env-mode",
-  "--framework-inference",
-  "--global-deps",
-  "--remote-cache-timeout",
-  "--token",
-  "--team",
-  "--api",
-]);
 export const NX_VALUE_OPTS = new Set([
   "-t",
   "--targets",
