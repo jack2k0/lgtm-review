@@ -518,5 +518,23 @@ describe("trimPartialSecret", () => {
     expect(trimPartialSecret("")).toBe("");
     expect(trimPartialSecret("trailing whitespace ")).toBe("trailing whitespace ");
   });
+
+  test("trims trailing run that is a URL with credentials cut inside password", () => {
+    expect(trimPartialSecret("curl https://user:hun")).toBe("curl");
+    expect(trimPartialSecret('curl "https://user:hun')).toBe("curl");
+    expect(trimPartialSecret("fetch postgres://admin:sec")).toBe("fetch");
+  });
+
+  test("keeps URL with port and path unchanged", () => {
+    expect(trimPartialSecret("curl https://host:80/pa")).toBe("curl https://host:80/pa");
+    expect(trimPartialSecret("curl https://host:80/path")).toBe("curl https://host:80/path");
+  });
+
+  test("trims trailing run when preceded by spaced separator and secret key", () => {
+    expect(trimPartialSecret("password : hun")).toBe("password :");
+    expect(trimPartialSecret("api_key = sec")).toBe("api_key =");
+    expect(trimPartialSecret("token := secret")).toBe("token :=");
+    expect(trimPartialSecret("title : foo")).toBe("title : foo");
+  });
 });
 

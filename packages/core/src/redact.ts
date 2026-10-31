@@ -228,6 +228,7 @@ function isSecretKey(ident: string): boolean {
 }
 
 const SPECIAL_PREV_WORDS = new Set(["bearer", "basic", "-p", "-u", "--user"]);
+const SEPARATOR_WORDS = new Set([":", "=", ":="]);
 
 function isSecretAssignRun(r: string): boolean {
   const m = /^["']?(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})(?::=|[:=])/.exec(r);
@@ -238,8 +239,10 @@ function isSecretAssignRun(r: string): boolean {
 /**
  * Trims a trailing whitespace-delimited run that looks like the start of a secret cut mid-token:
  * - starts with a known token prefix;
+ * - is a URL with credentials cut inside the password;
  * - is `key=value` or `key:value` (optionally quoted) where `isSecretKey(key)` is true;
- * - preceded by a secret flag/key (`isSecretKey` after stripping dashes/colons/equals) or Bearer/Basic/-p/-u/--user.
+ * - preceded by a secret flag/key (`isSecretKey` after stripping dashes/colons/equals) or Bearer/Basic/-p/-u/--user,
+ *   including when separated by a spaced `:` or `=` or `:=`.
  * Otherwise returns `cut` unchanged. Linear in the length of `cut`.
  */
 export function trimPartialSecret(cut: string): string {
@@ -263,10 +266,24 @@ export function trimPartialSecret(cut: string): string {
       prevStart--;
     }
     prevWord = cut.slice(prevStart, wsStart);
+
+    if (SEPARATOR_WORDS.has(prevWord)) {
+      let sepWsStart = prevStart;
+      while (sepWsStart > 0 && /\s/.test(cut[sepWsStart - 1]!)) {
+        sepWsStart--;
+      }
+      let sepWordStart = sepWsStart;
+      while (sepWordStart > 0 && !/\s/.test(cut[sepWordStart - 1]!)) {
+        sepWordStart--;
+      }
+      prevWord = cut.slice(sepWordStart, sepWsStart);
+    }
   }
 
   const unquotedRun = run.replace(/^["']/, "");
   const hasTokenPrefix = TOKEN_PREFIXES.some((prefix) => unquotedRun.startsWith(prefix));
+  const isUrlCreds = /^["']?[a-z][a-z0-9+.-]{1,20}:\/\/[^\s\/@:]*:/i.exec(run);
+  const isUrlCredsCut = isUrlCreds !== null && !run.slice(isUrlCreds[0].length).includes("/");
   const isAssign = isSecretAssignRun(run);
 
   let isPrevSecret = false;
@@ -283,7 +300,7 @@ export function trimPartialSecret(cut: string): string {
     }
   }
 
-  if (hasTokenPrefix || isAssign || isPrevSecret) {
+  if (hasTokenPrefix || isUrlCredsCut || isAssign || isPrevSecret) {
     return cut.slice(0, wsStart);
   }
   return cut;
