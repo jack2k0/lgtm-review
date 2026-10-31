@@ -129,6 +129,18 @@ const TOKEN_PATTERNS: { re: RegExp; gate: string[]; kind: string; guard?: (m: st
   { re: /(?:https?:\/\/)?hooks\.slack\.com\/services\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+/g, gate: ["hooks.slack.com/services/"], kind: "slack-webhook" },
 ];
 
+const TOKEN_PREFIXES: readonly string[] = Array.from(
+  new Set(
+    TOKEN_PATTERNS.flatMap((p) =>
+      p.gate.flatMap((g) => {
+        if (g === "k_live_" || g === "k_test_") return [`sk_${g.slice(2)}`, `rk_${g.slice(2)}`];
+        if (g.startsWith("hooks.slack.com")) return [g, `https://${g}`, `http://${g}`];
+        return [g];
+      })
+    )
+  )
+);
+
 // ---------------------------------------------------------------- headers, URLs, cookies
 
 const URL_CREDS = /(?<![A-Za-z0-9+.-])([a-z][a-z0-9+.-]{1,20}:\/\/)([^\s/@:"'<>]{0,200}):([^\s"'<>]{1,200})@(?=[^\s/?#]+(?:[:/?#]|$))/gi;
@@ -215,6 +227,68 @@ function isSecretKey(ident: string): boolean {
   return SECRET_WORD.test(k) && !NOT_SECRET_SUFFIX.test(k);
 }
 
+const SPECIAL_PREV_WORDS = new Set(["bearer", "basic", "-p", "-u", "--user"]);
+
+function isSecretAssignRun(r: string): boolean {
+  const m = /^["']?(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})(?::=|[:=])/.exec(r);
+  if (!m) return false;
+  return isSecretKey(m[1]!);
+}
+
+/**
+ * Trims a trailing whitespace-delimited run that looks like the start of a secret cut mid-token:
+ * - starts with a known token prefix;
+ * - is `key=value` or `key:value` (optionally quoted) where `isSecretKey(key)` is true;
+ * - preceded by a secret flag/key (`isSecretKey` after stripping dashes/colons/equals) or Bearer/Basic/-p/-u/--user.
+ * Otherwise returns `cut` unchanged. Linear in the length of `cut`.
+ */
+export function trimPartialSecret(cut: string): string {
+  if (cut.length === 0 || /\s/.test(cut[cut.length - 1]!)) return cut;
+
+  let runStart = cut.length - 1;
+  while (runStart > 0 && !/\s/.test(cut[runStart - 1]!)) {
+    runStart--;
+  }
+  const run = cut.slice(runStart);
+
+  let wsStart = runStart;
+  while (wsStart > 0 && /\s/.test(cut[wsStart - 1]!)) {
+    wsStart--;
+  }
+
+  let prevWord = "";
+  if (wsStart > 0) {
+    let prevStart = wsStart - 1;
+    while (prevStart > 0 && !/\s/.test(cut[prevStart - 1]!)) {
+      prevStart--;
+    }
+    prevWord = cut.slice(prevStart, wsStart);
+  }
+
+  const unquotedRun = run.replace(/^["']/, "");
+  const hasTokenPrefix = TOKEN_PREFIXES.some((prefix) => unquotedRun.startsWith(prefix));
+  const isAssign = isSecretAssignRun(run);
+
+  let isPrevSecret = false;
+  if (prevWord !== "") {
+    const noBracket = prevWord.replace(/^[{\[(]+/, "").replace(/[}\])]+$/, "");
+    const colonStripped = noBracket.replace(/[:=]+$/, "");
+    const quoteStripped = colonStripped.replace(/^["'`]+|["'`]+$/g, "");
+    const lower = quoteStripped.toLowerCase();
+    if (SPECIAL_PREV_WORDS.has(lower) || SPECIAL_PREV_WORDS.has(quoteStripped)) {
+      isPrevSecret = true;
+    } else {
+      const cleaned = quoteStripped.replace(/^-+/, "");
+      isPrevSecret = isSecretKey(cleaned);
+    }
+  }
+
+  if (hasTokenPrefix || isAssign || isPrevSecret) {
+    return cut.slice(0, wsStart);
+  }
+  return cut;
+}
+
 /** Values that are references, types or masks rather than literals. A secret-like key disables the UUID and quoted-prose exemptions. */
 function isNonLiteral(v: string, quoted: boolean, secretContext = false): boolean {
   if (isPlaceholder(v)) return true;
@@ -256,7 +330,15 @@ function redactAssign(g: Groups, st: State): string | null {
   if (g[5] !== undefined) return isNonLiteral(g[5], true, true) || g[5].length < 3 ? null : `${head}'${ph("secret")}'`;
   const v = g[6] as string;
   const sep = g[3] as string;
-  const minLen = sep.includes("=") ? 3 : 4;
+  const kClean = k.replace(/-/g, "");
+  const isPassLike =
+    kClean.includes("password") ||
+    kClean.includes("passwd") ||
+    kClean.includes("passphrase") ||
+    kClean === "pass" ||
+    kClean === "pwd" ||
+    kClean === "secret";
+  const minLen = sep.includes("=") ? 3 : isPassLike ? 3 : 4;
   if (v.length < minLen || isNonLiteral(v, false, true)) return null;
   return head + ph("secret");
 }

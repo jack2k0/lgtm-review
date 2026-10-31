@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { isEnvFilePath, redact } from "./redact.js";
+import { trimPartialSecret } from "./redact.js";
 
 // Every secret below is assembled at test time from fragments and a deterministic pseudo-random body, so that no file
 // of the repository contains a complete realistic secret (fixture secret scan, push protection).
@@ -483,6 +484,39 @@ describe("redact: properties", () => {
     const o = { usernames: ["redacted", "email"] };
     const once = redact("bob@example.test", o);
     expect(once.text).toBe("[redacted:email]");
+  });
+
+  test("password with colon and 3-char secret is redacted; token with colon and 3-char stays", () => {
+    expect(redact("password: abc").text).toBe("password: [redacted:secret]");
+    expect(redact("token: abc").text).toBe("token: abc");
+  });
+});
+
+describe("trimPartialSecret", () => {
+  test("trims trailing run starting with a known token prefix", () => {
+    expect(trimPartialSecret("prefix sk_live_1234")).toBe("prefix");
+    expect(trimPartialSecret('prefix "sk_live_1234')).toBe("prefix");
+    expect(trimPartialSecret("prefix ghp_abc")).toBe("prefix");
+  });
+
+  test("trims trailing run that is an assignment with secret key", () => {
+    expect(trimPartialSecret("prefix password=hun")).toBe("prefix");
+    expect(trimPartialSecret("prefix password:hun")).toBe("prefix");
+    expect(trimPartialSecret('prefix "api_key=xyz')).toBe("prefix");
+  });
+
+  test("trims trailing run preceded by secret flag or word", () => {
+    expect(trimPartialSecret("prefix --password hunt")).toBe("prefix --password");
+    expect(trimPartialSecret("prefix Bearer mytok")).toBe("prefix Bearer");
+    expect(trimPartialSecret("prefix -p sec")).toBe("prefix -p");
+    expect(trimPartialSecret("prefix --user usr")).toBe("prefix --user");
+  });
+
+  test("returns cut unchanged for prose or harmless trailing words", () => {
+    expect(trimPartialSecret("ordinary prose over limit")).toBe("ordinary prose over limit");
+    expect(trimPartialSecret("hello world")).toBe("hello world");
+    expect(trimPartialSecret("")).toBe("");
+    expect(trimPartialSecret("trailing whitespace ")).toBe("trailing whitespace ");
   });
 });
 
