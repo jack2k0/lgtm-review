@@ -801,3 +801,95 @@ describe("redact: secret assignment inside a harmless value", () => {
   });
 });
 
+describe("redact: escapes only in secret values", () => {
+  test("neighbouring assignments stay hidden", () => {
+    const inputs = [
+      `['password="hunter hei','token="my secret val','x']`,
+      `"password='hunter hei" => "password='other val"`,
+      `f('password="hunter hei') and api_key="my secret val`,
+    ];
+    for (const input of inputs) {
+      const once = redact(input);
+      expect(once.text, input).not.toContain("hunter hei");
+      expect(once.text, input).not.toContain("my secret val");
+      expect(once.text, input).not.toContain("other val");
+      const twice = redact(once.text);
+      expect(twice.text, input).toBe(once.text);
+    }
+  });
+
+  test("a harmless escaped quote is unchanged", () => {
+    const input = 'title="a \\"quoted\\" word"';
+    expect(redact(input)).toEqual({ text: input, count: 0 });
+  });
+
+  test("json escapes and already-redacted tails are idempotent", () => {
+    const pairs = [
+      '{"password":"abc\\"def ghi"}\n{"password":"[redacted:secret]"def ghi"}',
+      "cfg='x\\' apikey='[redacted:secret]'\n" + 'cfg="x\\" apikey="[redacted:secret]"',
+    ];
+    for (const input of pairs) {
+      const once = redact(input);
+      const twice = redact(once.text);
+      expect(twice.text, input).toBe(once.text);
+      expect(twice.count, input).toBe(0);
+      expect(once.text, input).not.toContain("def ghi");
+    }
+  });
+
+  test("fragment combinations stay idempotent and hide values after password=", () => {
+    const keys = ["password", "token", "api_key", "note", "cfg"] as const;
+    const quotes = ['"', "'"] as const;
+    const seps = ["=", " = ", ": "] as const;
+    const values = ["hunter2rocks99", "abc\\def", "plain words", "zz99"] as const;
+    const extras = ["", "\\", "\n"] as const;
+    const secretKey = new Set<string>(["password", "token", "api_key"]);
+    for (const key of keys) {
+      for (const q of quotes) {
+        for (const sep of seps) {
+          for (const value of values) {
+            for (const extra of extras) {
+              const input = `${key}${sep}${q}${value}${extra}`;
+              const once = redact(input);
+              const twice = redact(once.text);
+              expect(twice.text, input).toBe(once.text);
+              if (secretKey.has(key)) expect(once.text, input).not.toContain(value);
+            }
+          }
+        }
+      }
+    }
+
+    const bits = [
+      'password="hunter2rocks99"',
+      "token='hunter2rocks99'",
+      "cfg='x\\' apikey='hunter2rocks99'",
+      "note='plain words'",
+      'title="a \\"quoted\\" word"',
+      'api_key="mysecretval99"',
+    ];
+    for (let i = 0; i < bits.length; i++) {
+      for (let j = 0; j < bits.length; j++) {
+        for (const join of [" ", "\n", ""]) {
+          const input = bits[i] + join + bits[j];
+          const once = redact(input);
+          const twice = redact(once.text);
+          expect(twice.text, JSON.stringify(input)).toBe(once.text);
+          expect(once.text, JSON.stringify(input)).not.toContain("hunter2rocks99");
+          expect(once.text, JSON.stringify(input)).not.toContain("mysecretval99");
+        }
+      }
+    }
+
+    for (const q of quotes) {
+      for (const tail of ["def ghi", "hunter2rocks99", "other val"]) {
+        const input = `password=${q}[redacted:secret]${q}${tail}${q}`;
+        const once = redact(input);
+        const twice = redact(once.text);
+        expect(once.text, input).not.toContain(tail);
+        expect(twice.text, input).toBe(once.text);
+      }
+    }
+  });
+});
+
