@@ -339,9 +339,36 @@ function isScriptAutofix(toks: readonly string[]): boolean {
   return false;
 }
 
+/** Snapshot-update flags, exact tokens only (`--update` never swallows `--update-snapshots`). */
+function isUpdateFlag(t: string): boolean {
+  return (
+    t === "-u" ||
+    t === "--update" ||
+    t.startsWith("--update=") ||
+    t === "--updateSnapshot" ||
+    t.startsWith("--updateSnapshot=") ||
+    t === "--update-snapshots" ||
+    t.startsWith("--update-snapshots=")
+  );
+}
+
+/** A test run that rewrites its own expectations (`vitest -u`, `pnpm test -- --updateSnapshot`) proves nothing. */
+function isSnapshotUpdateRun(toks: readonly string[]): boolean {
+  if (!toks.some(isUpdateFlag)) return false;
+  const head = toks[0] as string;
+  if (head === "vitest" || head === "jest") return true;
+  if (!SCRIPT_RUNNERS.has(head)) return false;
+  const script = getRunnerScript(toks);
+  if (script === null) return false;
+  if (script === "vitest" || script === "jest") return true;
+  return script === "test" || script.startsWith("test:");
+}
+
 /** `gh run watch` only fails the command with `--exit-status`; `ruff check --fix` edits files instead of checking. */
 function isExcludedForm(s: string, toks: string[]): boolean {
   if (isScriptAutofix(toks)) return true;
+  if (/^cargo\s+clippy\b/.test(s) && toks.includes("--fix")) return true;
+  if (isSnapshotUpdateRun(toks)) return true;
   const eslintIdx = toks.indexOf("eslint");
   if (eslintIdx !== -1 && (eslintIdx === 0 || /^(?:pnpm|npm|yarn|bun|npx|bunx)$/.test(toks[0]!))) {
     if (toks.some((t) => t === "--fix" || t.startsWith("--fix=") || t.startsWith("--fix-type"))) return true;

@@ -355,6 +355,30 @@ const cases: [string, boolean, boolean?][] = [
   ["npm run lint -- --fix-dry-run", true],
   ["pnpm lint --fix-dry-run", true],
   ["pnpm lint --fix && pnpm test", true],
+  // status-update-flags
+  ["vitest -u", false],
+  ["vitest run -u", false],
+  ["vitest --update", false],
+  ["vitest --update=next", false],
+  ["vitest --update-snapshots", false],
+  ["vitest --update-snapshots=all", false],
+  ["jest -u", false],
+  ["npx jest -u", false],
+  ["bunx jest -u", false],
+  ["pnpm vitest -u", false],
+  ["pnpm jest --updateSnapshot", false],
+  ["pnpm test -u", false],
+  ["pnpm -r test -u", false],
+  ["pnpm test --updateSnapshot=paths", false],
+  ["npm test -- --updateSnapshot", false],
+  ["npm run test -- --update-snapshots", false],
+  ["turbo run test -- -u", false],
+  ["pnpm test:cover --update", false],
+  ["cargo clippy --fix", false],
+  ["pnpm test -u && pnpm test", true],
+  ["pnpm test -- --testNamePattern u", true],
+  ["pytest -u", true],
+  ["git add -u && pnpm test", true],
   ["", false],
   ["   ", false],
 ];
@@ -386,6 +410,14 @@ describe("classifyCommand", () => {
     expect(classifyShellMutation("npm run lint -- --fix").opaque).toBe(true);
     expect(classifyShellMutation("pnpm lint:fix").opaque).toBe(true);
     expect(classifyShellMutation("turbo run lint -- --fix").opaque).toBe(true);
+  });
+
+  test("snapshot updates and clippy --fix produce opaque shell mutations", () => {
+    expect(classifyShellMutation("pnpm test -u").opaque).toBe(true);
+    expect(classifyShellMutation("vitest -u").opaque).toBe(true);
+    expect(classifyShellMutation("npm test -- --updateSnapshot").opaque).toBe(true);
+    expect(classifyShellMutation("turbo run test -- -u").opaque).toBe(true);
+    expect(classifyShellMutation("cargo clippy --fix").opaque).toBe(true);
   });
 
   test("labels are the normalized check segment", () => {
