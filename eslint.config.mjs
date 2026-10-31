@@ -74,13 +74,19 @@ export default tseslint.config(
               message: `Node subpath '${name}' is forbidden in packages/core (outside src/node/ and src/testing/) and packages/web per AGENTS.md.`,
             })),
           ],
+          patterns: [
+            {
+              group: ["./node/*", "../node/*", "**/core/src/node/*"],
+              message: "Node-specific code in core/src/node is forbidden in packages/core (outside src/node/ and src/testing/) and packages/web per AGENTS.md.",
+            },
+          ],
         },
       ],
       "no-restricted-syntax": [
         "error",
         {
-          selector: "ImportExpression[source.value=/^node:/]",
-          message: "Dynamic import of node: modules is forbidden in packages/core (outside src/node/ and src/testing/) and packages/web per AGENTS.md.",
+          selector: `ImportExpression[source.value=/^(${bannedNodeBuiltins.map((m) => m.replace("/", ".")).join("|")})$/]`,
+          message: "Dynamic import of Node builtins is forbidden in packages/core (outside src/node/ and src/testing/) and packages/web per AGENTS.md.",
         },
       ],
     },

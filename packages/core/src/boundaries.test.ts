@@ -29,6 +29,16 @@ describe("AGENTS.md boundaries in ESLint", () => {
       expect(rules).toContain("no-restricted-syntax");
     });
 
+    it("bans dynamic import('fs') and import('fs/promises') in packages/core/src", async () => {
+      expect(await lint("packages/core/src/x.ts", 'await import("fs");')).toContain("no-restricted-syntax");
+      expect(await lint("packages/core/src/x.ts", 'await import("fs/promises");')).toContain("no-restricted-syntax");
+    });
+
+    it("bans a relative import of src/node from packages/core/src", async () => {
+      const rules = await lint("packages/core/src/x.ts", 'import "./node/git.js";');
+      expect(rules).toContain("no-restricted-imports");
+    });
+
     it("bans node:path in packages/web/src", async () => {
       const rules = await lint("packages/web/src/x.tsx", 'import "node:path";');
       expect(rules).toContain("no-restricted-imports");
