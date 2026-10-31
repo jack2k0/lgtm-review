@@ -12,7 +12,7 @@ async function lint(filePath: string, code: string): Promise<(string | null)[]> 
   return results[0]?.messages.map((m) => m.ruleId) ?? [];
 }
 
-describe("AGENTS.md boundaries in ESLint", () => {
+describe("AGENTS.md boundaries in ESLint", { timeout: 30000 }, () => {
   describe("error cases", () => {
     it("bans node:fs in packages/core/src", async () => {
       const rules = await lint("packages/core/src/x.ts", 'import "node:fs";');

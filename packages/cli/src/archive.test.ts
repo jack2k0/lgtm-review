@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { symlinkSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { symlinkSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -248,7 +248,7 @@ describe("E2E archive mirroring and reader integration", () => {
 
 describe("--archive refuses unsafe archive dirs", () => {
   test("archive dir inside the repository or the projects dir exits 1", () => {
-    const tmp = mkdtempSync(join(tmpdir(), "lgtm-archive-unsafe-"));
+    const tmp = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-archive-unsafe-")));
     try {
       const repo = join(tmp, "repo");
       const projectsDir = join(tmp, "projects");

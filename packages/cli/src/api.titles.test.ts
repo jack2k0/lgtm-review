@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { createServer, request, type IncomingHttpHeaders, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -417,7 +417,7 @@ describe("GET /api/sessions/:id/titles", () => {
 
 describe("summary, export and list ignore a titler", () => {
   test("two CLI runs match, and an in-process titler is never asked", async () => {
-    const home = mkdtempSync(join(tmpdir(), "lgtm-byte-"));
+    const home = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-byte-")));
     const repo = join(home, "repo");
     const projects = join(home, "projects");
     const archive = join(home, "archive");
