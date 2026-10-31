@@ -1,6 +1,6 @@
 ---
 title: "Strata (nazwa robocza) — wizualny review sesji agentów AI"
-status: draft / propozycja
+status: historical (superseded by context/foundation/prd.md)
 created: 2026-10-22
 author: jack2k (+ Claude)
 purpose: >
@@ -8,6 +8,8 @@ purpose: >
   Wszystkie decyzje produktowe w tym pliku są PROPOZYCJAMI do potwierdzenia
   w /10x-shape — nie są jeszcze zablokowane.
 ---
+
+> **Dokument historyczny:** To jest historyczna propozycja z dnia 2026-10-22. „Strata” była nazwą roboczą — produktem jest obecnie `lgtm-review`. Poniższe polecenia oraz nazwy pakietów nie są aktualne; aktualnymi źródłami są `context/foundation/prd.md` oraz `README.md`.
 
 # Strata — wizualny review sesji agentów AI
 
