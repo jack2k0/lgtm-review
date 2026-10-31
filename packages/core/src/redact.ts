@@ -211,8 +211,14 @@ function redactAuthHeader(g: Groups): string | null {
 
 // ---------------------------------------------------------------- key = value assignments
 
-const ASSIGN =
-  /(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|((?:[^\s"',;)}\]]|;(?=\S)){3,300}))/gi;
+/**
+ * Quoted assignment values are at most 4096 pieces. A backslash escapes the next character only inside a
+ * secret key's value (`password="abc\"def"`). A harmless value closes on the next quote of its kind, as on
+ * main, so `cfg='x\' apikey='hunter2'` does not swallow the secret. The unquoted alternative keeps its own cap.
+ */
+const QUOTED_CAP = 4096;
+const ASSIGN_HEAD_SRC = String.raw`(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})`;
+const UNQUOTED_VALUE = /^(?:[^\s"',;)}\]]|;(?=\S)){3,300}/;
 const SECRET_WORD =
   /token(?!s|iz)|secret|passw(?:or)?d|pass[_-]?phrase|access[_-]?key|auth[_-]?key|api[_-]?key|credential|private[_-]?key|(?:stripe|webhook|signing)[_-]?(?:key|secret|token|signature)|(?:^|[_.-])(?:pass|pwd|passwd)(?=$|[_.-])/;
 const NOT_SECRET_SUFFIX = /[_.-](?:file|path|dir|name|url|uri|type|count|limit|length|len|id|ttl|usage|budget|expires?|expiry)$/;
@@ -322,14 +328,14 @@ function isNonLiteral(v: string, quoted: boolean, secretContext = false): boolea
 
 /**
  * A value that belongs to a harmless key can itself hold an assignment (`cmd = "PASSWORD=..."`); the outer match has
- * consumed it, so the inner text is scanned again here (values are at most 300 characters, so this stays cheap).
+ * consumed it, so the inner text is scanned again here (a quoted value is at most 4096 pieces, so this stays cheap).
  */
 function redactInner(g: Groups, st: State): string | null {
   const q = g[4] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
   const v = (g[4] ?? g[5] ?? g[6]) as string;
   if (!v.includes("=") && !v.includes(":")) return null;
   const inner: State = { count: 0 };
-  const r = pass(v, inner, ASSIGN, [":", "="], false, (h) => redactAssign(h, inner));
+  const r = redactAssignRegions(v, inner);
   if (inner.count === 0) return null;
   st.count += inner.count - 1; // the caller counts the replacement itself once
   return `${g[1]}${g[2]}${g[1]}${g[3]}${q}${r}${q}`;
@@ -360,25 +366,186 @@ function redactAssign(g: Groups, st: State): string | null {
   return head + ph("secret");
 }
 
-/**
- * Like ASSIGN, but for a value whose opening `"` or `'` has no matching close before the end of the line (or text).
- * The `m` flag lets `$` match end-of-line. Content is limited to 300 chars (same as ASSIGN) and must not contain
- * the matching closing quote (guaranteed by `[^"\r\n]` / `[^'\r\n]`).
- */
-const ASSIGN_OPEN_QUOTE =
-  /(?<![A-Za-z0-9_.-])(['"]?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})(?:"([^"\r\n]{1,300})|'([^'\r\n]{1,300}))$/gim;
+type QuotedScan = { end: number; value: string; closed: boolean };
 
-function redactAssignOpenQuote(g: Groups): string | null {
-  const ident = g[2] as string;
+/** Quote at `quoteAt` opens another secret assignment whose value is at least three pieces. Returns that key's index. */
+function secretOpenerKeyStart(text: string, quoteAt: number): number | null {
+  let i = quoteAt;
+  let spaces = 0;
+  while (i > 0 && (text[i - 1] === " " || text[i - 1] === "\t") && spaces < 8) {
+    i--;
+    spaces++;
+  }
+  if (i >= 2 && text.startsWith(":=", i - 2)) i -= 2;
+  else if (i >= 1 && (text[i - 1] === "=" || text[i - 1] === ":")) i -= 1;
+  else return null;
+  spaces = 0;
+  while (i > 0 && (text[i - 1] === " " || text[i - 1] === "\t") && spaces < 3) {
+    i--;
+    spaces++;
+  }
+  const identEnd = i;
+  let s = i;
+  while (s > 0 && /[A-Za-z0-9_.-]/.test(text[s - 1]!)) s--;
+  const matched = /-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60}$/.exec(text.slice(s, identEnd));
+  if (matched === null) return null;
+  const ident = matched[0];
+  const identStart = identEnd - ident.length;
+  if (identStart > 0 && /[A-Za-z0-9_.-]/.test(text[identStart - 1]!)) return null;
   if (!isSecretKey(ident)) return null;
+  let j = quoteAt + 1;
+  let pieces = 0;
+  while (j < text.length && pieces < 3) {
+    const c = text[j]!;
+    if (c === "\n" || c === "\r" || c === '"' || c === "'") return null;
+    if (pieces === 0 && (c === " " || c === "\t")) return null;
+    if (c === "\\") {
+      if (j + 1 >= text.length || text[j + 1] === "\n" || text[j + 1] === "\r") return null;
+      j += 2;
+    } else {
+      j++;
+    }
+    pieces++;
+  }
+  return pieces >= 3 ? identStart : null;
+}
+
+/**
+ * Scan one quoted value starting at the opening quote. Secret values treat a backslash as an escape and stop
+ * before a later secret assignment so that assignment keeps its own quote. Over-cap values do not match.
+ */
+function scanQuoted(text: string, open: number, quote: string, escapes: boolean): QuotedScan | "over" | null {
+  const n = text.length;
+  const start = open + 1;
+  let j = start;
+  let pieces = 0;
+  while (j < n) {
+    const c = text[j]!;
+    if (c === "\n" || c === "\r") {
+      return j === start ? null : { end: j, value: text.slice(start, j), closed: false };
+    }
+    if (escapes && c === "\\") {
+      if (pieces >= QUOTED_CAP) return "over";
+      if (j + 1 >= n || text[j + 1] === "\n" || text[j + 1] === "\r") {
+        return { end: j + 1, value: text.slice(start, j + 1), closed: false };
+      }
+      j += 2;
+      pieces++;
+      continue;
+    }
+    if (c === quote) {
+      if (escapes) {
+        const keyAt = secretOpenerKeyStart(text, j);
+        if (keyAt !== null && keyAt >= start) return { end: keyAt, value: text.slice(start, keyAt), closed: false };
+      }
+      return { end: j + 1, value: text.slice(start, j), closed: true };
+    }
+    if (pieces >= QUOTED_CAP) return "over";
+    j++;
+    pieces++;
+  }
+  return j === start ? null : { end: j, value: text.slice(start, j), closed: false };
+}
+
+/** Old close-on-first-quote output glues the real tail on: `password="[redacted:secret]"def ghi"`. Drop that tail. */
+function leakedTailEnd(text: string, end: number, quote: string): number {
+  if (end >= text.length) return end;
+  // Only a word glued to the closing quote is a tail; `}, "name"` after a value is ordinary structure.
+  if (!/[A-Za-z0-9_]/.test(text[end]!)) return end;
+  let i = end;
+  while (i < text.length && i - end <= 300) {
+    const c = text[i]!;
+    if (c === "\n" || c === "\r" || c === "=" || c === ":") return end;
+    if (c === quote) return i + 1;
+    i++;
+  }
+  return end;
+}
+
+function openQuotedSecret(ident: string, keyQ: string, sep: string, value: string, quote: string): string | null {
   const k = ident.toLowerCase().replace(/^-+/, "");
-  const rawVal = (g[4] ?? g[5]) as string;
-  if (k === "pwd" && /^[.~/]/.test(rawVal)) return null;
-  if (rawVal.length < 3 || isNonLiteral(rawVal, true, true)) return null;
-  const q = g[1] as string;
-  const head = q + ident + q + (g[3] as string);
-  const vq = g[4] !== undefined ? '"' : "'";
-  return `${head}${vq}${ph("secret")}`;
+  if (k === "pwd" && /^[.~/]/.test(value)) return null;
+  if (value.length < 3 || isNonLiteral(value, true, true)) return null;
+  return `${keyQ}${ident}${keyQ}${sep}${quote}${ph("secret")}`;
+}
+
+/**
+ * One left-to-right pass over assignments. Escapes apply only when the key is secret; harmless values close on
+ * the next quote and are scanned again for an assignment inside them.
+ */
+function redactAssignRegions(text: string, st: State): string {
+  if (!text.includes("=") && !text.includes(":")) return text;
+  const head = new RegExp(ASSIGN_HEAD_SRC, "gi");
+  let out = "";
+  let from = 0;
+  let m: RegExpExecArray | null;
+  while ((m = head.exec(text)) !== null) {
+    const keyQ = m[1]!;
+    const ident = m[2]!;
+    const sep = m[3]!;
+    const at = m.index + m[0].length;
+    const secret = isSecretKey(ident);
+    if (at < text.length && (text[at] === '"' || text[at] === "'")) {
+      const quote = text[at]!;
+      const scanned = scanQuoted(text, at, quote, secret);
+      if (scanned === "over" || scanned === null) {
+        // The opening quote did not yield a value. Continue after it; restarting at the key is quadratic on a long line.
+        head.lastIndex = at + 1;
+        continue;
+      }
+      const advance = Math.max(scanned.end, m.index + 1);
+      if (isPlaceholder(scanned.value)) {
+        const end = scanned.closed ? leakedTailEnd(text, scanned.end, quote) : scanned.end;
+        if (end !== scanned.end) {
+          out += text.slice(from, scanned.end);
+          from = end;
+          st.count++;
+        }
+        head.lastIndex = end === scanned.end ? advance : end;
+        continue;
+      }
+      if (!secret) {
+        if (scanned.value.includes("=") || scanned.value.includes(":")) {
+          const inner: State = { count: 0 };
+          const innerText = redactAssignRegions(scanned.value, inner);
+          if (inner.count > 0) {
+            const closer = scanned.closed ? quote : "";
+            out += text.slice(from, at + 1) + innerText + closer;
+            from = scanned.end;
+            st.count += inner.count;
+          }
+        }
+        head.lastIndex = advance;
+        continue;
+      }
+      const g: Groups = ["", keyQ, ident, sep, quote === '"' ? scanned.value : undefined, quote === "'" ? scanned.value : undefined, undefined];
+      const repl = scanned.closed ? redactAssign(g, st) : openQuotedSecret(ident, keyQ, sep, scanned.value, quote);
+      if (repl === null) {
+        head.lastIndex = advance;
+        continue;
+      }
+      out += text.slice(from, m.index) + repl;
+      from = scanned.end;
+      st.count++;
+      head.lastIndex = advance;
+      continue;
+    }
+    const uq = UNQUOTED_VALUE.exec(text.slice(at));
+    if (uq === null) continue;
+    const value = uq[0];
+    const g: Groups = ["", keyQ, ident, sep, undefined, undefined, value];
+    const repl = redactAssign(g, st);
+    const end = at + value.length;
+    if (repl === null) {
+      head.lastIndex = end;
+      continue;
+    }
+    out += text.slice(from, m.index) + repl;
+    from = end;
+    st.count++;
+    head.lastIndex = end;
+  }
+  return from === 0 ? text : out + text.slice(from);
 }
 
 /** `--password hunter2xyz` style flags (space separated). */
@@ -660,11 +827,11 @@ function redactEntropy(text: string, st: State): string {
 // ---------------------------------------------------------------- entry point
 
 /**
- * JSON escaping hides secrets from every rule (`\"`, `\u0022`, `\u005f`). Decodes the printable-ASCII JSON escapes in
- * one linear pass; control escapes such as `\n` and `\r` stay so line structure is preserved. Used only on a copy:
- * `redact` keeps the original spelling unless the decoded copy reveals more secrets.
+ * JSON escaping hides secrets from every rule (`\"`, `\\`, `\u0022`, `\u005f`). Decodes those printable-ASCII JSON
+ * escapes in one linear pass; control escapes such as `\n` and `\r` stay so line structure is preserved. Used only
+ * on a copy: `redact` keeps the original spelling unless the decoded copy reveals more secrets.
  */
-const JSON_PRINTABLE_ESCAPE = /\\(?:u00([2-7][0-9a-f])|(["\/]))/gi;
+const JSON_PRINTABLE_ESCAPE = /\\(?:u00([2-7][0-9a-f])|(["\/\\]))/gi;
 
 function normalizeJsonEscapes(text: string): string {
   if (!text.includes("\\")) return text;
@@ -682,11 +849,20 @@ export function redact(input: string, opts: RedactOptions = {}): RedactResult {
   const plain = redactStable(input, opts);
   // Escaped text (`{\"password\": \"x\"}`) is redacted in decoded form, but only when decoding reveals a secret the
   // escaped spelling hid; otherwise code such as `"say \"hi\""` keeps its backslashes.
-  const decoded = normalizeJsonEscapes(plain.text);
-  if (decoded === plain.text) return plain;
-  const again = redactStable(decoded, opts);
-  return again.count > 0 ? { text: again.text, count: plain.count + again.count } : plain;
+  // Each decode removes one level of escaping, so nested levels take one round each.
+  let best = plain;
+  let work = plain.text;
+  for (let level = 0; level < MAX_DECODE_LEVELS; level++) {
+    const decoded = normalizeJsonEscapes(work);
+    if (decoded === work) break;
+    const again = redactStable(decoded, opts);
+    work = again.text;
+    if (again.count > 0) best = { text: again.text, count: best.count + again.count };
+  }
+  return best;
 }
+
+const MAX_DECODE_LEVELS = 4;
 
 function redactStable(input: string, opts: RedactOptions): RedactResult {
   const st: State = { count: 0 };
@@ -722,8 +898,7 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
     t = redactEnvLines(t, st);
   }
 
-  t = pass(t, st, ASSIGN, [":", "="], false, (g) => redactAssign(g, st));
-  t = pass(t, st, ASSIGN_OPEN_QUOTE, [":", "="], false, redactAssignOpenQuote);
+  t = redactAssignRegions(t, st);
   t = pass(t, st, CLI_FLAG, ["--", " -"], false, redactFlag);
   t = redactMysql(t, st);
   t = redactSshpass(t, st);

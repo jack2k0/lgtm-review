@@ -634,3 +634,287 @@ describe("redact: open-quote values (no closing quote before end of line)", () =
   });
 });
 
+describe("redact: long quoted values and escaped quotes", () => {
+  /** `n` characters, not hex, so only the assignment rule can hide it. */
+  const filler = (n: number) => "z".repeat(n - 1) + "7";
+
+  test.each([
+    ["double", '"'],
+    ["single", "'"],
+  ] as const)("closed %s value of 370 and of 4000 characters", (_name, q) => {
+    for (const n of [370, 4000]) {
+      const secret = filler(n);
+      const r = redact(`password=${q}${secret}${q}`);
+      expect(r.text, String(n)).toBe(`password=${q}[redacted:secret]${q}`);
+      expect(r.text, String(n)).not.toContain(secret);
+      expect(r.count, String(n)).toBe(1);
+    }
+  });
+
+  test.each([
+    ["double", '"'],
+    ["single", "'"],
+  ] as const)("open %s value of 370 and of 4000 characters", (_name, q) => {
+    for (const n of [370, 4000]) {
+      const secret = filler(n);
+      const r = redact(`password=${q}${secret}`);
+      expect(r.text, String(n)).toBe(`password=${q}[redacted:secret]`);
+      expect(r.text, String(n)).not.toContain(secret);
+      expect(r.count, String(n)).toBe(1);
+    }
+  });
+
+  test("an escaped quote does not end a closed value", () => {
+    const r = redact('password="abc\\"def ghi"');
+    expect(r.text).toBe('password="[redacted:secret]"');
+    expect(r.text).not.toContain("def ghi");
+    expect(r.count).toBe(1);
+  });
+
+  test("an escaped quote does not end an open value", () => {
+    const r = redact('password="abc\\"def ghi');
+    expect(r.text).toBe('password="[redacted:secret]');
+    expect(r.text).not.toContain("def ghi");
+    expect(r.count).toBe(1);
+  });
+
+  test("the JSON-escaped form of an escaped quote hides the tail", () => {
+    // JSON.stringify of the raw value: `\"` for each quote and `\\` for the backslash before the inner quote.
+    const closed = JSON.stringify('password="abc\\"def ghi"').slice(1, -1);
+    const open = JSON.stringify('password="abc\\"def ghi').slice(1, -1);
+    for (const input of [closed, open]) {
+      const r = redact(input);
+      expect(r.text, JSON.stringify(input)).not.toContain("def ghi");
+      expect(r.text, JSON.stringify(input)).toContain("[redacted:secret]");
+      expect(r.count, JSON.stringify(input)).toBeGreaterThanOrEqual(1);
+      const again = redact(r.text);
+      expect(again.text, JSON.stringify(input)).toBe(r.text);
+      expect(again.count, JSON.stringify(input)).toBe(0);
+    }
+  });
+
+  test("a quoted value longer than 4096 characters stays visible", () => {
+    const secret = "z".repeat(4097);
+    const input = `password="${secret}"`;
+    expect(redact(input)).toEqual({ text: input, count: 0 });
+  });
+
+  test("short closed values, a long non-secret, a reference, a windows path and a trailing escaped backslash", () => {
+    expect(redact('password="cat123"').text).toBe('password="[redacted:secret]"');
+    const title = `title="${"hello world ".repeat(30)}"`;
+    expect(redact(title)).toEqual({ text: title, count: 0 });
+    expect(redact('password="$VAR')).toEqual({ text: 'password="$VAR', count: 0 });
+    expect(redact('password="C:\\tmp\\x"').text).toBe('password="[redacted:secret]"');
+    expect(redact('password="a b\\\\"').text).toBe('password="[redacted:secret]"');
+  });
+
+  test("idempotent on long values and escaped quotes", () => {
+    const secret = filler(4000);
+    for (const input of [`password="${secret}"`, `password='${secret}`, 'password="abc\\"def ghi"', 'password="abc\\"def ghi', 'password="cat123"', 'password="$VAR']) {
+      const once = redact(input);
+      const twice = redact(once.text);
+      expect(twice.text, input).toBe(once.text);
+      expect(twice.count, input).toBe(0);
+    }
+  });
+});
+
+describe("redact: secret assignment inside a harmless value", () => {
+  // The escaped quote is inside the harmless value, so that value used to swallow the secret's opening quote.
+
+  test("single-quoted secret inside a closed harmless value", () => {
+    const input = "cfg='x\\' apikey='hunter2rocks99'";
+    const r = redact(input);
+    expect(r.text).toBe("cfg='x\\' apikey='[redacted:secret]'");
+    expect(r.text).not.toContain("hunter2");
+    expect(r.count).toBe(1);
+  });
+
+  test("single-quoted secret with spaces, then more quoted text", () => {
+    const input = "cfg='x\\' apikey='hunter2 rocks' and 'more'";
+    const r = redact(input);
+    expect(r.text).toBe("cfg='x\\' apikey='[redacted:secret]' and 'more'");
+    expect(r.text).not.toContain("hunter2");
+    expect(r.count).toBe(1);
+  });
+
+  test("double-quoted secret inside a closed harmless value keeps the escaped quote", () => {
+    const input = 'cfg="x\\" apikey="hunter2rocks99"';
+    const r = redact(input);
+    expect(r.text).toBe('cfg="x\\" apikey="[redacted:secret]"');
+    expect(r.text).not.toContain("hunter2");
+    expect(r.count).toBe(1);
+  });
+
+  test("double-quoted secret with spaces, then more quoted text", () => {
+    const input = 'cfg="x\\" apikey="hunter2 rocks" and "more"';
+    const r = redact(input);
+    expect(r.text).toBe('cfg="x\\" apikey="[redacted:secret]" and "more"');
+    expect(r.text).not.toContain("hunter2");
+    expect(r.count).toBe(1);
+  });
+
+  test("unclosed secret inside a closed harmless value", () => {
+    expect(redact("cfg='x\\' apikey='hunter2 rocks' and more").text).toBe("cfg='x\\' apikey='[redacted:secret]' and more");
+    expect(redact("cfg='x\\' apikey='hunter2rocks99 more'").text).toBe("cfg='x\\' apikey='[redacted:secret]'");
+    expect(redact('cfg="x\\" apikey="hunter2rocks99 more"').text).toBe('cfg="x\\" apikey="[redacted:secret]"');
+  });
+
+  test("secret inside an open harmless value, either quote style", () => {
+    expect(redact("cfg='x\\' apikey='hunter2rocks99").text).toBe("cfg='x\\' apikey='[redacted:secret]");
+    expect(redact("cfg='x\\' apikey='hunter2 rocks").text).toBe("cfg='x\\' apikey='[redacted:secret]");
+    expect(redact('cfg="x\\" apikey="hunter2rocks99').text).toBe('cfg="x\\" apikey="[redacted:secret]');
+    expect(redact("cfg='x\\' apikey=\"hunter2rocks99").text).toBe("cfg='x\\' apikey=\"[redacted:secret]");
+    expect(redact('cfg="x\\" apikey=\'hunter2rocks99').text).toBe('cfg="x\\" apikey=\'[redacted:secret]');
+  });
+
+  test("a harmless value with no secret is unchanged", () => {
+    const sq = "cfg='x\\' note='plain words'";
+    const dq = 'cfg="x\\" note=\\"plain words\\""';
+    const open = "cfg='x\\' note='plain words";
+    expect(redact(sq)).toEqual({ text: sq, count: 0 });
+    expect(redact(dq)).toEqual({ text: dq, count: 0 });
+    expect(redact(open)).toEqual({ text: open, count: 0 });
+  });
+
+  test("a secret value that itself ends in a key name still closes", () => {
+    expect(redact('password="my apikey="').text).toBe('password="[redacted:secret]"');
+    expect(redact('password="my apikey=" extra').text).toBe('password="[redacted:secret]" extra');
+    expect(redact('password="token="').text).toBe('password="[redacted:secret]"');
+  });
+
+  test("idempotent when a secret sits inside a harmless value", () => {
+    for (const input of [
+      "cfg='x\\' apikey='hunter2rocks99'",
+      "cfg='x\\' apikey='hunter2 rocks' and 'more'",
+      'cfg="x\\" apikey="hunter2rocks99"',
+      'cfg="x\\" apikey="hunter2 rocks" and "more"',
+      "cfg='x\\' apikey='hunter2rocks99",
+      "cfg='x\\' note='plain words'",
+      'password="my apikey="',
+    ]) {
+      const once = redact(input);
+      const twice = redact(once.text);
+      expect(twice.text, input).toBe(once.text);
+      expect(twice.count, input).toBe(0);
+    }
+  });
+});
+
+describe("redact: escapes only in secret values", () => {
+  test("neighbouring assignments stay hidden", () => {
+    const inputs = [
+      `['password="hunter hei','token="my secret val','x']`,
+      `"password='hunter hei" => "password='other val"`,
+      `f('password="hunter hei') and api_key="my secret val`,
+    ];
+    for (const input of inputs) {
+      const once = redact(input);
+      expect(once.text, input).not.toContain("hunter hei");
+      expect(once.text, input).not.toContain("my secret val");
+      expect(once.text, input).not.toContain("other val");
+      const twice = redact(once.text);
+      expect(twice.text, input).toBe(once.text);
+    }
+  });
+
+  test("a harmless escaped quote is unchanged", () => {
+    const input = 'title="a \\"quoted\\" word"';
+    expect(redact(input)).toEqual({ text: input, count: 0 });
+  });
+
+  test("json escapes and already-redacted tails are idempotent", () => {
+    const pairs = [
+      '{"password":"abc\\"def ghi"}\n{"password":"[redacted:secret]"def ghi"}',
+      "cfg='x\\' apikey='[redacted:secret]'\n" + 'cfg="x\\" apikey="[redacted:secret]"',
+    ];
+    for (const input of pairs) {
+      const once = redact(input);
+      const twice = redact(once.text);
+      expect(twice.text, input).toBe(once.text);
+      expect(twice.count, input).toBe(0);
+      expect(once.text, input).not.toContain("def ghi");
+    }
+  });
+
+  test("fragment combinations stay idempotent and hide values after password=", () => {
+    const keys = ["password", "token", "api_key", "note", "cfg"] as const;
+    const quotes = ['"', "'"] as const;
+    const seps = ["=", " = ", ": "] as const;
+    const values = ["hunter2rocks99", "abc\\def", "plain words", "zz99"] as const;
+    const extras = ["", "\\", "\n"] as const;
+    const secretKey = new Set<string>(["password", "token", "api_key"]);
+    for (const key of keys) {
+      for (const q of quotes) {
+        for (const sep of seps) {
+          for (const value of values) {
+            for (const extra of extras) {
+              const input = `${key}${sep}${q}${value}${extra}`;
+              const once = redact(input);
+              const twice = redact(once.text);
+              expect(twice.text, input).toBe(once.text);
+              if (secretKey.has(key)) expect(once.text, input).not.toContain(value);
+            }
+          }
+        }
+      }
+    }
+
+    const bits = [
+      'password="hunter2rocks99"',
+      "token='hunter2rocks99'",
+      "cfg='x\\' apikey='hunter2rocks99'",
+      "note='plain words'",
+      'title="a \\"quoted\\" word"',
+      'api_key="mysecretval99"',
+    ];
+    for (let i = 0; i < bits.length; i++) {
+      for (let j = 0; j < bits.length; j++) {
+        for (const join of [" ", "\n", ""]) {
+          const input = bits[i] + join + bits[j];
+          const once = redact(input);
+          const twice = redact(once.text);
+          expect(twice.text, JSON.stringify(input)).toBe(once.text);
+          expect(once.text, JSON.stringify(input)).not.toContain("hunter2rocks99");
+          expect(once.text, JSON.stringify(input)).not.toContain("mysecretval99");
+        }
+      }
+    }
+
+    for (const q of quotes) {
+      for (const tail of ["def ghi", "hunter2rocks99", "other val"]) {
+        const input = `password=${q}[redacted:secret]${q}${tail}${q}`;
+        const once = redact(input);
+        const twice = redact(once.text);
+        expect(once.text, input).not.toContain(tail);
+        expect(twice.text, input).toBe(once.text);
+      }
+    }
+  });
+});
+
+describe("redact: nested escaping", () => {
+  test("a secret escaped twice next to a redacted line is stable", () => {
+    const input = `"{\\\\\\"password\\\\\\":\\\\\\"abc\\\\\\\\\\\\\\"def ghi\\\\\\"}"\n"{\\"password\\":\\"[redacted:secret]\\"def ghi\\"}"`;
+    const once = redact(input);
+    expect(once.text).not.toContain("def ghi");
+    expect(redact(once.text).text).toBe(once.text);
+  });
+
+  test("escaped text with no secret keeps its backslashes at every level", () => {
+    for (const input of ['"say \\"hi\\""', '"say \\\\\\"hi\\\\\\""', 'path = "C:\\\\tmp"']) {
+      expect(redact(input)).toEqual({ text: input, count: 0 });
+    }
+  });
+});
+
+describe("redact: structure after a redacted value survives", () => {
+  test("a JSON-escaped secret keeps the keys after it", () => {
+    const r = redact('\\"password\\": \\"Zq9Xv7Lm2P\\"}, \\"name\\": \\"keepme\\"');
+    expect(r.text).toBe('"password": "[redacted:secret]"}, "name": "keepme"');
+  });
+
+  test("a closed value keeps a following plain key", () => {
+    expect(redact('{"password":"[redacted:secret]","name":"keepme"}').text).toBe('{"password":"[redacted:secret]","name":"keepme"}');
+  });
+});
