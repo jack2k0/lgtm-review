@@ -893,3 +893,17 @@ describe("redact: escapes only in secret values", () => {
   });
 });
 
+describe("redact: nested escaping", () => {
+  test("a secret escaped twice next to a redacted line is stable", () => {
+    const input = `"{\\\\\\"password\\\\\\":\\\\\\"abc\\\\\\\\\\\\\\"def ghi\\\\\\"}"\n"{\\"password\\":\\"[redacted:secret]\\"def ghi\\"}"`;
+    const once = redact(input);
+    expect(once.text).not.toContain("def ghi");
+    expect(redact(once.text).text).toBe(once.text);
+  });
+
+  test("escaped text with no secret keeps its backslashes at every level", () => {
+    for (const input of ['"say \\"hi\\""', '"say \\\\\\"hi\\\\\\""', 'path = "C:\\\\tmp"']) {
+      expect(redact(input)).toEqual({ text: input, count: 0 });
+    }
+  });
+});

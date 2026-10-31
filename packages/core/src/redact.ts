@@ -849,11 +849,20 @@ export function redact(input: string, opts: RedactOptions = {}): RedactResult {
   const plain = redactStable(input, opts);
   // Escaped text (`{\"password\": \"x\"}`) is redacted in decoded form, but only when decoding reveals a secret the
   // escaped spelling hid; otherwise code such as `"say \"hi\""` keeps its backslashes.
-  const decoded = normalizeJsonEscapes(plain.text);
-  if (decoded === plain.text) return plain;
-  const again = redactStable(decoded, opts);
-  return again.count > 0 ? { text: again.text, count: plain.count + again.count } : plain;
+  // Each decode removes one level of escaping, so nested levels take one round each.
+  let best = plain;
+  let work = plain.text;
+  for (let level = 0; level < MAX_DECODE_LEVELS; level++) {
+    const decoded = normalizeJsonEscapes(work);
+    if (decoded === work) break;
+    const again = redactStable(decoded, opts);
+    work = again.text;
+    if (again.count > 0) best = { text: again.text, count: best.count + again.count };
+  }
+  return best;
 }
+
+const MAX_DECODE_LEVELS = 4;
 
 function redactStable(input: string, opts: RedactOptions): RedactResult {
   const st: State = { count: 0 };
