@@ -719,3 +719,85 @@ describe("redact: long quoted values and escaped quotes", () => {
   });
 });
 
+describe("redact: secret assignment inside a harmless value", () => {
+  // The escaped quote is inside the harmless value, so that value used to swallow the secret's opening quote.
+
+  test("single-quoted secret inside a closed harmless value", () => {
+    const input = "cfg='x\\' apikey='hunter2rocks99'";
+    const r = redact(input);
+    expect(r.text).toBe("cfg='x\\' apikey='[redacted:secret]'");
+    expect(r.text).not.toContain("hunter2");
+    expect(r.count).toBe(1);
+  });
+
+  test("single-quoted secret with spaces, then more quoted text", () => {
+    const input = "cfg='x\\' apikey='hunter2 rocks' and 'more'";
+    const r = redact(input);
+    expect(r.text).toBe("cfg='x\\' apikey='[redacted:secret]' and 'more'");
+    expect(r.text).not.toContain("hunter2");
+    expect(r.count).toBe(1);
+  });
+
+  test("double-quoted secret inside a closed harmless value keeps the escaped quote", () => {
+    const input = 'cfg="x\\" apikey="hunter2rocks99"';
+    const r = redact(input);
+    expect(r.text).toBe('cfg="x\\" apikey="[redacted:secret]"');
+    expect(r.text).not.toContain("hunter2");
+    expect(r.count).toBe(1);
+  });
+
+  test("double-quoted secret with spaces, then more quoted text", () => {
+    const input = 'cfg="x\\" apikey="hunter2 rocks" and "more"';
+    const r = redact(input);
+    expect(r.text).toBe('cfg="x\\" apikey="[redacted:secret]" and "more"');
+    expect(r.text).not.toContain("hunter2");
+    expect(r.count).toBe(1);
+  });
+
+  test("unclosed secret inside a closed harmless value", () => {
+    expect(redact("cfg='x\\' apikey='hunter2 rocks' and more").text).toBe("cfg='x\\' apikey='[redacted:secret]' and more");
+    expect(redact("cfg='x\\' apikey='hunter2rocks99 more'").text).toBe("cfg='x\\' apikey='[redacted:secret]'");
+    expect(redact('cfg="x\\" apikey="hunter2rocks99 more"').text).toBe('cfg="x\\" apikey="[redacted:secret]"');
+  });
+
+  test("secret inside an open harmless value, either quote style", () => {
+    expect(redact("cfg='x\\' apikey='hunter2rocks99").text).toBe("cfg='x\\' apikey='[redacted:secret]");
+    expect(redact("cfg='x\\' apikey='hunter2 rocks").text).toBe("cfg='x\\' apikey='[redacted:secret]");
+    expect(redact('cfg="x\\" apikey="hunter2rocks99').text).toBe('cfg="x\\" apikey="[redacted:secret]');
+    expect(redact("cfg='x\\' apikey=\"hunter2rocks99").text).toBe("cfg='x\\' apikey=\"[redacted:secret]");
+    expect(redact('cfg="x\\" apikey=\'hunter2rocks99').text).toBe('cfg="x\\" apikey=\'[redacted:secret]');
+  });
+
+  test("a harmless value with no secret is unchanged", () => {
+    const sq = "cfg='x\\' note='plain words'";
+    const dq = 'cfg="x\\" note=\\"plain words\\""';
+    const open = "cfg='x\\' note='plain words";
+    expect(redact(sq)).toEqual({ text: sq, count: 0 });
+    expect(redact(dq)).toEqual({ text: dq, count: 0 });
+    expect(redact(open)).toEqual({ text: open, count: 0 });
+  });
+
+  test("a secret value that itself ends in a key name still closes", () => {
+    expect(redact('password="my apikey="').text).toBe('password="[redacted:secret]"');
+    expect(redact('password="my apikey=" extra').text).toBe('password="[redacted:secret]" extra');
+    expect(redact('password="token="').text).toBe('password="[redacted:secret]"');
+  });
+
+  test("idempotent when a secret sits inside a harmless value", () => {
+    for (const input of [
+      "cfg='x\\' apikey='hunter2rocks99'",
+      "cfg='x\\' apikey='hunter2 rocks' and 'more'",
+      'cfg="x\\" apikey="hunter2rocks99"',
+      'cfg="x\\" apikey="hunter2 rocks" and "more"',
+      "cfg='x\\' apikey='hunter2rocks99",
+      "cfg='x\\' note='plain words'",
+      'password="my apikey="',
+    ]) {
+      const once = redact(input);
+      const twice = redact(once.text);
+      expect(twice.text, input).toBe(once.text);
+      expect(twice.count, input).toBe(0);
+    }
+  });
+});
+

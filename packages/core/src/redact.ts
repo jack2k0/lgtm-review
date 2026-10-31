@@ -217,14 +217,32 @@ function redactAuthHeader(g: Groups): string | null {
  * the value. A value that ends in an escaped backslash (`password="a b\\"`) still closes on the quote,
  * because that backslash is consumed as a pair and the following quote is free. The cap is 4096 pieces
  * (a plain value longer than 4096 characters does not match). The unquoted alternative keeps its own cap.
+ * A quote that opens a secret assignment (`apikey='...'`) does not end the surrounding value: otherwise
+ * `cfg='x\' apikey='hunter2'` keeps the secret, because that quote was used as the outer closer.
+ * The quote still closes when nothing value-like follows it, so `password="my apikey="` stays one assignment.
  */
 const QUOTED_PIECE_DQ = '(?:\\\\[^\\r\\n]|[^"\\\\\\r\\n])';
 const QUOTED_PIECE_SQ = "(?:\\\\[^\\r\\n]|[^'\\\\\\r\\n])";
 const QUOTED_CAP = 4096;
+/**
+ * Secret word sitting immediately before the separator and the quote. The word is the same list as `isSecretKey`,
+ * so a prefixed key is covered when the secret word ends the ident (`db_password`, `api_key`). `token_file` is not,
+ * because of the suffix exemption. No capturing groups: this sits inside a lookbehind.
+ */
+const SECRET_ASSIGN_BEFORE_QUOTE =
+  "(?:token(?!s|iz)|secret|passw(?:or)?d|pass[_-]?phrase|access[_-]?key|auth[_-]?key|api[_-]?key|credential|private[_-]?key|(?:stripe|webhook|signing)[_-]?(?:key|secret|token|signature)|pass|pwd|passwd)(?![_.-](?:file|path|dir|name|url|uri|type|count|limit|length|len|id|ttl|usage|budget|expires?|expiry))[ \\t]{0,3}(?::=|[:=])[ \\t]{0,8}";
+/** Three pieces of a quoted value, not starting with whitespace: the quote opened a nested assignment. */
+const VALUE_AFTER_OPENER = "(?:\\\\[^\\r\\n]|[^\"'\\\\\\s\\r\\n])(?:\\\\[^\\r\\n]|[^\"'\\\\\\r\\n]){2}";
+/**
+ * The closer is checked before it is consumed, so the value lookahead has to include the quote.
+ * An alternation of "not a secret key" and "no value follows" would see the quote itself and always pass.
+ */
+const rejectSecretOpener = (quote: '"' | "'"): string =>
+  `(?!(?<=${SECRET_ASSIGN_BEFORE_QUOTE})${quote}${VALUE_AFTER_OPENER})`;
 
 const ASSIGN =
   new RegExp(
-    `(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\\1([ \\t]{0,3}(?::=|[:=])[ \\t]{0,8})(?:"(${QUOTED_PIECE_DQ}{1,${QUOTED_CAP}})"|'(${QUOTED_PIECE_SQ}{1,${QUOTED_CAP}})'|((?:[^\\s"',;)}\\]]|;(?=\\S)){3,300}))`,
+    `(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\\1([ \\t]{0,3}(?::=|[:=])[ \\t]{0,8})(?:"(${QUOTED_PIECE_DQ}{1,${QUOTED_CAP}})${rejectSecretOpener('"')}"|'(${QUOTED_PIECE_SQ}{1,${QUOTED_CAP}})${rejectSecretOpener("'")}'|((?:[^\\s"',;)}\\]]|;(?=\\S)){3,300}))`,
     "gi",
   );
 const SECRET_WORD =
@@ -385,7 +403,8 @@ const ASSIGN_OPEN_QUOTE = new RegExp(
   "gim",
 );
 
-function redactAssignOpenQuote(g: Groups): string | null {
+/** Secret open-quote only. Harmless open values are scanned by `redactOpenInner`, which must not call back here. */
+function redactSecretOpen(g: Groups): string | null {
   const ident = g[2] as string;
   if (!isSecretKey(ident)) return null;
   const k = ident.toLowerCase().replace(/^-+/, "");
@@ -396,6 +415,27 @@ function redactAssignOpenQuote(g: Groups): string | null {
   const head = q + ident + q + (g[3] as string);
   const vq = g[4] !== undefined ? '"' : "'";
   return `${head}${vq}${ph("secret")}`;
+}
+
+/**
+ * An unclosed harmless value runs to the end of the line, so a secret inside it is not a separate match when its
+ * quotes do not end this value (`cfg='x\' apikey="hunter2`). Scan the captured text once; do not add a closer.
+ */
+function redactOpenInner(g: Groups, st: State): string | null {
+  const q = g[4] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
+  const v = (g[4] ?? g[5]) as string;
+  if (q === "" || (!v.includes("=") && !v.includes(":"))) return null;
+  const inner: State = { count: 0 };
+  let r = pass(v, inner, ASSIGN, [":", "="], false, (h) => redactAssign(h, inner));
+  r = pass(r, inner, ASSIGN_OPEN_QUOTE, [":", "="], false, redactSecretOpen);
+  if (inner.count === 0) return null;
+  st.count += inner.count - 1;
+  return `${g[1]}${g[2]}${g[1]}${g[3]}${q}${r}`;
+}
+
+function redactAssignOpenQuote(g: Groups, st: State): string | null {
+  if (!isSecretKey(g[2] as string)) return redactOpenInner(g, st);
+  return redactSecretOpen(g);
 }
 
 /** `--password hunter2xyz` style flags (space separated). */
@@ -740,7 +780,7 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
   }
 
   t = pass(t, st, ASSIGN, [":", "="], false, (g) => redactAssign(g, st));
-  t = pass(t, st, ASSIGN_OPEN_QUOTE, [":", "="], false, redactAssignOpenQuote);
+  t = pass(t, st, ASSIGN_OPEN_QUOTE, [":", "="], false, (g) => redactAssignOpenQuote(g, st));
   t = pass(t, st, CLI_FLAG, ["--", " -"], false, redactFlag);
   t = redactMysql(t, st);
   t = redactSshpass(t, st);
