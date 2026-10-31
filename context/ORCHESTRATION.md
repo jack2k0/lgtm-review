@@ -26,7 +26,7 @@ Reguły: `AGENTS.md` (wszyscy agenci), `REVIEW.md` (tiery, uwagi, rejestr, maks.
 - Pilot: następne 2 zmiany; metryki na merge (tier, liczba uwag, werdykty, rundy) w rejestrze `reviews/findings.md`.
 
 ## Faza łańcucha
-Po v0.4 (2026-10-31, decyzje właściciela): S-31 wariant A (tylko Linux i macOS), oczekiwanie testu macOS zmienione; `redact-edges` i `status-script-autofix` zamykają odłożone uwagi. Zadanie macOS w CI nadal `continue-on-error`, dopóki nie przejdzie na GitHubie. `status-update-flags` zamyka `pnpm test -u` i `cargo clippy --fix`. Otwarte z rejestrów: wartość ze spacjami przecięta przez limit tekstu.
+Po v0.4 (2026-10-31, decyzje właściciela): S-31 wariant A (tylko Linux i macOS), oczekiwanie testu macOS zmienione; `redact-edges` i `status-script-autofix` zamykają odłożone uwagi. Zadanie macOS w CI nadal `continue-on-error`, dopóki nie przejdzie na GitHubie. `status-update-flags` zamyka `pnpm test -u` i `cargo clippy --fix`. Otwarte z rejestrów: wartość ze spacjami przecięta przez limit tekstu. Po pushu `11dd28e` zadanie macOS miało 6 czerwonych testów: `macos-green` naprawia ścieżki w przygotowaniu dwóch testów i wydłuża limit czasu (cli 30 s, `boundaries` 30 s); `continue-on-error` zostaje, dopóki zadanie nie będzie zielone.
 
 v0.4 S-22..S-30 ZMERGOWANE lokalnie 2026-10-30 (Agy implementuje, Haiku/Sonnet + Opus recenzują). Czeka na właściciela: push, pierwsze uruchomienie nowych zadań CI, sprawdzenie nazwy, publikacja.
 
