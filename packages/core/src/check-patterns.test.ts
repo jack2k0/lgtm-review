@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { classifyShellMutation } from "./shell-edits.js";
 import { checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, stripHeredocs, type RepoScripts } from "./check-patterns.js";
 
 const repo: RepoScripts = { packageScripts: ["verify"], makeTargets: ["ci"], scriptFiles: ["tools/run-all.sh"] };
@@ -330,6 +331,30 @@ const cases: [string, boolean, boolean?][] = [
   ["cat <<'EOF' > notes.txt\npytest\npnpm test\nEOF", false],
   ["echo 'a && pytest'", false],
   ["echo \"x; pnpm test\"", false],
+  // status-script-autofix
+  ["pnpm lint --fix", false],
+  ["pnpm -r lint --fix", false],
+  ["pnpm --filter x lint --fix", false],
+  ["npm run lint -- --fix", false],
+  ["turbo run lint -- --fix", false],
+  ["pnpm lint:fix", false],
+  ["pnpm lint-fix", false],
+  ["pnpm fix:lint", false],
+  ["turbo lint:fix", false],
+  ["turbo run lint-fix", false],
+  ["pnpm lint --fix=code", false],
+  ["pnpm lint --fix-type=problem", false],
+  ["pnpm lint --fix-type problem", false],
+  ["pnpm lint --fix-only", false],
+  ["pnpm lint --write", false],
+  ["pnpm lint --apply", false],
+  ["pnpm lint --apply-unsafe", false],
+  ["pnpm lint --unsafe", false],
+  ["pnpm check --fix", false],
+  ["pnpm lint:ci --fix", false],
+  ["npm run lint -- --fix-dry-run", true],
+  ["pnpm lint --fix-dry-run", true],
+  ["pnpm lint --fix && pnpm test", true],
   ["", false],
   ["   ", false],
 ];
@@ -354,6 +379,13 @@ describe("classifyCommand", () => {
     expect(classifyCommand("pnpm verify").isCheck).toBe(false);
     expect(classifyCommand("make ci").isCheck).toBe(false);
     expect(classifyCommand("tools/run-all.sh").isCheck).toBe(false);
+  });
+
+  test("autofix scripts produce opaque shell mutations", () => {
+    expect(classifyShellMutation("pnpm lint --fix").opaque).toBe(true);
+    expect(classifyShellMutation("npm run lint -- --fix").opaque).toBe(true);
+    expect(classifyShellMutation("pnpm lint:fix").opaque).toBe(true);
+    expect(classifyShellMutation("turbo run lint -- --fix").opaque).toBe(true);
   });
 
   test("labels are the normalized check segment", () => {
