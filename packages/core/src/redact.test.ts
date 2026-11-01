@@ -693,10 +693,13 @@ describe("redact: long quoted values and escaped quotes", () => {
     }
   });
 
-  test("a quoted value longer than 4096 characters stays visible", () => {
+  test("a quoted secret longer than 4096 characters is redacted", () => {
     const secret = "z".repeat(4097);
     const input = `password="${secret}"`;
-    expect(redact(input)).toEqual({ text: input, count: 0 });
+    const r = redact(input);
+    expect(r.text).toBe('password="[redacted:secret]"');
+    expect(r.text).not.toContain(secret);
+    expect(r.count).toBe(1);
   });
 
   test("short closed values, a long non-secret, a reference, a windows path and a trailing escaped backslash", () => {
@@ -957,6 +960,33 @@ describe("redact: open findings", () => {
     expectHidden("cfg='x\\' apikey='abc def'", ["abc def"]);
     expect(redact("cfg='x\\' apikey='abc def'").text).toBe("cfg='x\\' apikey='[redacted:secret]'");
     expectHidden('password="abc def token="ghi jkl', ["abc def", "ghi jkl"]);
+  });
+});
+
+describe("redact: secret values have no length cap", () => {
+  test.each([
+    ["double", '"'],
+    ["single", "'"],
+  ] as const)("closed and open %s values of 5000 and 100000 characters", (_name, q) => {
+    for (const n of [5000, 100000]) {
+      const tail = " tail text";
+      const value = "z".repeat(n - tail.length) + tail;
+      const shapes = [
+        [`password=${q}${value}${q}`, `password=${q}[redacted:secret]${q}`],
+        [`password=${q}${value}`, `password=${q}[redacted:secret]`],
+        [`{"password":${q}${value}${q}}`, `{"password":${q}[redacted:secret]${q}}`],
+        [`{"password":${q}${value}`, `{"password":${q}[redacted:secret]`],
+      ] as const;
+      for (const [input, expected] of shapes) {
+        const once = redact(input);
+        expect(once.text, `${q} ${n}`).toBe(expected);
+        expect(once.text, `${q} ${n}`).not.toContain(value);
+        expect(once.text, `${q} ${n}`).not.toContain("tail text");
+        const twice = redact(once.text);
+        expect(twice.text, `${q} ${n}`).toBe(once.text);
+        expect(twice.count, `${q} ${n}`).toBe(0);
+      }
+    }
   });
 });
 

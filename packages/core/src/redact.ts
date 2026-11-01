@@ -212,9 +212,10 @@ function redactAuthHeader(g: Groups): string | null {
 // ---------------------------------------------------------------- key = value assignments
 
 /**
- * Quoted assignment values are at most 4096 pieces. A backslash escapes the next character only inside a
- * secret key's value (`password="abc\"def"`). A harmless value closes on the next quote of its kind, as on
- * main, so `cfg='x\' apikey='hunter2'` does not swallow the secret. The unquoted alternative keeps its own cap.
+ * A harmless quoted value is at most 4096 pieces. A secret key's quoted value has no length cap within the
+ * line. A backslash escapes the next character only inside a secret key's value (`password="abc\"def"`).
+ * A harmless value closes on the next quote of its kind, as on main, so `cfg='x\' apikey='hunter2'` does not
+ * swallow the secret. The unquoted alternative keeps its own cap.
  */
 const QUOTED_CAP = 4096;
 const ASSIGN_HEAD_SRC = String.raw`(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})`;
@@ -422,9 +423,10 @@ function driveQuoteCloses(text: string, start: number, slash: number): boolean {
 }
 
 /**
- * Scan one quoted value starting at the opening quote. Secret values treat a backslash as an escape and stop
- * before a later secret assignment so that assignment keeps its own quote. A drive-path value does not treat
- * `\"` as an escape when that quote is followed by whitespace or the end of the line. Over-cap values do not match.
+ * Scan one quoted value starting at the opening quote. Secret values treat a backslash as an escape, have no
+ * length cap, and stop before a later secret assignment so that assignment keeps its own quote. A drive-path
+ * value does not treat `\"` as an escape when that quote is followed by whitespace or the end of the line.
+ * A harmless value past QUOTED_CAP does not match.
  */
 function scanQuoted(text: string, open: number, quote: string, escapes: boolean): QuotedScan | "over" | null {
   const n = text.length;
@@ -442,7 +444,6 @@ function scanQuoted(text: string, open: number, quote: string, escapes: boolean)
         pieces++;
         continue;
       }
-      if (pieces >= QUOTED_CAP) return "over";
       if (j + 1 >= n || text[j + 1] === "\n" || text[j + 1] === "\r") {
         return { end: j + 1, value: text.slice(start, j + 1), closed: false };
       }
@@ -457,7 +458,7 @@ function scanQuoted(text: string, open: number, quote: string, escapes: boolean)
       }
       return { end: j + 1, value: text.slice(start, j), closed: true };
     }
-    if (pieces >= QUOTED_CAP) return "over";
+    if (!escapes && pieces >= QUOTED_CAP) return "over";
     j++;
     pieces++;
   }
