@@ -908,6 +908,58 @@ describe("redact: nested escaping", () => {
   });
 });
 
+describe("redact: open findings", () => {
+  const nested = '{"cfg":"{\\"password\\":\\"abc\\\\\\"def ghi\\\\\\"\\"}"}';
+  const nestedAgain = JSON.stringify(nested).slice(1, -1);
+  const nestedPlain = '{"cfg":"{\\"a\\":\\"plain words\\"}"}';
+
+  function expectHidden(input: string, hidden: string[]): void {
+    const once = redact(input);
+    for (const secret of hidden) expect(once.text, input).not.toContain(secret);
+    const twice = redact(once.text);
+    expect(twice.text, input).toBe(once.text);
+    expect(twice.count, input).toBe(0);
+  }
+
+  test("a closing quote of a harmless value can open the next key", () => {
+    expectHidden(nested, ["abc", "def ghi"]);
+    expect(redact(nested).text).toContain("[redacted:secret]");
+    expectHidden(nestedAgain, ["abc", "def ghi"]);
+    expect(redact(nestedAgain).text).toContain("[redacted:secret]");
+  });
+
+  test("plain JSON and a long harmless value stay byte for byte", () => {
+    const plain = '{"a":"plain","name":"x"}';
+    const title = 'title="a" and "b" stays';
+    const longTitle = `title="${"n".repeat(5000)}"`;
+    for (const input of [plain, title, nestedPlain, longTitle]) {
+      expect(redact(input), input).toEqual({ text: input, count: 0 });
+      expect(redact(redact(input).text).text, input).toBe(input);
+    }
+  });
+
+  test("a drive-path value closes on a backslash-quote before a flag", () => {
+    const input = 'token="C:\\temp\\" --flag value';
+    const once = redact(input);
+    expect(once.text).toBe('token="[redacted:secret]" --flag value');
+    expect(once.text).not.toContain("temp");
+    expect(redact(once.text).text).toBe(once.text);
+    expect(redact(once.text).count).toBe(0);
+  });
+
+  test("a backslash-quote that is not a drive path still hides the tail", () => {
+    expectHidden('password="abc\\" def ghi', ["abc", "def ghi"]);
+    expectHidden('password="a b\\" and then plain', ["and then plain"]);
+    expectHidden('password="abc\\" def ghi"', ["def ghi"]);
+  });
+
+  test("a harmless escaped quote does not swallow the next secret or the following plain text", () => {
+    expectHidden("cfg='x\\' apikey='abc def'", ["abc def"]);
+    expect(redact("cfg='x\\' apikey='abc def'").text).toBe("cfg='x\\' apikey='[redacted:secret]'");
+    expectHidden('password="abc def token="ghi jkl', ["abc def", "ghi jkl"]);
+  });
+});
+
 describe("redact: structure after a redacted value survives", () => {
   test("a JSON-escaped secret keeps the keys after it", () => {
     const r = redact('\\"password\\": \\"Zq9Xv7Lm2P\\"}, \\"name\\": \\"keepme\\"');
