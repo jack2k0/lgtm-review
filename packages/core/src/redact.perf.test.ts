@@ -168,4 +168,21 @@ describe("redact: performance (1 MB adversarial inputs)", () => {
     ]) as [number, number, number];
     expectFast("mixed realistic log", ms, smallMs, baselineMs);
   });
+
+  test("1 MB line of password quote repeats", { timeout: 60_000 }, () => {
+    const text = 'password="'.repeat(Math.ceil(MB / 10)).slice(0, MB);
+    expect(text.length).toBe(MB);
+    const [ms] = bestTimes([() => void redact(text)]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+  });
+
+  test("1 MB open secret value", { timeout: 60_000 }, () => {
+    const text = `password="${"z".repeat(MB - 10)}`;
+    expect(text.length).toBe(MB);
+    let r!: ReturnType<typeof redact>;
+    const [ms] = bestTimes([() => void (r = redact(text))]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+    expect(r.text).toBe('password="[redacted:secret]');
+    expect(r.text).not.toContain("zzz");
+  });
 });

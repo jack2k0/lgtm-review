@@ -212,9 +212,10 @@ function redactAuthHeader(g: Groups): string | null {
 // ---------------------------------------------------------------- key = value assignments
 
 /**
- * Quoted assignment values are at most 4096 pieces. A backslash escapes the next character only inside a
- * secret key's value (`password="abc\"def"`). A harmless value closes on the next quote of its kind, as on
- * main, so `cfg='x\' apikey='hunter2'` does not swallow the secret. The unquoted alternative keeps its own cap.
+ * A harmless quoted value is at most 4096 pieces. A secret key's quoted value has no length cap within the
+ * line. A backslash escapes the next character only inside a secret key's value (`password="abc\"def"`).
+ * A harmless value closes on the next quote of its kind, as on main, so `cfg='x\' apikey='hunter2'` does not
+ * swallow the secret. The unquoted alternative keeps its own cap.
  */
 const QUOTED_CAP = 4096;
 const ASSIGN_HEAD_SRC = String.raw`(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]{0,3}(?::=|[:=])[ \t]{0,8})`;
@@ -410,9 +411,22 @@ function secretOpenerKeyStart(text: string, quoteAt: number): number | null {
   return pieces >= 3 ? identStart : null;
 }
 
+/** Value starts with a Windows drive (`C:\`) and this backslash-quote is followed by whitespace or end of line. */
+function driveQuoteCloses(text: string, start: number, slash: number): boolean {
+  if (slash < start + 2 || text[start + 1] !== ":" || text[start + 2] !== "\\") return false;
+  const c0 = text.charCodeAt(start);
+  if (!((c0 >= 65 && c0 <= 90) || (c0 >= 97 && c0 <= 122))) return false;
+  const after = slash + 2;
+  if (after >= text.length) return true;
+  const c = text[after]!;
+  return c === " " || c === "\t" || c === "\n" || c === "\r";
+}
+
 /**
- * Scan one quoted value starting at the opening quote. Secret values treat a backslash as an escape and stop
- * before a later secret assignment so that assignment keeps its own quote. Over-cap values do not match.
+ * Scan one quoted value starting at the opening quote. Secret values treat a backslash as an escape, have no
+ * length cap, and stop before a later secret assignment so that assignment keeps its own quote. A drive-path
+ * value does not treat `\"` as an escape when that quote is followed by whitespace or the end of the line.
+ * A harmless value past QUOTED_CAP does not match.
  */
 function scanQuoted(text: string, open: number, quote: string, escapes: boolean): QuotedScan | "over" | null {
   const n = text.length;
@@ -425,7 +439,11 @@ function scanQuoted(text: string, open: number, quote: string, escapes: boolean)
       return j === start ? null : { end: j, value: text.slice(start, j), closed: false };
     }
     if (escapes && c === "\\") {
-      if (pieces >= QUOTED_CAP) return "over";
+      if (j + 1 < n && text[j + 1] === quote && driveQuoteCloses(text, start, j)) {
+        j++;
+        pieces++;
+        continue;
+      }
       if (j + 1 >= n || text[j + 1] === "\n" || text[j + 1] === "\r") {
         return { end: j + 1, value: text.slice(start, j + 1), closed: false };
       }
@@ -440,7 +458,7 @@ function scanQuoted(text: string, open: number, quote: string, escapes: boolean)
       }
       return { end: j + 1, value: text.slice(start, j), closed: true };
     }
-    if (pieces >= QUOTED_CAP) return "over";
+    if (!escapes && pieces >= QUOTED_CAP) return "over";
     j++;
     pieces++;
   }
@@ -515,7 +533,8 @@ function redactAssignRegions(text: string, st: State): string {
             st.count += inner.count;
           }
         }
-        head.lastIndex = advance;
+        // Resume at the closing quote so it can serve as the opening quote of the next key.
+        head.lastIndex = scanned.closed ? scanned.end - 1 : advance;
         continue;
       }
       const g: Groups = ["", keyQ, ident, sep, quote === '"' ? scanned.value : undefined, quote === "'" ? scanned.value : undefined, undefined];
