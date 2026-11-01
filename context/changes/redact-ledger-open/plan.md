@@ -31,6 +31,7 @@ The orchestrator measures real logs before and after, aggregates only. Do not op
 ```gate
 allow: ^packages/core/src/redact\.ts$
 allow: ^packages/core/src/redact\.test\.ts$
+allow: ^packages/core/src/redact\.perf\.test\.ts$
 allow: ^context/(changes|archive)/redact-ledger-open/
 deps: no
 schema: no
