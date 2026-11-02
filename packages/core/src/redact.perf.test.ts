@@ -185,4 +185,20 @@ describe("redact: performance (1 MB adversarial inputs)", () => {
     expect(r.text).toBe('password="[redacted:secret]');
     expect(r.text).not.toContain("zzz");
   });
+
+  test("1 MB of 20000 lines, each with an escaped secret", { timeout: 60_000 }, () => {
+    const unit = '{\\"password\\": \\"hunter2 words\\"} x\\"y\\" tail\n';
+    const text = unit.repeat(Math.ceil(MB / unit.length)).slice(0, MB);
+    const small = text.slice(0, SMALL);
+    expect(text.length).toBe(MB);
+    expect(text.split("\n").length).toBeGreaterThan(20000);
+    let r!: ReturnType<typeof redact>;
+    const [ms] = bestTimes([
+      () => void (r = redact(text)),
+      () => void redact(small),
+    ]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+    expect(r.text).not.toContain("hunter2");
+    expect(redact(r.text).text).toBe(r.text);
+  });
 });
