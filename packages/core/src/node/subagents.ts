@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { lstat, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { createSubagentCollector, DESCRIPTION_MAX, type SubagentTranscript } from "../subagents.js";
 import { readSessionLines } from "./lines.js";
@@ -92,6 +92,15 @@ async function readMeta(path: string): Promise<Meta | null> {
   }
 }
 
+async function isSymlink(path: string): Promise<boolean> {
+  try {
+    const st = await lstat(path);
+    return st.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Reads the subagent transcripts of a session whose parent made `Agent` calls with the tool-use ids `parentIds`.
  * Only transcripts that an `Agent` call (of the parent, or of an already read transcript: nested agents) refers
@@ -101,6 +110,10 @@ async function readMeta(path: string): Promise<Meta | null> {
 export async function loadSubagents(sessionFile: string, parentIds: ReadonlySet<string>, opts: { detail?: boolean } = {}): Promise<LoadedSubagents> {
   const out: LoadedSubagents = { transcripts: new Map(), warnings: [] };
   const dir = subagentsDirFor(sessionFile);
+  if (await isSymlink(dirname(dir)) || await isSymlink(dir)) {
+    out.warnings.push("subagent directory is a symlink, skipped");
+    return out;
+  }
   const found = await listAgentFiles(dir);
   if (found === null) return out;
   if (found.total > found.stems.length) {
@@ -111,6 +124,10 @@ export async function loadSubagents(sessionFile: string, parentIds: ReadonlySet<
   const seenToolUse = new Set<string>();
   for (const stem of found.stems) {
     const agentId = stem.slice("agent-".length);
+    if (await isSymlink(join(dir, `${stem}.jsonl`)) || await isSymlink(join(dir, `${stem}.meta.json`))) {
+      out.warnings.push(`subagent ${agentId}: symlink, transcript skipped`);
+      continue;
+    }
     const meta = await readMeta(join(dir, `${stem}.meta.json`));
     if (meta === null) {
       out.warnings.push(`subagent ${agentId}: meta missing or unreadable, transcript skipped`);
