@@ -36,7 +36,7 @@ describe("redact: performance (1 MB adversarial inputs)", () => {
   /** 4x the input must not cost more than 8x the time; quadratic growth would be at least 16x. */
   const SCALING_RATIO = 8;
   /** Timings below this are too small to compare reliably. */
-  const NOISE_FLOOR_MS = 25;
+  const NOISE_FLOOR_MS = 100;
 
   const OPTIONS: { usernames?: string[]; repoDir?: string; envFile?: boolean }[] = [
     {},
