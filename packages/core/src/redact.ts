@@ -466,39 +466,40 @@ function scanQuoted(text: string, open: number, quote: string, escapes: boolean)
 }
 
 /**
- * Old close-on-first-quote output glues the real tail on: `password="[redacted:secret]"def ghi"`. Drop that tail,
- * but only when the eat ends the pattern: the residue of one leaked value runs to its original closing quote and
- * then ordinary structure follows. A second glued run right after (`"def"def"`, `x\\"x\\"...`, or the same shape
- * once decoding has flattened the escapes to `x"x"x...`) is a chain of escaped-quote junk, not one leaked tail;
- * eating it piece by piece never ends (the pattern regrows on every pass), so the text would change on every
- * second call of `redact`. Leave the chain alone instead.
+ * Old close-on-first-quote output glues the real tail on: `password="[redacted:secret]"def ghi"`. Drop that tail.
+ * One piece is a glued word run that ends in the next closing quote of the same kind, bounded like a value scan:
+ * no newline, no `=` or `:`, at most 300 characters. Pieces repeat in junk such as `def"ghi jkl"` and `x\\"x\\"...`
+ * (also once decoding has flattened the escapes to `x"x"x...`), so consume the whole chain of glued pieces in one
+ * call: after a piece ends in the quote, continue while the next character is again a glued word, and stop when a
+ * piece does not end in the quote (at a stop character, past the 300 limit or at the end). The per-pass rules are
+ * unchanged; what changed is the pace. Eating one piece per pass hit `MAX_ROUNDS` on a long chain, so the result
+ * depended on the call count, and leaving the rest of the chain kept text visible that the pre-`redact-long-escaped`
+ * output hid. Redaction fails closed toward hiding, so the chain is removed.
  */
 const TAIL_WORD = /[A-Za-z0-9_]/;
-
-function tailRepeat(text: string, end: number, quote: string): boolean {
-  if (end >= text.length || !TAIL_WORD.test(text[end]!)) return false;
-  let i = end;
-  while (i < text.length && i - end <= 300) {
-    const c = text[i]!;
-    if (c === "\n" || c === "\r" || c === "=" || c === ":") return false;
-    if (c === quote) return true;
-    i++;
-  }
-  return false;
-}
 
 function leakedTailEnd(text: string, end: number, quote: string): number {
   if (end >= text.length) return end;
   // Only a word glued to the closing quote is a tail; `}, "name"` after a value is ordinary structure.
   if (!TAIL_WORD.test(text[end]!)) return end;
-  let i = end;
-  while (i < text.length && i - end <= 300) {
-    const c = text[i]!;
-    if (c === "\n" || c === "\r" || c === "=" || c === ":") return end;
-    if (c === quote) return tailRepeat(text, i + 1, quote) ? end : i + 1;
-    i++;
+  let eaten = end;
+  for (;;) {
+    let i = eaten;
+    let found = -1;
+    while (i < text.length && i - eaten <= 300) {
+      const c = text[i]!;
+      if (c === "\n" || c === "\r" || c === "=" || c === ":") break;
+      if (c === quote) {
+        found = i;
+        break;
+      }
+      i++;
+    }
+    if (found < 0) return eaten;
+    eaten = found + 1;
+    // Chain on: the next character must again be a glued word for the chain to continue.
+    if (eaten >= text.length || !TAIL_WORD.test(text[eaten]!)) return eaten;
   }
-  return end;
 }
 
 function openQuotedSecret(ident: string, keyQ: string, sep: string, value: string, quote: string): string | null {

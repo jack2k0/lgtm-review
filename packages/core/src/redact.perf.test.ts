@@ -201,4 +201,18 @@ describe("redact: performance (1 MB adversarial inputs)", () => {
     expect(r.text).not.toContain("hunter2");
     expect(redact(r.text).text).toBe(r.text);
   });
+
+  test("1 MB glued-tail chain after a redacted value", { timeout: 60_000 }, () => {
+    const head = 'password="[redacted:secret]"';
+    const text = (head + 'x"'.repeat(500_000)).slice(0, MB);
+    const small = head + 'x"'.repeat(1000);
+    expect(text.length).toBe(MB);
+    let r!: ReturnType<typeof redact>;
+    const [ms] = bestTimes([
+      () => void (r = redact(text)),
+      () => void redact(small),
+    ]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+    expect(r.text).toBe(head);
+  });
 });

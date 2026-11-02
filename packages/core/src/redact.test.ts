@@ -1013,22 +1013,42 @@ describe("redact: decode is scoped to the lines that need it", () => {
   });
 
   /** Finding 5 of redact-ledger-open: `password="` plus 300 repeats of `x\\"` changed on every second call. */
-  test("an escaped-quote chain after a redacted value is stable on the second call", () => {
+  test("an escaped-quote chain after a redacted value is removed whole and stays removed", () => {
     const input = 'password="' + 'x\\\\"'.repeat(300);
     const once = redact(input);
-    const twice = redact(once.text);
-    expect(twice.text).toBe(once.text);
+    expect(once.text).toBe('password="[redacted:secret]"');
+    expect(redact(once.text).text).toBe(once.text);
   });
 
-  test("an escaped-quote chain after a redacted value is stable at every size and level", () => {
+  test("a glued chain after a redacted value is removed at every size and level", () => {
     for (const n of [2, 18, 19, 100]) {
       const raw = 'password="' + 'x\\\\"'.repeat(n);
+      expect(redact(raw).text).toBe('password="[redacted:secret]"');
       expect(redact(redact(raw).text).text).toBe(redact(raw).text);
       const decoded = 'password="[redacted:secret]"' + 'x\\"'.repeat(n);
+      expect(redact(decoded).text).toBe('password="[redacted:secret]"');
       expect(redact(redact(decoded).text).text).toBe(redact(decoded).text);
       const flattened = 'password="[redacted:secret]"' + 'x"'.repeat(n);
+      expect(redact(flattened).text).toBe('password="[redacted:secret]"');
       expect(redact(redact(flattened).text).text).toBe(redact(flattened).text);
     }
+  });
+
+  test("a glued chain of word pieces is removed whole", () => {
+    const once = redact('password="abc"def"ghi jkl"');
+    expect(once.text).toBe('password="[redacted:secret]"');
+    expect(redact(once.text).text).toBe(once.text);
+    const twice = redact('password="[redacted:secret]"def"ghi"');
+    expect(twice.text).toBe('password="[redacted:secret]"');
+    expect(redact(twice.text).text).toBe(twice.text);
+  });
+
+  test("the chain stops at ordinary structure and keeps it", () => {
+    const once = redact('password="[redacted:secret]"abc=now');
+    expect(once.text).toBe('password="[redacted:secret]"abc=now');
+    expect(redact(once.text).text).toBe(once.text);
+    const keys = redact('\\"password\\": \\"Zq9Xv7Lm2P\\"}, \\"name\\": \\"keepme\\"');
+    expect(keys.text).toBe('"password": "[redacted:secret]"}, "name": "keepme"');
   });
 
   test("a single line with an escaped secret and other text hides the secret", () => {
