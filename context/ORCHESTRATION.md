@@ -137,4 +137,5 @@ Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-li
 ## Otwarte problemy
 - Odłożone z S-22/S-23: sekret 3-znakowy po `:` (test `token: abc` tego pilnuje); core ucina tekst promptu do 200 znaków przed redakcją, więc token na granicy cięcia zostawia krótki prefiks (także w `--summary`).
 - Odłożone z S-24: `pnpm lint --fix` nadal liczy się jako check, bo autofix jest ukryty za nazwą skryptu.
+- Znane wycieki redakcji, sprawdzone na `1b3321d`, NIE RUSZAĆ bez decyzji Jacka (polecenie z 2.11; szczegóły: `context/archive/redact-next-line/reviews/findings.md`, uwagi 2 i 5): `password:` i niżej `- Changeme123Now`; `password: ""` i wartość w następnej linii; wiersz tabeli `| password |` i niżej `| Changeme123Now |`; `Authorization: Bearer abc123def456 ZmFrZVNlY3JldFZhbHVlMTIz, see docs` (przecinek zatrzymuje ukrywanie drugiego tokenu).
 brak (S-04 import-map zmergowane i zarchiwizowane 2026-10-23; audyt realnych logów S-14 zrobiony)
