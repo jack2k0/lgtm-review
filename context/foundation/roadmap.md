@@ -370,10 +370,10 @@ Follow-up rule rounds on real logs after S-20 (round 2), merged into main; track
 | S-23 | redact-terminal    | run `--list` and `--json` without printing secrets; `--raw` opts out                                     | S    | High | S-22          | FR-008, Guardrail no secrets   | done (2026-10-30) |
 | S-24 | status-autofix     | trust `checked`: autofix runs are edits, a source file covers only itself, relative `cd` to the gate works | M    | High + audit | —     | FR-002, FR-004, FR-017         | done (2026-10-30) |
 | S-25 | release-path       | see one version source, a correct package name, a release workflow and a clean-install smoke test        | M    | High | —             | NFR packaging                  | done (2026-10-30) |
-| S-26 | ci-hardening       | rely on CI for macOS/Windows, lint, the merge gate on pull requests and a coverage report                | M    | High | S-25          | NFR reproducible statuses      | done (2026-10-30; not yet run on GitHub) |
+| S-26 | ci-hardening       | rely on CI for macOS/Windows, lint, the merge gate on pull requests and a coverage report                | M    | High | S-25          | NFR reproducible statuses      | done (2026-10-30) |
 | S-27 | docs-refresh       | read a current README (status, Map, Play, install truth) and grouped `--help`                            | S    | Medium | S-25        | NFR docs match behaviour       | done (2026-10-30) |
 | S-28 | cli-dedupe         | (internal) one shared session-analysis path, a smaller `main()`, shared path helpers                     | S    | High | S-23          | Maintainability                | done (2026-10-30) |
-| S-29 | ui-browser         | use the UI on narrow screens, with Esc going back, less cross-check noise, highlighted diffs; browser tests | L  | Medium | S-26        | FR-005, FR-006, FR-019         | done (2026-10-30; e2e job not yet run on GitHub) |
+| S-29 | ui-browser         | use the UI on narrow screens, with Esc going back, less cross-check noise, highlighted diffs; browser tests | L  | Medium | S-26        | FR-005, FR-006, FR-019         | done (2026-10-30) |
 | S-30 | rule-files-split   | (internal) `shell-edits.ts` and `check-patterns.ts` split into modules with no behaviour change          | L    | High + audit | S-24, S-28 | Maintainability              | done (2026-10-30) |
 
 Order: S-22 → S-23 → S-24 → S-25 → S-26 ‖ S-27 → S-28 → S-29 → S-30. At most two in flight. S-30 is last so a refactor never mixes with rule fixes; it is dropped if its PRE/POST audit is not byte-identical.
