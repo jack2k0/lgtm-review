@@ -31,7 +31,7 @@ export function resolveToken(hash: string, store: KeyValueStore | null): TokenSt
     }
     return { token: fromHash, stripHash: true };
   }
-  let stored: string | null = null;
+  let stored: string | null;
   try {
     stored = store?.getItem(KEY) ?? null;
   } catch {

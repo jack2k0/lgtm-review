@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { removedLines, findTableLines } from "./gate.mjs";
+import { removedLines } from "./gate.mjs";
 
 function hasHistory() {
   try {

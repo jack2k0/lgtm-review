@@ -196,7 +196,7 @@ export function renderExport(input: ExportInput, opts: ExportOptions): ExportRes
         else if (l.t === "-") hunkRemoved++;
       }
       // Redact the hunk as one text so multi-line constructs (private key blocks) are caught; the line count is preserved.
-      let body = red(h.lines.map((l) => l.s).join("\n"), { envFile: env });
+      const body = red(h.lines.map((l) => l.s).join("\n"), { envFile: env });
       let lines = body.text.split("\n");
       let count = body.count;
       if (lines.length !== h.lines.length) {

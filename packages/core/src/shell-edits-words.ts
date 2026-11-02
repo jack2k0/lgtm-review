@@ -1,4 +1,3 @@
-import { isDocPath } from "./hints.js";
 import {
   isArithmeticCommandStart,
   scanBracketPairEnd,

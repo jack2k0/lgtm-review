@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { symlinkSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { symlinkSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -10,7 +10,6 @@ import { startServer, type RunningServer } from "./server.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = join(here, "../dist/cli.js");
-const fixtures = join(here, "../../core/fixtures/sessions");
 const PROJECT = "/home/user/myproject";
 
 function run(args: string[], env: Record<string, string> = {}) {

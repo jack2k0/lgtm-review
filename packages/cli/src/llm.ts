@@ -438,7 +438,7 @@ export function createTitler(opts: TitlerOptions): Titler {
     return new Promise((resolveRequest) => {
       let settled = false;
       const agent = new Agent({ keepAlive: false });
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined = undefined;
       const finish = (outcome: HttpOutcome) => {
         if (settled) return;
         settled = true;
@@ -587,7 +587,7 @@ export function createTitler(opts: TitlerOptions): Titler {
     const slot = rec.slots.get(job.index);
     if (!slot || slot.state !== "queued") return;
     slot.state = "inflight";
-    let source: TitleSource | null = null;
+    let source: TitleSource | null;
     try {
       source = await rec.load(job.index);
     } catch {

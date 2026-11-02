@@ -683,7 +683,6 @@ describe("scoped checks (FR-017)", () => {
   const P = "/home/user/project";
   const WEB = `${P}/packages/web/src/a.ts`;
   const CORE = `${P}/packages/core/src/b.ts`;
-  const WEB_INDEX = `${P}/packages/web/src/index.ts`;
   const CORE_INDEX = `${P}/packages/core/src/index.ts`;
   const BILLING = `${P}/packages/billing/api/handler.ts`;
 

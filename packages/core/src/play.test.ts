@@ -2,14 +2,11 @@ import { describe, expect, test } from "vitest";
 import {
   buildBeats,
   BEATS_MAX,
-  type BuildBeatsInput,
-  type DiffsInput,
 } from "./play.js";
 import {
   FileDiff,
   ImportMapResponse,
   MapEdge,
-  MapNode,
   PlayResponse,
   Step,
 } from "./schema.js";

@@ -367,7 +367,7 @@ export function loadWorkspacePackages(root: string, host: MapHost): Map<string, 
     if (glob.endsWith("/*") || glob === "*") {
       const parent = glob === "*" ? "" : glob.slice(0, -2);
       if (parent.includes("*")) continue;
-      let names: string[] = [];
+      let names: string[];
       try {
         names = host.listDirs?.(`${prefix}${parent}`) ?? [];
       } catch {

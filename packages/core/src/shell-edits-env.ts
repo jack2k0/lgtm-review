@@ -5,7 +5,6 @@ import {
   type HeredocStart,
 } from "./check-patterns.js";
 import {
-  GIT_OPS,
   isIgnoredPath,
   isUnknownTarget,
   nonLiteralClimb,

@@ -138,7 +138,6 @@ describe("status accuracy against labels", () => {
       }
     }
     const ratio = matched / total;
-    // eslint-disable-next-line no-console
     console.log(`status match: ${matched}/${total} (${(ratio * 100).toFixed(1)}%)`);
     expect(misses, misses.join("\n")).toEqual([]);
     expect(ratio).toBeGreaterThanOrEqual(0.95);

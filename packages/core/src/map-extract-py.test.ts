@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 import {
   extractPythonImports,
   createPythonResolver,
-  type PythonImport,
 } from "./map-extract-py.js";
 import type { MapHost } from "./map-extract.js";
 
