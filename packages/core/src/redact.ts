@@ -376,6 +376,17 @@ function consumeFurtherAuthTokens(tail: string): number {
     let j = i;
     while (j < tail.length && tail[j] !== " " && tail[j] !== "\t" && tail[j] !== "\r" && tail[j] !== "\n") j++;
     const word = tail.slice(i, j);
+
+    const punctMatch = /[,;.]+$/.exec(word);
+    if (punctMatch !== null) {
+      const punctLen = punctMatch[0].length;
+      const stripped = word.slice(0, word.length - punctLen);
+      if (isAuthCredentialWord(stripped)) {
+        consumed = j - punctLen;
+      }
+      break;
+    }
+
     if (!isAuthCredentialWord(word)) break;
     consumed = j;
   }
@@ -800,17 +811,49 @@ function redactAssignRegions(text: string, st: State): string {
   return from === 0 ? text : out + text.slice(from);
 }
 
+const STRICT_VALUE_CHARS = /^[A-Za-z0-9_+/=.~!@#$%^&*-]+$/;
+const STRICT_B64_CHARS = /^[A-Za-z0-9_+/=]+$/;
+
+function hasEqualsOnlyAtEnd(word: string): boolean {
+  const eq = word.indexOf("=");
+  if (eq === -1) return true;
+  if (eq === 0) return false;
+  for (let i = eq; i < word.length; i++) {
+    if (word[i] !== "=") return false;
+  }
+  return true;
+}
+
+function isStrictValue(word: string): boolean {
+  if (word.length < 8) return false;
+  if (!STRICT_VALUE_CHARS.test(word)) return false;
+  if (!hasEqualsOnlyAtEnd(word)) return false;
+  if (isPlaceholder(word)) return false;
+
+  const hasDigit = /\d/.test(word);
+  const hasLower = /[a-z]/.test(word);
+  const hasUpper = /[A-Z]/.test(word);
+
+  if (hasDigit && hasLower && hasUpper) return true;
+  if (word.length >= 16 && STRICT_B64_CHARS.test(word) && hasDigit && (hasLower || hasUpper)) return true;
+  return false;
+}
+
 function redactNextLine(text: string, st: State): string {
   if (!text.includes("\n") || (!text.includes("=") && !text.includes(":"))) return text;
-  const re = /(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]*[:=][ \t]*)(?=\r?\n)/gi;
+  const re = /(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]*[:=][ \t]*)(?:(""|'')[ \t]*)?(?=\r?\n)/gi;
   let out = "";
   let from = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const ident = m[2]!;
+    const emptyQuotes = m[4];
     const isAuth = ident.toLowerCase() === "authorization" || ident.toLowerCase().endsWith("authorization");
     const isSec = isSecretKey(ident);
     if (!isAuth && !isSec) {
+      continue;
+    }
+    if (emptyQuotes !== undefined && !isSec) {
       continue;
     }
     const matchEnd = m.index + m[0].length;
@@ -829,6 +872,46 @@ function redactNextLine(text: string, st: State): string {
     if (trimmed === "") {
       re.lastIndex = nextLineStart;
       continue;
+    }
+
+    if (emptyQuotes !== undefined) {
+      if (/^[ \t]*-([ \t]|$)/.test(fullNextLine)) {
+        re.lastIndex = nextLineStart;
+        continue;
+      }
+      if (/\s/.test(trimmed) || !isStrictValue(trimmed)) {
+        re.lastIndex = nextLineStart;
+        continue;
+      }
+      const indentLen = fullNextLine.length - fullNextLine.trimStart().length;
+      const indent = fullNextLine.slice(0, indentLen);
+      const replacedLine = `${indent}${ph("secret")}`;
+      out += text.slice(from, nextLineStart) + replacedLine;
+      from = nextLineEnd;
+      st.count++;
+      re.lastIndex = nextLineEnd;
+      continue;
+    }
+
+    if (isSec) {
+      const listMatch = /^([ \t]*-[ \t]+)(\S+)$/.exec(fullNextLine);
+      if (listMatch !== null) {
+        const listPrefix = listMatch[1]!;
+        const listWord = listMatch[2]!;
+        if (isStrictValue(listWord)) {
+          const replacedLine = `${listPrefix}${ph("secret")}`;
+          out += text.slice(from, nextLineStart) + replacedLine;
+          from = nextLineEnd;
+          st.count++;
+          re.lastIndex = nextLineEnd;
+          continue;
+        }
+        re.lastIndex = nextLineStart;
+        continue;
+      } else if (/^[ \t]*-([ \t]|$)/.test(fullNextLine)) {
+        re.lastIndex = nextLineStart;
+        continue;
+      }
     }
 
     let schemePrefix = "";
@@ -876,6 +959,123 @@ function redactNextLine(text: string, st: State): string {
     re.lastIndex = nextLineEnd;
   }
   return from === 0 ? text : out + text.slice(from);
+}
+
+function isTableRow(trimmed: string): boolean {
+  return trimmed.length >= 2 && trimmed.startsWith("|") && trimmed.endsWith("|");
+}
+
+function isSeparatorRow(trimmed: string): boolean {
+  return isTableRow(trimmed) && /^[:|\-\s]+$/.test(trimmed) && trimmed.includes("-");
+}
+
+function redactSecretTableCells(text: string, st: State): string {
+  if (!text.includes("|")) return text;
+
+  const lines = text.split("\n");
+  let tableActive = false;
+  let secretColumns = new Set<number>();
+  let expectingSeparator = false;
+  let changed = false;
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    const rawLine = lines[idx]!;
+    const hasCr = rawLine.endsWith("\r");
+    const line = hasCr ? rawLine.slice(0, -1) : rawLine;
+    const trimmed = line.trim();
+
+    if (!isTableRow(trimmed)) {
+      tableActive = false;
+      secretColumns.clear();
+      expectingSeparator = false;
+      continue;
+    }
+
+    const nextIsSeparator =
+      idx + 1 < lines.length &&
+      isSeparatorRow((lines[idx + 1]!.endsWith("\r") ? lines[idx + 1]!.slice(0, -1) : lines[idx + 1]!).trim());
+
+    if (!tableActive || nextIsSeparator) {
+      tableActive = true;
+      secretColumns.clear();
+      expectingSeparator = false;
+
+      const parts = line.split("|");
+      for (let c = 1; c < parts.length - 1; c++) {
+        if (isSecretKey(parts[c]!.trim())) {
+          secretColumns.add(c);
+        }
+      }
+      expectingSeparator = secretColumns.size > 0;
+
+      let rowChanged = false;
+      for (let c = 1; c < parts.length - 2; c++) {
+        if (isSecretKey(parts[c]!.trim())) {
+          const nextRaw = parts[c + 1]!;
+          const nextTrimmed = nextRaw.trim();
+          if (isStrictValue(nextTrimmed)) {
+            const start = nextRaw.length - nextRaw.trimStart().length;
+            const end = nextRaw.trimEnd().length;
+            parts[c + 1] = nextRaw.slice(0, start) + ph("secret") + nextRaw.slice(end);
+            st.count++;
+            rowChanged = true;
+          }
+        }
+      }
+      if (rowChanged) {
+        lines[idx] = parts.join("|") + (hasCr ? "\r" : "");
+        changed = true;
+      }
+      continue;
+    }
+
+    if (expectingSeparator) {
+      expectingSeparator = false;
+      if (isSeparatorRow(trimmed)) {
+        continue;
+      }
+    }
+
+    const parts = line.split("|");
+    let rowChanged = false;
+
+    if (secretColumns.size > 0) {
+      for (const col of secretColumns) {
+        if (col < parts.length - 1) {
+          const rawCell = parts[col]!;
+          const cellTrimmed = rawCell.trim();
+          if (isStrictValue(cellTrimmed)) {
+            const start = rawCell.length - rawCell.trimStart().length;
+            const end = rawCell.trimEnd().length;
+            parts[col] = rawCell.slice(0, start) + ph("secret") + rawCell.slice(end);
+            st.count++;
+            rowChanged = true;
+          }
+        }
+      }
+    }
+
+    for (let c = 1; c < parts.length - 2; c++) {
+      if (isSecretKey(parts[c]!.trim())) {
+        const nextRaw = parts[c + 1]!;
+        const nextTrimmed = nextRaw.trim();
+        if (isStrictValue(nextTrimmed)) {
+          const start = nextRaw.length - nextRaw.trimStart().length;
+          const end = nextRaw.trimEnd().length;
+          parts[c + 1] = nextRaw.slice(0, start) + ph("secret") + nextRaw.slice(end);
+          st.count++;
+          rowChanged = true;
+        }
+      }
+    }
+
+    if (rowChanged) {
+      lines[idx] = parts.join("|") + (hasCr ? "\r" : "");
+      changed = true;
+    }
+  }
+
+  return changed ? lines.join("\n") : text;
 }
 
 /** `--password hunter2xyz` style flags (space separated). */
@@ -1289,6 +1489,7 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
 
   t = redactAssignRegions(t, st);
   t = redactNextLine(t, st);
+  t = redactSecretTableCells(t, st);
   t = pass(t, st, CLI_FLAG, ["--", " -"], false, redactFlag);
   t = redactMysql(t, st);
   t = redactSshpass(t, st);

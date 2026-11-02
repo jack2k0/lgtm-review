@@ -271,4 +271,21 @@ describe("redact: performance (1 MB adversarial inputs)", () => {
     const [ms] = bestTimes([() => void redact(text)]);
     expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
   });
+
+  test("1 MB of | password |\\n repeats", { timeout: 60_000 }, () => {
+    const unit = "| password |\n";
+    const text = unit.repeat(Math.ceil(MB / unit.length)).slice(0, MB);
+    const [ms] = bestTimes([() => void redact(text)]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+  });
+
+  test("1 MB of | a | password |\\n|---|---|\\n followed by 1 MB of | x | y |\\n", { timeout: 60_000 }, () => {
+    const headUnit = "| a | password |\n|---|---|\n";
+    const dataUnit = "| x | y |\n";
+    const text =
+      headUnit.repeat(Math.ceil(MB / headUnit.length)).slice(0, MB) +
+      dataUnit.repeat(Math.ceil(MB / dataUnit.length)).slice(0, MB);
+    const [ms] = bestTimes([() => void redact(text)]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+  });
 });

@@ -9,8 +9,10 @@ Rules 1 to 3 hide ordinary text more easily than the existing next-line rule, so
 - at least 8 characters;
 - only `A-Za-z0-9` and `_ + / = . ~ ! @ # $ % ^ & * -`;
 - `=` only at its end;
-- at least one digit and at least one letter;
-- not a placeholder (`isPlaceholder`).
+- not a placeholder (`isPlaceholder`);
+- and either of: (a) at least one digit, one lowercase and one uppercase letter; (b) at least 16 characters, only `A-Za-z0-9_+/=`, at least one digit and one letter.
+
+Revised after review: digit plus letter alone hid `gpt-4o-mini`, `v1.2.3-beta`, `string64`, `varchar255`, `config/db1.yml`, `TOKEN_LIMIT_100` in columns such as `token`. The owner asked not to over-hide. The accepted cost: a short value of one letter case, `| password | hunter2secret |`, stays visible.
 
 The existing rule for a plain next-line value stays as it is. `Important` must stay visible under rules 1 to 3.
 
@@ -38,6 +40,7 @@ The placeholder is `[redacted:secret]`. Already redacted cells fail `isStrictVal
 |---|---|
 | `password:\n- Changeme123Now` | `password:\n- [redacted:secret]` |
 | `password:\n  - Changeme123Now` | `password:\n  - [redacted:secret]` |
+| `\| password \| abcd1234efgh5678ijkl \|` | `\| password \| [redacted:secret] \|` |
 | `password: ""\nChangeme123Now` | `password: ""\n[redacted:secret]` |
 | `token = ''\nChangeme123Now` | `token = ''\n[redacted:secret]` |
 | `\| password \| Changeme123Now \|` | `\| password \| [redacted:secret] \|` |
@@ -51,6 +54,13 @@ Unchanged byte for byte, count 0:
 
 - `password:\n- Important`
 - `password:\n- item`
+- `password:\n- gpt-4o-mini`
+- `password:\n- config/db1.yml`
+- `token = ''\nv1.2.3-beta`
+- `| name | token |\n|---|---|\n| x | v1.2.3-beta |`
+- `| field | secret |\n|---|---|\n| size | string64 |`
+- `| secret | note |\n|---|---|\n| claude-3-5-sonnet | ok |`
+- `| name | token |\n|---|---|\n| x | TOKEN_LIMIT_100 |`
 - `password:\n- see the docs here1`
 - `password: ""\nImportant`
 - `password = ""\ngetPassword1()`
