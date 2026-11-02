@@ -145,7 +145,7 @@ const TOKEN_PREFIXES: readonly string[] = Array.from(
 
 const URL_CREDS = /(?<![A-Za-z0-9+.-])([a-z][a-z0-9+.-]{1,20}:\/\/)([^\s/@:"'<>]{0,200}):([^\s"'<>]{1,200})@(?=[^\s/?#]+(?:[:/?#]|$))/gi;
 
-const AUTH_HEADER = /(?<![A-Za-z0-9])(authorization["']?[ \t]{0,3}[:=][ \t]{0,3}["']?)((?:(?!authorization["']?[ \t]{0,3}[:=])[^\r\n])+)/gi;
+const AUTH_HEADER = /(authorization["']?[ \t]{0,3}[:=][ \t]{0,3}["']?)((?:(?!authorization["']?[ \t]{0,3}[:=])[^\r\n])+)/gi;
 const BEARER = /(?<![A-Za-z0-9])(bearer[ \t]{1,8})([A-Za-z0-9._~+/=-]{16,})/gi;
 const AZURE_KEY = /(?<![A-Za-z0-9])((?:Account|SharedAccess)Key[ \t]{0,3}=[ \t]{0,3})([A-Za-z0-9+/]{20,}={0,2})/g;
 
@@ -357,6 +357,30 @@ function redactCookieHeaders(text: string, st: State): string {
 const AUTH_SCHEMES = new Set(["bearer", "basic", "token", "digest", "negotiate", "bot"]);
 const AUTH_SCHEME = /^([A-Za-z][A-Za-z0-9_-]{0,31})[ \t]+([\s\S]*)$/;
 const AUTH_TOKEN = /^[A-Za-z0-9._~+/=-]{8,}/;
+const AUTH_TOKEN_CHARS = /^[A-Za-z0-9._~+/=-]+$/;
+
+function isAuthCredentialWord(w: string): boolean {
+  return (
+    w.length >= 16 &&
+    AUTH_TOKEN_CHARS.test(w) &&
+    (/\d/.test(w) || (/[A-Z]/.test(w) && /[a-z]/.test(w)))
+  );
+}
+
+function consumeFurtherAuthTokens(tail: string): number {
+  let consumed = 0;
+  while (consumed < tail.length) {
+    let i = consumed;
+    while (i < tail.length && (tail[i] === " " || tail[i] === "\t")) i++;
+    if (i === consumed) break;
+    let j = i;
+    while (j < tail.length && tail[j] !== " " && tail[j] !== "\t" && tail[j] !== "\r" && tail[j] !== "\n") j++;
+    const word = tail.slice(i, j);
+    if (!isAuthCredentialWord(word)) break;
+    consumed = j;
+  }
+  return consumed;
+}
 
 /**
  * Redacts one `Authorization` header value. The whole value is credential material, but a value that is prose
@@ -383,7 +407,8 @@ function redactAuthHeader(g: Groups): string | null {
     const t = token[0];
     if (/^[a-z]+$/.test(t) && t.length < 16) return null;
     if (!AUTH_SCHEMES.has(name) && t.length < 16 && !/[0-9]/.test(t) && !/[A-Z]/.test(t)) return null;
-    return `${g[1]}${prefix}${ph("auth-header")}${rest.slice(t.length)}`;
+    const extra = consumeFurtherAuthTokens(rest.slice(t.length));
+    return `${g[1]}${prefix}${ph("auth-header")}${rest.slice(t.length + extra)}`;
   }
 
   // No scheme: preserve the old guard that keeps ordinary lowercase prose such as `Authorization: required` intact.
@@ -391,7 +416,8 @@ function redactAuthHeader(g: Groups): string | null {
   if (token === null || /^[a-z]+$/.test(token[0])) return null;
   const t = token[0];
   if (t.length < 16 && !/[0-9]/.test(t) && !/[A-Z]/.test(t)) return null;
-  return `${g[1]}${ph("auth-header")}${value.slice(t.length)}`;
+  const extra = consumeFurtherAuthTokens(value.slice(t.length));
+  return `${g[1]}${ph("auth-header")}${value.slice(t.length + extra)}`;
 }
 
 // ---------------------------------------------------------------- key = value assignments
@@ -770,6 +796,84 @@ function redactAssignRegions(text: string, st: State): string {
     from = end;
     st.count++;
     head.lastIndex = end;
+  }
+  return from === 0 ? text : out + text.slice(from);
+}
+
+function redactNextLine(text: string, st: State): string {
+  if (!text.includes("\n") || (!text.includes("=") && !text.includes(":"))) return text;
+  const re = /(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]*[:=][ \t]*)(?=\r?\n)/gi;
+  let out = "";
+  let from = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const ident = m[2]!;
+    const isAuth = ident.toLowerCase() === "authorization" || ident.toLowerCase().endsWith("authorization");
+    const isSec = isSecretKey(ident);
+    if (!isAuth && !isSec) {
+      continue;
+    }
+    const matchEnd = m.index + m[0].length;
+    let nl = matchEnd;
+    if (nl < text.length && text[nl] === "\r") nl++;
+    if (nl >= text.length || text[nl] !== "\n") continue;
+    const nextLineStart = nl + 1;
+    if (nextLineStart >= text.length) break;
+
+    let nextLineEnd = nextLineStart;
+    while (nextLineEnd < text.length && text[nextLineEnd] !== "\r" && text[nextLineEnd] !== "\n") {
+      nextLineEnd++;
+    }
+    const fullNextLine = text.slice(nextLineStart, nextLineEnd);
+    const trimmed = fullNextLine.trim();
+    if (trimmed === "") {
+      re.lastIndex = nextLineStart;
+      continue;
+    }
+
+    let schemePrefix = "";
+    let token = trimmed;
+    const schemeMatch = /^(Basic|Bearer)[ \t]+(\S+)$/i.exec(trimmed);
+    if (schemeMatch !== null) {
+      schemePrefix = trimmed.slice(0, trimmed.length - schemeMatch[2]!.length);
+      token = schemeMatch[2]!;
+    } else if (/\s/.test(trimmed)) {
+      re.lastIndex = nextLineStart;
+      continue;
+    }
+
+    if (/^[=:{}\[\(<"'`]/.test(trimmed) || /^[=:{}\[\(<"'`]/.test(token)) {
+      re.lastIndex = nextLineStart;
+      continue;
+    }
+    if (trimmed.includes("~") || token.includes("~")) {
+      re.lastIndex = nextLineStart;
+      continue;
+    }
+    if (isPlaceholder(trimmed) || isPlaceholder(token)) {
+      re.lastIndex = nextLineStart;
+      continue;
+    }
+    if (token.length < 8) {
+      re.lastIndex = nextLineStart;
+      continue;
+    }
+    const hasDigit = /\d/.test(token);
+    const hasUpperAndLower = /[A-Z]/.test(token) && /[a-z]/.test(token);
+    if (!hasDigit && !hasUpperAndLower) {
+      re.lastIndex = nextLineStart;
+      continue;
+    }
+
+    const indentLen = fullNextLine.length - fullNextLine.trimStart().length;
+    const indent = fullNextLine.slice(0, indentLen);
+    const kind = isAuth ? "auth-header" : "secret";
+    const replacedLine = `${indent}${schemePrefix}${ph(kind)}`;
+
+    out += text.slice(from, nextLineStart) + replacedLine;
+    from = nextLineEnd;
+    st.count++;
+    re.lastIndex = nextLineEnd;
   }
   return from === 0 ? text : out + text.slice(from);
 }
@@ -1184,6 +1288,7 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
   }
 
   t = redactAssignRegions(t, st);
+  t = redactNextLine(t, st);
   t = pass(t, st, CLI_FLAG, ["--", " -"], false, redactFlag);
   t = redactMysql(t, st);
   t = redactSshpass(t, st);
