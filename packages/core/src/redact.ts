@@ -465,19 +465,41 @@ function scanQuoted(text: string, open: number, quote: string, escapes: boolean)
   return j === start ? null : { end: j, value: text.slice(start, j), closed: false };
 }
 
-/** Old close-on-first-quote output glues the real tail on: `password="[redacted:secret]"def ghi"`. Drop that tail. */
+/**
+ * Old close-on-first-quote output glues the real tail on: `password="[redacted:secret]"def ghi"`. Drop that tail.
+ * One piece is a glued word run that ends in the next closing quote of the same kind, bounded like a value scan:
+ * no newline, no `=` or `:`, at most 300 characters. Pieces repeat in junk such as `def"ghi jkl"` and `x\\"x\\"...`
+ * (also once decoding has flattened the escapes to `x"x"x...`), so consume the whole chain of glued pieces in one
+ * call: after a piece ends in the quote, continue while the next character is again a glued word, and stop when a
+ * piece does not end in the quote (at a stop character, past the 300 limit or at the end). The per-pass rules are
+ * unchanged; what changed is the pace. Eating one piece per pass hit `MAX_ROUNDS` on a long chain, so the result
+ * depended on the call count, and leaving the rest of the chain kept text visible that the pre-`redact-long-escaped`
+ * output hid. Redaction fails closed toward hiding, so the chain is removed.
+ */
+const TAIL_WORD = /[A-Za-z0-9_]/;
+
 function leakedTailEnd(text: string, end: number, quote: string): number {
   if (end >= text.length) return end;
   // Only a word glued to the closing quote is a tail; `}, "name"` after a value is ordinary structure.
-  if (!/[A-Za-z0-9_]/.test(text[end]!)) return end;
-  let i = end;
-  while (i < text.length && i - end <= 300) {
-    const c = text[i]!;
-    if (c === "\n" || c === "\r" || c === "=" || c === ":") return end;
-    if (c === quote) return i + 1;
-    i++;
+  if (!TAIL_WORD.test(text[end]!)) return end;
+  let eaten = end;
+  for (;;) {
+    let i = eaten;
+    let found = -1;
+    while (i < text.length && i - eaten <= 300) {
+      const c = text[i]!;
+      if (c === "\n" || c === "\r" || c === "=" || c === ":") break;
+      if (c === quote) {
+        found = i;
+        break;
+      }
+      i++;
+    }
+    if (found < 0) return eaten;
+    eaten = found + 1;
+    // Chain on: the next character must again be a glued word for the chain to continue.
+    if (eaten >= text.length || !TAIL_WORD.test(text[eaten]!)) return eaten;
   }
-  return end;
 }
 
 function openQuotedSecret(ident: string, keyQ: string, sep: string, value: string, quote: string): string | null {
@@ -847,8 +869,9 @@ function redactEntropy(text: string, st: State): string {
 
 /**
  * JSON escaping hides secrets from every rule (`\"`, `\\`, `\u0022`, `\u005f`). Decodes those printable-ASCII JSON
- * escapes in one linear pass; control escapes such as `\n` and `\r` stay so line structure is preserved. Used only
- * on a copy: `redact` keeps the original spelling unless the decoded copy reveals more secrets.
+ * escapes in one linear pass; control escapes such as `\n` and `\r` stay so line structure is preserved. Used only on
+ * a copy: `redact` keeps the original spelling of every line whose escapes hid nothing and rewrites the lines that
+ * did hide a secret.
  */
 const JSON_PRINTABLE_ESCAPE = /\\(?:u00([2-7][0-9a-f])|(["\/\\]))/gi;
 
@@ -869,8 +892,66 @@ export function redact(input: string, opts: RedactOptions = {}): RedactResult {
   // Escaped text (`{\"password\": \"x\"}`) is redacted in decoded form, but only when decoding reveals a secret the
   // escaped spelling hid; otherwise code such as `"say \"hi\""` keeps its backslashes.
   // Each decode removes one level of escaping, so nested levels take one round each.
+  const whole = decodeLoop(plain, opts);
+  // With no secret found under decoding, the result is the plain one, as before: no extra work is done.
+  if (whole.count === plain.count) return whole;
+  // A redaction under decoding rewrites the line that held the secret; it must not rewrite the other lines. Redo
+  // the loop line by line so the lines where decoding reveals nothing keep their spelling, and fall back to the
+  // whole-text result when the reconstruction redacts or hides less than the whole-text result did.
+  const scoped = redactDecodedLines(plain, opts);
+  if (
+    scoped === null ||
+    scoped.count < whole.count ||
+    countOccurrences(scoped.text, "[redacted") < countOccurrences(whole.text, "[redacted")
+  ) {
+    return whole;
+  }
+  return scoped;
+}
+
+/** Escaping is removed one level at a time; a level whose redaction finds nothing still drives the next level. */
+function decodeLoop(plain: RedactResult, opts: RedactOptions): RedactResult {
   let best = plain;
   let work = plain.text;
+  for (let level = 0; level < MAX_DECODE_LEVELS; level++) {
+    const decoded = normalizeJsonEscapes(work);
+    if (decoded === work) break;
+    const again = redactStable(decoded, opts);
+    work = again.text;
+    if (again.count > 0) best = { text: again.text, count: best.count + again.count };
+  }
+  return best;
+}
+
+/**
+ * The decode loop above, run one line at a time over the plainly redacted text. Decoding never introduces a line
+ * break, so a secret a decode level reveals lies on a single line and the line-by-line result is the whole-text
+ * result with each untouched line back to its own spelling. `null` when the text is a single line, where nothing
+ * can be kept back: the line-by-line result would be the whole-text result.
+ */
+function redactDecodedLines(plain: RedactResult, opts: RedactOptions): RedactResult | null {
+  const text = plain.text;
+  if (!text.includes("\n")) return null;
+  let out = "";
+  let count = 0;
+  for (let from = 0; ; ) {
+    const nl = text.indexOf("\n", from);
+    const end = nl < 0 ? text.length : nl;
+    const line = text.slice(from, end);
+    // The same loop; escaping can no longer reach across lines, so one loop per line finds the same secrets.
+    const decoded = decodedLine(line, opts);
+    out += decoded.count > 0 ? decoded.text : line;
+    count += decoded.count;
+    if (nl < 0) break;
+    out += "\n";
+    from = nl + 1;
+  }
+  return { text: out, count: plain.count + count };
+}
+
+function decodedLine(line: string, opts: RedactOptions): RedactResult {
+  let best: RedactResult = { text: line, count: 0 };
+  let work = line;
   for (let level = 0; level < MAX_DECODE_LEVELS; level++) {
     const decoded = normalizeJsonEscapes(work);
     if (decoded === work) break;

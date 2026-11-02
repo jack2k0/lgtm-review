@@ -1000,3 +1000,78 @@ describe("redact: structure after a redacted value survives", () => {
     expect(redact('{"password":"[redacted:secret]","name":"keepme"}').text).toBe('{"password":"[redacted:secret]","name":"keepme"}');
   });
 });
+
+describe("redact: decode is scoped to the lines that need it", () => {
+  /** Finding 4 of redact-ledger-open: no redaction outside the line that held the secret. */
+  test("a line where decoding reveals nothing keeps its backslashes while the secret line is redacted", () => {
+    const input = 'const a = "x\\\\y";\n{\\"password\\": \\"hunter2 words\\"}';
+    const once = redact(input);
+    expect(once.text.split("\n")[0]).toBe('const a = "x\\\\y";');
+    expect(once.text.split("\n")[1]).toBe('{"password": "[redacted:secret]"}');
+    expect(once.count).toBe(1);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+
+  /** Finding 5 of redact-ledger-open: `password="` plus 300 repeats of `x\\"` changed on every second call. */
+  test("an escaped-quote chain after a redacted value is removed whole and stays removed", () => {
+    const input = 'password="' + 'x\\\\"'.repeat(300);
+    const once = redact(input);
+    expect(once.text).toBe('password="[redacted:secret]"');
+    expect(redact(once.text).text).toBe(once.text);
+  });
+
+  test("a glued chain after a redacted value is removed at every size and level", () => {
+    for (const n of [2, 18, 19, 100]) {
+      const raw = 'password="' + 'x\\\\"'.repeat(n);
+      expect(redact(raw).text).toBe('password="[redacted:secret]"');
+      expect(redact(redact(raw).text).text).toBe(redact(raw).text);
+      const decoded = 'password="[redacted:secret]"' + 'x\\"'.repeat(n);
+      expect(redact(decoded).text).toBe('password="[redacted:secret]"');
+      expect(redact(redact(decoded).text).text).toBe(redact(decoded).text);
+      const flattened = 'password="[redacted:secret]"' + 'x"'.repeat(n);
+      expect(redact(flattened).text).toBe('password="[redacted:secret]"');
+      expect(redact(redact(flattened).text).text).toBe(redact(flattened).text);
+    }
+  });
+
+  test("a glued chain of word pieces is removed whole", () => {
+    const once = redact('password="abc"def"ghi jkl"');
+    expect(once.text).toBe('password="[redacted:secret]"');
+    expect(redact(once.text).text).toBe(once.text);
+    const twice = redact('password="[redacted:secret]"def"ghi"');
+    expect(twice.text).toBe('password="[redacted:secret]"');
+    expect(redact(twice.text).text).toBe(twice.text);
+  });
+
+  test("the chain stops at ordinary structure and keeps it", () => {
+    const once = redact('password="[redacted:secret]"abc=now');
+    expect(once.text).toBe('password="[redacted:secret]"abc=now');
+    expect(redact(once.text).text).toBe(once.text);
+    const keys = redact('\\"password\\": \\"Zq9Xv7Lm2P\\"}, \\"name\\": \\"keepme\\"');
+    expect(keys.text).toBe('"password": "[redacted:secret]"}, "name": "keepme"');
+  });
+
+  test("a single line with an escaped secret and other text hides the secret", () => {
+    const once = redact('\\"password\\": \\"Zq9Xv7Lm2P\\"}, \\"name\\": \\"keepme\\"');
+    expect(once.text).not.toContain("Zq9Xv7Lm2P");
+    expect(once.count).toBeGreaterThanOrEqual(1);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+
+  test("a PEM block with escaped BEGIN and END lines on separate lines stays redacted", () => {
+    const pemBody = body(32, 130, B64URL) + body(32, 131, B64URL);
+    const input = [
+      '{\\"tag\\": \\"-----BEGIN RSA PRIVATE KEY-----\\"}',
+      pemBody,
+      '{\\"tail\\": \\"-----END RSA PRIVATE KEY-----\\"}',
+      '{\\"password\\": \\"hunter2 words\\"}',
+    ].join("\n");
+    const once = redact(input);
+    expect(once.text).not.toContain("BEGIN");
+    expect(once.text).not.toContain("END RSA");
+    expect(once.text).not.toContain("hunter2");
+    expect(once.text).toContain("[redacted:private-key]");
+    expect(redact(once.text).text).toBe(once.text);
+  });
+});
+
