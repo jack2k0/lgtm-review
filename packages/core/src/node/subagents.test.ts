@@ -1,4 +1,4 @@
-import { appendFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -208,5 +208,118 @@ describe("subagentStamp", () => {
 
       writeFileSync(join(dir, "sess", "subagents", "agent-a2222222.meta.json"), JSON.stringify({ toolUseId: "p_ag1", description: "other" }));
       expect(await subagentStamp(f)).not.toBe(s2);
+    }));
+});
+
+describe("symlinks", () => {
+  const OUTSIDE_LINE =
+    '{"type":"user","uuid":"00000000-0000-4000-8000-000000000999","parentUuid":null,"isSidechain":true,"agentId":"a2222222","sessionId":"00000000-0000-4000-8000-000000000001","timestamp":"2026-01-01T00:00:03.500Z","cwd":"/home/user/project","gitBranch":"main","version":"2.1.0","message":{"role":"user","content":"outside-recognizable-transcript-line"}}\n';
+
+  test("symlinked .jsonl: warning and empty transcript map", () =>
+    withTmp(async (dir) => {
+      const f = install(dir, "subagent-check");
+      const outside = join(dir, "outside");
+      mkdirSync(outside, { recursive: true });
+      const outsideJsonl = join(outside, "agent-outside.jsonl");
+      writeFileSync(outsideJsonl, OUTSIDE_LINE);
+
+      const agentJsonl = join(dir, "sess", "subagents", "agent-a2222222.jsonl");
+      rmSync(agentJsonl);
+      symlinkSync(outsideJsonl, agentJsonl);
+
+      const loaded = await loadSubagents(f, new Set(["p_ag1"]));
+      expect(loaded.warnings).toEqual(["subagent a2222222: symlink, transcript skipped"]);
+      expect(loaded.transcripts.size).toBe(0);
+    }));
+
+  test("symlinked .meta.json: warning and empty transcript map", () =>
+    withTmp(async (dir) => {
+      const f = install(dir, "subagent-check");
+      const outside = join(dir, "outside");
+      mkdirSync(outside, { recursive: true });
+      const outsideMeta = join(outside, "agent-outside.meta.json");
+      writeFileSync(outsideMeta, JSON.stringify({ toolUseId: "p_ag1", description: "outside meta" }));
+      const outsideJsonl = join(outside, "agent-outside.jsonl");
+      writeFileSync(outsideJsonl, OUTSIDE_LINE);
+
+      const agentMeta = join(dir, "sess", "subagents", "agent-a2222222.meta.json");
+      rmSync(agentMeta);
+      symlinkSync(outsideMeta, agentMeta);
+
+      const loaded = await loadSubagents(f, new Set(["p_ag1"]));
+      expect(loaded.warnings).toEqual(["subagent a2222222: symlink, transcript skipped"]);
+      expect(loaded.transcripts.size).toBe(0);
+    }));
+
+  test("symlinked subagents directory: warning and empty transcript map", () =>
+    withTmp(async (dir) => {
+      const f = install(dir, "subagent-check");
+      const outsideSubagents = join(dir, "outside", "subagents");
+      mkdirSync(outsideSubagents, { recursive: true });
+      writeFileSync(join(outsideSubagents, "agent-a2222222.meta.json"), JSON.stringify({ toolUseId: "p_ag1", description: "outside subagents" }));
+      writeFileSync(join(outsideSubagents, "agent-a2222222.jsonl"), OUTSIDE_LINE);
+
+      rmSync(join(dir, "sess", "subagents"), { recursive: true });
+      symlinkSync(outsideSubagents, join(dir, "sess", "subagents"));
+
+      const loaded = await loadSubagents(f, new Set(["p_ag1"]));
+      expect(loaded.warnings).toEqual(["subagent directory is a symlink, skipped"]);
+      expect(loaded.transcripts.size).toBe(0);
+    }));
+
+  test("symlinked <sessionId> directory: warning and empty transcript map", () =>
+    withTmp(async (dir) => {
+      const f = install(dir, "subagent-check");
+      const outsideSess = join(dir, "outside", "sess");
+      const outsideSubagents = join(outsideSess, "subagents");
+      mkdirSync(outsideSubagents, { recursive: true });
+      writeFileSync(join(outsideSubagents, "agent-a2222222.meta.json"), JSON.stringify({ toolUseId: "p_ag1", description: "outside session" }));
+      writeFileSync(join(outsideSubagents, "agent-a2222222.jsonl"), OUTSIDE_LINE);
+
+      rmSync(join(dir, "sess"), { recursive: true });
+      symlinkSync(outsideSess, join(dir, "sess"));
+
+      const loaded = await loadSubagents(f, new Set(["p_ag1"]));
+      expect(loaded.warnings).toEqual(["subagent directory is a symlink, skipped"]);
+      expect(loaded.transcripts.size).toBe(0);
+    }));
+
+  test("symlinked stem next to a regular one: regular transcript still loads", () =>
+    withTmp(async (dir) => {
+      const f = install(dir, "subagent-check");
+      const m = join(dir, "sess", "subagents");
+      const outside = join(dir, "outside");
+      mkdirSync(outside, { recursive: true });
+      writeFileSync(join(outside, "agent-a1111111.jsonl"), OUTSIDE_LINE);
+
+      // agent-a1111111 is a symlinked stem; agent-a2222222 is a regular stem from the fixture
+      symlinkSync(join(outside, "agent-a1111111.jsonl"), join(m, "agent-a1111111.jsonl"));
+      writeFileSync(join(m, "agent-a1111111.meta.json"), JSON.stringify({ toolUseId: "p_ag0", description: "symlinked" }));
+
+      const loaded = await loadSubagents(f, new Set(["p_ag0", "p_ag1"]));
+      expect(loaded.warnings).toEqual(["subagent a1111111: symlink, transcript skipped"]);
+      expect(loaded.transcripts.has("p_ag1")).toBe(true);
+      expect(loaded.transcripts.has("p_ag0")).toBe(false);
+      expect(loaded.transcripts.size).toBe(1);
+    }));
+
+  test("symlinked stem does not register toolUseId or report unmatched", () =>
+    withTmp(async (dir) => {
+      const f = install(dir, "subagent-check");
+      const m = join(dir, "sess", "subagents");
+      const outside = join(dir, "outside");
+      mkdirSync(outside, { recursive: true });
+      writeFileSync(join(outside, "agent-a1111111.jsonl"), OUTSIDE_LINE);
+
+      // agent-a1111111 shares toolUseId "p_ag1" with agent-a2222222, but because it is a symlink
+      // it does not register its toolUseId so the regular agent-a2222222 is not marked duplicate
+      symlinkSync(join(outside, "agent-a1111111.jsonl"), join(m, "agent-a1111111.jsonl"));
+      writeFileSync(join(m, "agent-a1111111.meta.json"), JSON.stringify({ toolUseId: "p_ag1", description: "symlink duplicate attempt" }));
+
+      const loaded = await loadSubagents(f, new Set(["p_ag1"]));
+      expect(loaded.warnings).toEqual(["subagent a1111111: symlink, transcript skipped"]);
+      expect(loaded.transcripts.has("p_ag1")).toBe(true);
+      expect(loaded.transcripts.get("p_ag1")?.description).toBe("Run the test suite");
+      expect(loaded.transcripts.size).toBe(1);
     }));
 });
