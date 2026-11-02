@@ -1115,3 +1115,24 @@ describe("redact: decode is scoped to the lines that need it", () => {
   });
 });
 
+describe("redact: cookie headers in code and with stray quotes", () => {
+  const cases: [string, string][] = [
+    ['"Cookie: session=" + value', '"Cookie: session=" + value'],
+    ["'Cookie: session=' + token", "'Cookie: session=' + token"],
+    ['const h = "Cookie: sid=" + id;', 'const h = "Cookie: sid=" + id;'],
+    ['{"msg": "Cookie: token=" }', '{"msg": "Cookie: token=" }'],
+    ['"Cookie: session=" + a + "x"', '"Cookie: session=" + a + "x"'],
+    ['Cookie: session="abc123 secret value', "Cookie: session=[redacted:cookie]"],
+    ['Cookie: a=1"; session=Zq8mWv3Lp0Rt7Xk2', 'Cookie: a=1"; session=[redacted:cookie]'],
+    ['Cookie: session=Zq8mWv3\\"Lp0Rt7Xk2', "Cookie: session=[redacted:cookie]"],
+    ['Cookie: session=abc"def', "Cookie: session=[redacted:cookie]"],
+    ['curl -H "Cookie: session=abc123secretvalue" http://x', 'curl -H "Cookie: session=[redacted:cookie]" http://x'],
+    ['curl -H \\"Cookie: session=abc123secretvalue\\" http://x', 'curl -H \\"Cookie: session=[redacted:cookie]\\" http://x'],
+  ];
+
+  test.each(cases)("%s", (input, expected) => {
+    const once = redact(input);
+    expect(once.text).toBe(expected);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+});

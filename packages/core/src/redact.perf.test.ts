@@ -224,6 +224,15 @@ describe("redact: performance (1 MB adversarial inputs)", () => {
     expect(redact(r.text).text).toBe(r.text);
   });
 
+  test.each([
+    ["repeated cookie heads with a quote", 'cookie:"'],
+    ["repeated cookie lines with an open quote", 'Cookie: session="x\n'],
+  ])("1 MB of %s", { timeout: 60_000 }, (_name, unit) => {
+    const text = unit.repeat(Math.ceil(MB / unit.length)).slice(0, MB);
+    const [ms] = bestTimes([() => void redact(text)]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+  });
+
   test("1 MB glued-tail chain after a redacted value", { timeout: 60_000 }, () => {
     const head = 'password="[redacted:secret]"';
     const text = (head + 'x"'.repeat(500_000)).slice(0, MB);

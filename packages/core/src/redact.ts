@@ -166,12 +166,25 @@ function quoteOpenerAt(text: string, i: number): QuotedOpener | null {
   return null;
 }
 
-/** Index of the first `\n` or `\r` at or after `i`, or `text.length`. */
+/** Index of the first `\n` or `\r` at or after `i`, or `text.length`. The caller keeps the result for its whole line. */
 function lineEndAt(text: string, i: number): number {
-  const nl = text.indexOf("\n", i);
-  const cr = text.indexOf("\r", i);
-  if (nl < 0) return cr < 0 ? text.length : cr;
-  return cr < 0 || nl < cr ? nl : cr;
+  let j = i;
+  while (j < text.length && text[j] !== "\n" && text[j] !== "\r") j++;
+  return j;
+}
+
+/** A quote right after `=` that is followed by code, not a value: `"Cookie: session=" + value`, `{"m": "Cookie: a=" }`. */
+function quoteEndsInCode(text: string, afterQuote: number, lineEnd: number): boolean {
+  let j = afterQuote;
+  while (j < lineEnd && (text[j] === " " || text[j] === "\t")) j++;
+  return j >= lineEnd || "+})],".includes(text[j]!);
+}
+
+/** A stray quote before `;` is not the end of the header: `Cookie: a=1"; session=x`. */
+function quoteBeforeSemicolon(text: string, afterQuote: number, lineEnd: number): boolean {
+  let j = afterQuote;
+  while (j < lineEnd && (text[j] === " " || text[j] === "\t")) j++;
+  return j < lineEnd && text[j] === ";";
 }
 
 /**
@@ -216,8 +229,8 @@ interface CookieValueScan {
  * no length cap; everything else in the header is kept. Linear in the header's line; the replacement pieces are
  * flushed lazily so a header that is left alone is never copied.
  */
-function redactCookieValue(text: string, p: number): CookieValueScan {
-  let regionEnd = lineEndAt(text, p); // end of the header value; a quote met outside a quoted value shrinks it
+function redactCookieValue(text: string, p: number, lineEnd: number): CookieValueScan {
+  let regionEnd = lineEnd; // end of the header value; a quote met outside a quoted value shrinks it
   const headerOpener = quoteOpenerAt(text, p);
   if (headerOpener !== null) {
     const run = quotedRunEnd(text, p, headerOpener);
@@ -239,13 +252,29 @@ function redactCookieValue(text: string, p: number): CookieValueScan {
     while (j < regionEnd) {
       const c = text[j]!;
       if (c === ";") break;
-      if (c === '"' || c === "'") {
+      const stray = quoteOpenerAt(text, j);
+      if (stray !== null) {
+        const after = j + stray.len;
+        // Inside a value, a quote glued to a word is part of the value: `session=abc\"def`.
+        if (eq >= 0 && after < regionEnd && TAIL_WORD.test(text[after]!)) {
+          j = after;
+          continue;
+        }
+        if (headerOpener === null && quoteBeforeSemicolon(text, after, lineEnd)) {
+          j = after;
+          continue;
+        }
         regionEnd = j; // a quote outside a quoted value ends the header value here
         break;
       }
       if (c === "=" && eq < 0) {
         eq = j;
         const vOpener = quoteOpenerAt(text, j + 1);
+        if (vOpener !== null && j + 1 < regionEnd && quoteEndsInCode(text, j + 1 + vOpener.len, lineEnd)) {
+          regionEnd = j + 1;
+          j = regionEnd;
+          break;
+        }
         if (vOpener === null) {
           // Unquoted value: the scan below continues to the segment end.
           contentFrom = j + 1;
@@ -307,10 +336,12 @@ function redactCookieHeaders(text: string, st: State): string {
   const re = new RegExp(COOKIE_HEAD_SRC, "gi");
   let out = "";
   let from = 0;
+  let lineEnd = -1;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const headEnd = m.index + m[0]!.length;
-    const r = redactCookieValue(text, headEnd);
+    if (lineEnd < headEnd) lineEnd = lineEndAt(text, headEnd);
+    const r = redactCookieValue(text, headEnd, lineEnd);
     if (r.replaced !== null) {
       out += text.slice(from, m.index) + m[0] + r.replaced;
       from = r.end;
