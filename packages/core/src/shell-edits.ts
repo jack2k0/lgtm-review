@@ -24,12 +24,9 @@ import {
   stripHeredocs,
   stripPrefixes,
   type RepoScripts,
-  type Segment,
 } from "./check-patterns.js";
 
 import {
-  canonicalizeEditPath,
-  collapseSlashes,
   FILES_MAX,
   GIT_OPS,
   gitSub,

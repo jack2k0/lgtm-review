@@ -172,7 +172,7 @@ export async function gitCrosscheck(
     since = new Date(startParsed - GIT_WINDOW_MARGIN_MS).toISOString();
     until = new Date(input.endedAtMs + GIT_WINDOW_MARGIN_MS).toISOString();
 
-    let refArg = "HEAD";
+    let refArg: string;
     const branchCandidate = input.branch.trim();
     const hasBranch = branchCandidate !== "" && branchCandidate !== "unknown" && branchCandidate !== "HEAD";
 

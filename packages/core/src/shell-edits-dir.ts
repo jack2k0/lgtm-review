@@ -1,11 +1,8 @@
 import { isDocPath } from "./hints.js";
 import {
   checkArithmeticOpener,
-  isArithmeticCommandStart,
   isGroupingSubshellOpen,
   normalizeFirstToken,
-  scanBracketPairEnd,
-  scanParenPairEnd,
   stripPrefixes,
   type Segment,
 } from "./check-patterns.js";
@@ -14,7 +11,6 @@ import {
 } from "./shell-edits-words.js";
 import {
   canonicalizeEditPath,
-  collapseSlashes,
   isMktempValue,
   isTempRootValue,
   normalizePath,

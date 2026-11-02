@@ -516,7 +516,7 @@ export function createApi(opts: ServerOptions): ApiHandler {
       if (analysis.prompts[i]!.inheritedFrom === undefined) own.push(i);
     }
     const rootDir = file.root ?? opts.dir;
-    let repoDir = rootDir;
+    let repoDir: string;
     try {
       repoDir = realpathSync(rootDir);
     } catch {

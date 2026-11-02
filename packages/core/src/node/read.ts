@@ -29,7 +29,8 @@ async function run(file: string, analyzer: Analyzer, opts: AnalyzeOptions): Prom
 
 /** Streams a session file (and its subagent transcripts) into the push-based analyzer. Dedupe by uuid is per file. */
 export async function analyzeFile(file: string, opts: AnalyzeOptions = {}): Promise<SessionAnalysis> {
-  const { subagents: _ignored, ...rest } = opts;
+  const rest = { ...opts };
+  delete rest.subagents;
   return run(file, createAnalyzer(rest), rest);
 }
 
@@ -38,7 +39,8 @@ export async function analyzeFile(file: string, opts: AnalyzeOptions = {}): Prom
  * `details()` and `diffFor()` without a second pass over the file.
  */
 export async function analyzeFileDetail(file: string, opts: Omit<AnalyzeOptions, "detail"> = {}): Promise<{ analysis: SessionAnalysis; analyzer: Analyzer }> {
-  const { subagents: _ignored, ...rest } = opts;
+  const rest = { ...opts };
+  delete rest.subagents;
   const o = { ...rest, detail: true };
   const analyzer = createAnalyzer(o);
   return { analysis: await run(file, analyzer, o), analyzer };

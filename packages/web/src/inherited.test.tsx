@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import type { PromptAnalysis, SessionAnalysis, SessionSummary } from "@lgtm/core";
-import { PromptTable, Row, InheritedGroup } from "./PromptTable";
+import { PromptTable, Row } from "./PromptTable";
 import { SessionList } from "./SessionList";
 
 const prompt = (index: number, over: Partial<PromptAnalysis> = {}): PromptAnalysis => ({

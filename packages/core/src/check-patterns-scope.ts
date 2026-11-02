@@ -3,7 +3,6 @@ import {
   matchSegment,
   parseArgs,
   valsOf,
-  type ParsedArgs,
   normalizeFirstToken,
   stripPrefixes,
   tokens,

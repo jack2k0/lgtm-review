@@ -1,10 +1,9 @@
-import * as childProcess from "node:child_process";
 import { execFileSync } from "node:child_process";
 import { request } from "node:http";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { ImportMapResponse } from "@lgtm/core";
 import { startServer, type RunningServer } from "./server.js";
 import { DEFAULT_LIST_FILES_MAX_BUFFER, DEFAULT_LIST_FILES_TIMEOUT, listFiles } from "./map.js";
