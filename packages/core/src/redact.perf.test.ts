@@ -233,6 +233,14 @@ describe("redact: performance (1 MB adversarial inputs)", () => {
     expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
   });
 
+  test.each([
+    ["one authorization token", `Authorization: Bearer ${"a1".repeat(MB / 2)}`],
+    ["repeated authorization headers", "authorization: x ".repeat(MB / 17)],
+  ])("1 MB of %s", { timeout: 60_000 }, (_name, text) => {
+    const [ms] = bestTimes([() => void redact(text)]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+  });
+
   test("1 MB glued-tail chain after a redacted value", { timeout: 60_000 }, () => {
     const head = 'password="[redacted:secret]"';
     const text = (head + 'x"'.repeat(500_000)).slice(0, MB);

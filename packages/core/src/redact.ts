@@ -145,7 +145,7 @@ const TOKEN_PREFIXES: readonly string[] = Array.from(
 
 const URL_CREDS = /(?<![A-Za-z0-9+.-])([a-z][a-z0-9+.-]{1,20}:\/\/)([^\s/@:"'<>]{0,200}):([^\s"'<>]{1,200})@(?=[^\s/?#]+(?:[:/?#]|$))/gi;
 
-const AUTH_HEADER = /(?<![A-Za-z0-9])(authorization["']?[ \t]{0,3}[:=][ \t]{0,3}["']?)([^\r\n]{1,4096})/gi;
+const AUTH_HEADER = /(?<![A-Za-z0-9])(authorization["']?[ \t]{0,3}[:=][ \t]{0,3}["']?)((?:(?!authorization["']?[ \t]{0,3}[:=])[^\r\n])+)/gi;
 const BEARER = /(?<![A-Za-z0-9])(bearer[ \t]{1,8})([A-Za-z0-9._~+/=-]{16,})/gi;
 const AZURE_KEY = /(?<![A-Za-z0-9])((?:Account|SharedAccess)Key[ \t]{0,3}=[ \t]{0,3})([A-Za-z0-9+/]{20,}={0,2})/g;
 

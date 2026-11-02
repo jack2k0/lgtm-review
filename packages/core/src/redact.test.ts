@@ -1136,3 +1136,23 @@ describe("redact: cookie headers in code and with stray quotes", () => {
     expect(redact(once.text).text).toBe(once.text);
   });
 });
+
+describe("redact: authorization values have no length cap", () => {
+  const long = "a1".repeat(2500);
+  const cases: [string, string][] = [
+    [`Authorization: Bearer ${long}`, "Authorization: Bearer [redacted:auth-header]"],
+    [`Authorization: Basic ${long}`, "Authorization: Basic [redacted:auth-header]"],
+    [`Authorization: ${long}`, "Authorization: [redacted:auth-header]"],
+    [`Authorization: Digest username="${long}"`, "Authorization: Digest [redacted:auth-header]"],
+    [`{"Authorization":"Bearer ${long}","x":"y"}`, '{"Authorization":"Bearer [redacted:auth-header]","x":"y"}'],
+    [`Authorization: Bearer ${long} authorization: Basic ${long}`, "Authorization: Bearer [redacted:auth-header] authorization: Basic [redacted:auth-header]"],
+    ["Authorization: Bearer authorizationtoken123", "Authorization: Bearer [redacted:auth-header]"],
+    ["Authorization: required for this endpoint", "Authorization: required for this endpoint"],
+  ];
+
+  test.each(cases)("%s", (input, expected) => {
+    const once = redact(input);
+    expect(once.text).toBe(expected);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+});
