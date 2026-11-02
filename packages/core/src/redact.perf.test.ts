@@ -202,6 +202,28 @@ describe("redact: performance (1 MB adversarial inputs)", () => {
     expect(redact(r.text).text).toBe(r.text);
   });
 
+  test("1 MB open cookie value", { timeout: 60_000 }, () => {
+    const text = `Cookie: session="${"z".repeat(MB - 17)}`;
+    expect(text.length).toBe(MB);
+    let r!: ReturnType<typeof redact>;
+    const [ms] = bestTimes([() => void (r = redact(text))]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+    expect(r.text).toBe("Cookie: session=[redacted:cookie]");
+    expect(r.text).not.toContain("zzz");
+    expect(redact(r.text).text).toBe(r.text);
+  });
+
+  test("1 MB line of quoted cookie segments", { timeout: 60_000 }, () => {
+    const text = `Cookie: ${'session="v"; '.repeat(Math.ceil(MB / 13)).slice(0, MB - 8)}`;
+    expect(text.length).toBe(MB);
+    let r!: ReturnType<typeof redact>;
+    const [ms] = bestTimes([() => void (r = redact(text))]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+    expect(r.text).not.toContain('"v"');
+    expect(r.text).toContain("session=[redacted:cookie]");
+    expect(redact(r.text).text).toBe(r.text);
+  });
+
   test("1 MB glued-tail chain after a redacted value", { timeout: 60_000 }, () => {
     const head = 'password="[redacted:secret]"';
     const text = (head + 'x"'.repeat(500_000)).slice(0, MB);

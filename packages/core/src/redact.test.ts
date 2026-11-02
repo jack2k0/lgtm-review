@@ -385,6 +385,46 @@ describe("redact: PEM blocks", () => {
   });
 });
 
+describe("redact: quoted cookie values", () => {
+  // Secret value assembled at test time, as everywhere in this file.
+  const sv = "7" + b(14, 120) + "Q";
+  const rows: [string, string][] = [
+    [`Cookie: session="${sv}"`, `Cookie: session=[redacted:cookie]`],
+    [`Cookie: session=\\"${sv}\\"`, `Cookie: session=[redacted:cookie]`],
+    [`Cookie: session='${sv}'; theme=dark`, `Cookie: session=[redacted:cookie]; theme=dark`],
+    [`Cookie: theme="dark"; auth="${sv}"; lang=en`, `Cookie: theme="dark"; auth=[redacted:cookie]; lang=en`],
+    [`Cookie: session="a;b c"; theme=dark`, `Cookie: session=[redacted:cookie]; theme=dark`],
+    [`Cookie: session="${sv}`, `Cookie: session=[redacted:cookie]`],
+    [`{"Cookie":"session=${sv}; theme=dark","x":"y"}`, `{"Cookie":"session=[redacted:cookie]; theme=dark","x":"y"}`],
+    [`{"Cookie": "session=${sv}"}`, `{"Cookie": "session=[redacted:cookie]"}`],
+    [`curl -H "Cookie: session=${sv}" http://x`, `curl -H "Cookie: session=[redacted:cookie]" http://x`],
+    [`curl -H 'Cookie: theme=dark; sid=${sv}' http://x`, `curl -H 'Cookie: theme=dark; sid=[redacted:cookie]' http://x`],
+    [`Cookie: session=${"z".repeat(5000)}`, `Cookie: session=[redacted:cookie]`],
+  ];
+
+  test.each(rows.map(([input, expected], i) => [`row ${i + 1}`, input, expected] as const))(
+    "%s hides the secret and is idempotent",
+    (_name, input, expected) => {
+      const r = redact(input);
+      expect(r.text).toBe(expected);
+      expect(r.count).toBeGreaterThanOrEqual(1);
+      expect(r.text, input).not.toContain(sv);
+      expect(redact(r.text), `redact(redact(x)) === redact(x)`).toEqual({ text: r.text, count: 0 });
+    },
+  );
+
+  test.each(
+    [
+      [`Cookie: theme="dark"; lang=en`],
+      [`cookie: "hello"`],
+      [`the cookie: it's fine`],
+      [`Cookie: session=[redacted:cookie]`],
+    ].map((t, i) => [`keep ${i + 1}`, t[0]] as const),
+  )("%s stays byte for byte with count 0", (_name, input) => {
+    expect(redact(input)).toEqual({ text: input, count: 0 });
+  });
+});
+
 describe("redact: identity", () => {
   test("home directories", () => {
     expect(redact("/home/jack/git/app/src/a.ts").text).toBe("~/git/app/src/a.ts");
