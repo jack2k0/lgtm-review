@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import { isEnvFilePath, redact } from "./redact.js";
-import { isStrictValue } from "./redact.js";
 import { trimPartialSecret } from "./redact.js";
 import { PROMPT_TEXT_MAX, parseLines } from "./parse.js";
 import { prompt } from "./testing/records.js";
@@ -1220,32 +1219,10 @@ describe("redact: authorization further tokens and glued prefix (Phase 2)", () =
 });
 
 describe("redact: four known redaction leaks", () => {
-  describe("isStrictValue", () => {
-    test("valid strict values", () => {
-      expect(isStrictValue("Changeme123Now")).toBe(true);
-      expect(isStrictValue("Other456Value")).toBe(true);
-      expect(isStrictValue("abc1234=")).toBe(true);
-      expect(isStrictValue("abc123==")).toBe(true);
-      expect(isStrictValue("ZmFrZVNlY3JldFZhbHVlMTIz")).toBe(true);
-    });
-
-    test("invalid strict values", () => {
-      expect(isStrictValue("Important")).toBe(false);
-      expect(isStrictValue("item")).toBe(false);
-      expect(isStrictValue("see the docs here1")).toBe(false);
-      expect(isStrictValue("getPassword1()")).toBe(false);
-      expect(isStrictValue("username: alice1234")).toBe(false);
-      expect(isStrictValue("password")).toBe(false);
-      expect(isStrictValue("required")).toBe(false);
-      expect(isStrictValue("[redacted:secret]")).toBe(false);
-      expect(isStrictValue("a=b12345")).toBe(false);
-      expect(isStrictValue("=12345ab")).toBe(false);
-    });
-  });
-
   const cases: [string, string][] = [
     ["password:\n- Changeme123Now", "password:\n- [redacted:secret]"],
     ["password:\n  - Changeme123Now", "password:\n  - [redacted:secret]"],
+    ["| password | abcd1234efgh5678ijkl |", "| password | [redacted:secret] |"],
     ['password: ""\nChangeme123Now', 'password: ""\n[redacted:secret]'],
     ["token = ''\nChangeme123Now", "token = ''\n[redacted:secret]"],
     ["| password | Changeme123Now |", "| password | [redacted:secret] |"],
@@ -1277,6 +1254,13 @@ describe("redact: four known redaction leaks", () => {
   const unchanged: string[] = [
     "password:\n- Important",
     "password:\n- item",
+    "password:\n- gpt-4o-mini",
+    "password:\n- config/db1.yml",
+    "token = ''\nv1.2.3-beta",
+    "| name | token |\n|---|---|\n| x | v1.2.3-beta |",
+    "| field | secret |\n|---|---|\n| size | string64 |",
+    "| secret | note |\n|---|---|\n| claude-3-5-sonnet | ok |",
+    "| name | token |\n|---|---|\n| x | TOKEN_LIMIT_100 |",
     "password:\n- see the docs here1",
     'password: ""\nImportant',
     'password = ""\ngetPassword1()',

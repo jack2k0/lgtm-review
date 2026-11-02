@@ -812,6 +812,7 @@ function redactAssignRegions(text: string, st: State): string {
 }
 
 const STRICT_VALUE_CHARS = /^[A-Za-z0-9_+/=.~!@#$%^&*-]+$/;
+const STRICT_B64_CHARS = /^[A-Za-z0-9_+/=]+$/;
 
 function hasEqualsOnlyAtEnd(word: string): boolean {
   const eq = word.indexOf("=");
@@ -823,13 +824,19 @@ function hasEqualsOnlyAtEnd(word: string): boolean {
   return true;
 }
 
-export function isStrictValue(word: string): boolean {
+function isStrictValue(word: string): boolean {
   if (word.length < 8) return false;
   if (!STRICT_VALUE_CHARS.test(word)) return false;
   if (!hasEqualsOnlyAtEnd(word)) return false;
-  if (!/\d/.test(word) || !/[a-zA-Z]/.test(word)) return false;
   if (isPlaceholder(word)) return false;
-  return true;
+
+  const hasDigit = /\d/.test(word);
+  const hasLower = /[a-z]/.test(word);
+  const hasUpper = /[A-Z]/.test(word);
+
+  if (hasDigit && hasLower && hasUpper) return true;
+  if (word.length >= 16 && STRICT_B64_CHARS.test(word) && hasDigit && (hasLower || hasUpper)) return true;
+  return false;
 }
 
 function redactNextLine(text: string, st: State): string {
