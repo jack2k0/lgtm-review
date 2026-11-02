@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { isEnvFilePath, redact } from "./redact.js";
+import { isStrictValue } from "./redact.js";
 import { trimPartialSecret } from "./redact.js";
 import { PROMPT_TEXT_MAX, parseLines } from "./parse.js";
 import { prompt } from "./testing/records.js";
@@ -1208,6 +1209,88 @@ describe("redact: authorization further tokens and glued prefix (Phase 2)", () =
     "Authorization: required for this endpoint",
     "reauthorization: required",
     "no authorization needed",
+  ];
+
+  test.each(unchanged)("unchanged: %s", (input) => {
+    const once = redact(input);
+    expect(once.text).toBe(input);
+    expect(once.count).toBe(0);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+});
+
+describe("redact: four known redaction leaks", () => {
+  describe("isStrictValue", () => {
+    test("valid strict values", () => {
+      expect(isStrictValue("Changeme123Now")).toBe(true);
+      expect(isStrictValue("Other456Value")).toBe(true);
+      expect(isStrictValue("abc1234=")).toBe(true);
+      expect(isStrictValue("abc123==")).toBe(true);
+      expect(isStrictValue("ZmFrZVNlY3JldFZhbHVlMTIz")).toBe(true);
+    });
+
+    test("invalid strict values", () => {
+      expect(isStrictValue("Important")).toBe(false);
+      expect(isStrictValue("item")).toBe(false);
+      expect(isStrictValue("see the docs here1")).toBe(false);
+      expect(isStrictValue("getPassword1()")).toBe(false);
+      expect(isStrictValue("username: alice1234")).toBe(false);
+      expect(isStrictValue("password")).toBe(false);
+      expect(isStrictValue("required")).toBe(false);
+      expect(isStrictValue("[redacted:secret]")).toBe(false);
+      expect(isStrictValue("a=b12345")).toBe(false);
+      expect(isStrictValue("=12345ab")).toBe(false);
+    });
+  });
+
+  const cases: [string, string][] = [
+    ["password:\n- Changeme123Now", "password:\n- [redacted:secret]"],
+    ["password:\n  - Changeme123Now", "password:\n  - [redacted:secret]"],
+    ['password: ""\nChangeme123Now', 'password: ""\n[redacted:secret]'],
+    ["token = ''\nChangeme123Now", "token = ''\n[redacted:secret]"],
+    ["| password | Changeme123Now |", "| password | [redacted:secret] |"],
+    ["| password |\n| Changeme123Now |", "| password |\n| [redacted:secret] |"],
+    [
+      "| user | password |\n|---|---|\n| alice | Changeme123Now |\n| bob | Other456Value |",
+      "| user | password |\n|---|---|\n| alice | [redacted:secret] |\n| bob | [redacted:secret] |",
+    ],
+    [
+      "Authorization: Bearer abc123def456 ZmFrZVNlY3JldFZhbHVlMTIz, see docs",
+      "Authorization: Bearer [redacted:auth-header], see docs",
+    ],
+    [
+      "Authorization: Basic dXNlcjpwYXNzd29yZDEyMzQ1 ZmFrZVNlY3JldFZhbHVlMTIz.",
+      "Authorization: Basic [redacted:auth-header].",
+    ],
+    [
+      "Authorization: Bearer abc123def456ghi789, authentication, and docs",
+      "Authorization: Bearer [redacted:auth-header], authentication, and docs",
+    ],
+  ];
+
+  test.each(cases)("%s", (input, expected) => {
+    const once = redact(input);
+    expect(once.text).toBe(expected);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+
+  const unchanged: string[] = [
+    "password:\n- Important",
+    "password:\n- item",
+    "password:\n- see the docs here1",
+    'password: ""\nImportant',
+    'password = ""\ngetPassword1()',
+    'password: ""\nusername: alice1234',
+    'password: ""\n- Changeme123Now',
+    'title: ""\nChangeme123Now',
+    "| password | required |",
+    "| password | see the vault |",
+    "| title | Changeme123Now |",
+    "| name | password |\n|---|---|\n| x | required |",
+    "| password | notes |\n|---|---|\n| required | Changeme123Now |",
+    "| password |\n\nChangeme123Now",
+    "Authorization: Bearer xyz for the API",
+    "Authorization: Bearer abc def,",
   ];
 
   test.each(unchanged)("unchanged: %s", (input) => {
