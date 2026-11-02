@@ -1156,3 +1156,64 @@ describe("redact: authorization values have no length cap", () => {
     expect(redact(once.text).text).toBe(once.text);
   });
 });
+
+describe("redact: secret value on the line under its key (Phase 1)", () => {
+  const cases: [string, string][] = [
+    ["password=\nhunter2secretvalue", "password=\n[redacted:secret]"],
+    ["password:\n  Zq9Xv7Lm2P", "password:\n  [redacted:secret]"],
+    ["Authorization:\nBasic dXNlcjpodW50ZXIycGFzcw==", "Authorization:\nBasic [redacted:auth-header]"],
+    ["API_KEY=\r\nZq9Xv7Lm2P\r\n", "API_KEY=\r\n[redacted:secret]\r\n"],
+  ];
+
+  test.each(cases)("%s", (input, expected) => {
+    const once = redact(input);
+    expect(once.text).toBe(expected);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+
+  const unchanged: string[] = [
+    "password:\n  file: /run/secret",
+    "password:\n  - item",
+    "token:\n\nZq9Xv7Lm2P",
+    "password=\nnext line of prose",
+    "password:\nrequired",
+    "title=\nZq9Xv7Lm2P",
+    "password=\n[redacted:secret]",
+  ];
+
+  test.each(unchanged)("unchanged: %s", (input) => {
+    const once = redact(input);
+    expect(once.text).toBe(input);
+    expect(once.count).toBe(0);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+});
+
+describe("redact: authorization further tokens and glued prefix (Phase 2)", () => {
+  const cases: [string, string][] = [
+    ["Authorization: Basic dXNlcjpwYXNz ZmFrZVNlY3JldFZhbHVlMTIz", "Authorization: Basic [redacted:auth-header]"],
+    ["Authorization: Bearer abc123def456 ZmFrZVNlY3JldFZhbHVlMTIz for the API", "Authorization: Bearer [redacted:auth-header] for the API"],
+    ["Authorization: Bearer abc123def456 for the API", "Authorization: Bearer [redacted:auth-header] for the API"],
+    ["myauthorization: Basic Qm9vZ3VzU2VjcmV0MTIzNDU2", "myauthorization: Basic [redacted:auth-header]"],
+  ];
+
+  test.each(cases)("%s", (input, expected) => {
+    const once = redact(input);
+    expect(once.text).toBe(expected);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+
+  const unchanged: string[] = [
+    "Authorization: Bearer xyz for the API",
+    "Authorization: required for this endpoint",
+    "reauthorization: required",
+    "no authorization needed",
+  ];
+
+  test.each(unchanged)("unchanged: %s", (input) => {
+    const once = redact(input);
+    expect(once.text).toBe(input);
+    expect(once.count).toBe(0);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+});

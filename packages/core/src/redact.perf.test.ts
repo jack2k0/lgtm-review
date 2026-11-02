@@ -254,4 +254,21 @@ describe("redact: performance (1 MB adversarial inputs)", () => {
     expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
     expect(r.text).toBe(head);
   });
+
+  test.each([
+    ["password=\\n repeats", "password=\n"],
+    ["password=\\nZq9Xv7Lm2P\\n repeats", "password=\nZq9Xv7Lm2P\n"],
+  ])("1 MB of %s", { timeout: 60_000 }, (_name, unit) => {
+    const text = unit.repeat(Math.ceil(MB / unit.length)).slice(0, MB);
+    const [ms] = bestTimes([() => void redact(text)]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+  });
+
+  test.each([
+    ["repeated short words in authorization header", ("Authorization: Bearer abc123def456 " + "xyz ".repeat(Math.ceil(MB / 4))).slice(0, MB)],
+    ["repeated long tokens in authorization header", ("Authorization: Bearer " + "ZmFrZVNlY3JldFZhbHVlMTIz ".repeat(Math.ceil(MB / 25))).slice(0, MB)],
+  ])("1 MB header value of %s", { timeout: 60_000 }, (_name, text) => {
+    const [ms] = bestTimes([() => void redact(text)]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+  });
 });
