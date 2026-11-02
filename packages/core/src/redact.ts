@@ -4,8 +4,8 @@
  * Node-free: the caller supplies the OS user names and the repository directory.
  * `redact` is pure, deterministic, idempotent (`redact(redact(x).text).text === redact(x).text`) and linear in the
  * input size: every regular expression below is either anchored by a literal prefix plus a lookbehind that stops
- * restarts inside a character run, or uses bounded quantifiers; the PEM scan and the entropy scan are manual
- * single-pass scanners. Placeholders are `[redacted:<kind>]`, `~`, `<user>` and `<repo>`; none of them can match a
+ * restarts inside a character run, or uses bounded quantifiers; the PEM scan, the cookie-header scan and the
+ * entropy scan are manual single-pass scanners. Placeholders are `[redacted:<kind>]`, `~`, `<user>` and `<repo>`; none of them can match a
  * rule again.
  *
  * `count` is the total number of replacements made (one per redacted secret, path prefix, user name or e-mail).
@@ -149,24 +149,209 @@ const AUTH_HEADER = /(?<![A-Za-z0-9])(authorization["']?[ \t]{0,3}[:=][ \t]{0,3}
 const BEARER = /(?<![A-Za-z0-9])(bearer[ \t]{1,8})([A-Za-z0-9._~+/=-]{16,})/gi;
 const AZURE_KEY = /(?<![A-Za-z0-9])((?:Account|SharedAccess)Key[ \t]{0,3}=[ \t]{0,3})([A-Za-z0-9+/]{20,}={0,2})/g;
 
-const COOKIE = /(?<![A-Za-z0-9-])((?:set-)?cookie["']?[ \t]{0,3}:[ \t]{0,3})([^\r\n"']{1,4096})/gi;
+/** Head of a `Cookie: value` header: `(set-)cookie`, an optional quote right after the name, then the colon. */
+const COOKIE_HEAD_SRC = String.raw`(?<![A-Za-z0-9-])((?:set-)?cookie["']?[ \t]{0,3}:[ \t]{0,3})`;
 const COOKIE_SECRET_NAME = /session|sess|sid|token|auth|jwt|csrf|xsrf|secret|key|login|remember|passw/i;
 
-function redactCookie(g: Groups, st: State): string | null {
-  const parts = (g[2] as string).split(";");
-  let n = 0;
-  const out = parts.map((seg) => {
-    const eq = seg.indexOf("=");
-    if (eq < 0) return seg;
-    const name = seg.slice(0, eq);
-    const value = seg.slice(eq + 1);
-    if (value.trim() === "" || isPlaceholder(value.trim()) || !COOKIE_SECRET_NAME.test(name)) return seg;
-    n++;
-    return `${name}=${ph("cookie")}`;
-  });
-  if (n === 0) return null;
-  st.count += n - 1; // `pass` adds the last one
-  return (g[1] as string) + out.join(";");
+/** A quoted run opener at `i`: `"`, `'` or their backslash-escaped spellings `\"`, `\'`. */
+type QuotedOpener = { len: 1 | 2; quote: string };
+
+function quoteOpenerAt(text: string, i: number): QuotedOpener | null {
+  const c = text[i];
+  if (c === '"' || c === "'") return { len: 1, quote: c };
+  if (c === "\\") {
+    const q = text[i + 1];
+    return q === '"' || q === "'" ? { len: 2, quote: q } : null;
+  }
+  return null;
+}
+
+/** Index of the first `\n` or `\r` at or after `i`, or `text.length`. The caller keeps the result for its whole line. */
+function lineEndAt(text: string, i: number): number {
+  let j = i;
+  while (j < text.length && text[j] !== "\n" && text[j] !== "\r") j++;
+  return j;
+}
+
+/** A quote right after `=` that is followed by code, not a value: `"Cookie: session=" + value`, `{"m": "Cookie: a=" }`. */
+function quoteEndsInCode(text: string, afterQuote: number, lineEnd: number): boolean {
+  let j = afterQuote;
+  while (j < lineEnd && (text[j] === " " || text[j] === "\t")) j++;
+  return j >= lineEnd || "+})],".includes(text[j]!);
+}
+
+/** A stray quote before `;` is not the end of the header: `Cookie: a=1"; session=x`. */
+function quoteBeforeSemicolon(text: string, afterQuote: number, lineEnd: number): boolean {
+  let j = afterQuote;
+  while (j < lineEnd && (text[j] === " " || text[j] === "\t")) j++;
+  return j < lineEnd && text[j] === ";";
+}
+
+/**
+ * End of the quoted run opened at `open` with `opener`: `end` is past the matching closer (`closed`) or the end of the
+ * line, and never grows past a newline. A one-character opener is closed by that bare quote (a `\"` pair in between is
+ * an escaped quote and is skipped); the two-character opener `\"` is closed by the literal `\"` sequence, a bare quote
+ * in between is content.
+ */
+function quotedRunEnd(text: string, open: number, opener: QuotedOpener): { end: number; closed: boolean } {
+  const n = text.length;
+  let j = open + opener.len;
+  while (j < n) {
+    const c = text[j]!;
+    if (c === "\n" || c === "\r") return { end: j, closed: false };
+    if (opener.len === 2) {
+      if (c === "\\" && text[j + 1] === opener.quote) return { end: j + 2, closed: true };
+    } else if (c === "\\" && text[j + 1] === opener.quote) {
+      j++; // the escaped quote is not a closer; the loop's own `j++` skips it too
+    } else if (c === opener.quote) {
+      return { end: j + 1, closed: true };
+    }
+    j++;
+  }
+  return { end: j, closed: false };
+}
+
+interface CookieValueScan {
+  /** End of the header value; scanning resumes here. */
+  end: number;
+  /** The replacement covering `[start, end)`, or null when the header was left byte for byte. */
+  replaced: string | null;
+  count: number;
+}
+
+/**
+ * Scans one `Cookie: ` header value from `p`. The value may open with `"`, `'`, `\"` or `\'`; it then ends at the
+ * matching closer (the closer itself stays visible), otherwise at the end of the line. Segments split on `;` outside a
+ * quoted value; a segment's quoted value is replaced whole together with its quotes, an unterminated one runs to the
+ * end of the header value. A quote met outside a quoted value ends the header value there (the quote stays visible),
+ * which also closes an unquoted value: the closing quote of `curl -H "Cookie: x=y"`. A secret-named segment value
+ * (COOKIE_SECRET_NAME on the name, the value neither empty nor a placeholder) is replaced by `[redacted:cookie]` with
+ * no length cap; everything else in the header is kept. Linear in the header's line; the replacement pieces are
+ * flushed lazily so a header that is left alone is never copied.
+ */
+function redactCookieValue(text: string, p: number, lineEnd: number): CookieValueScan {
+  let regionEnd = lineEnd; // end of the header value; a quote met outside a quoted value shrinks it
+  const headerOpener = quoteOpenerAt(text, p);
+  if (headerOpener !== null) {
+    const run = quotedRunEnd(text, p, headerOpener);
+    // A closed header keeps its closer visible: the value is what is in between.
+    regionEnd = run.closed ? run.end - headerOpener.len : run.end;
+  }
+  let j = headerOpener !== null ? p + headerOpener.len : p;
+  let piece = p; // start of the value part not yet copied into `out`
+  let out = "";
+  let found = 0;
+  while (j < regionEnd) {
+    const segStart = j;
+    let eq = -1;
+    // value span (exclusive) and the inner content span of the value; set when `=` is found
+    let valueEnd = -1;
+    let contentFrom = -1;
+    let contentTo = -1;
+    let openQuoted = false; // the value opened with a quote and never closed: it is hidden from `eq + 1` to regionEnd
+    while (j < regionEnd) {
+      const c = text[j]!;
+      if (c === ";") break;
+      const stray = quoteOpenerAt(text, j);
+      if (stray !== null) {
+        const after = j + stray.len;
+        // Inside a value, a quote glued to a word is part of the value: `session=abc\"def`.
+        if (eq >= 0 && after < regionEnd && TAIL_WORD.test(text[after]!)) {
+          j = after;
+          continue;
+        }
+        if (headerOpener === null && quoteBeforeSemicolon(text, after, lineEnd)) {
+          j = after;
+          continue;
+        }
+        regionEnd = j; // a quote outside a quoted value ends the header value here
+        break;
+      }
+      if (c === "=" && eq < 0) {
+        eq = j;
+        const vOpener = quoteOpenerAt(text, j + 1);
+        if (vOpener !== null && j + 1 < regionEnd && quoteEndsInCode(text, j + 1 + vOpener.len, lineEnd)) {
+          regionEnd = j + 1;
+          j = regionEnd;
+          break;
+        }
+        if (vOpener === null) {
+          // Unquoted value: the scan below continues to the segment end.
+          contentFrom = j + 1;
+          j++;
+          continue;
+        }
+        const run = quotedRunEnd(text, j + 1, vOpener);
+        if (run.closed && run.end <= regionEnd) {
+          valueEnd = run.end;
+          contentFrom = j + 1 + vOpener.len;
+          contentTo = run.end - vOpener.len;
+          j = run.end; // the segment continues after the closing quote
+          continue;
+        }
+        // Unterminated, or the closer lies past the end of the header value: the value runs to the end of the header
+        // value and is hidden whole by a secret-named segment below.
+        valueEnd = regionEnd;
+        contentFrom = j + 1 + vOpener.len;
+        contentTo = regionEnd;
+        openQuoted = true;
+        j = regionEnd;
+        break;
+      }
+      j++;
+    }
+    if (eq >= 0) {
+      if (contentFrom < 0) contentFrom = eq + 1; // unquoted value run to the segment end
+      if (contentTo < 0) contentTo = j;
+      const trimmed = text.slice(contentFrom, contentTo).trim();
+      if (
+        COOKIE_SECRET_NAME.test(text.slice(segStart, eq)) &&
+        trimmed !== "" &&
+        !isPlaceholder(trimmed)
+      ) {
+        out += text.slice(piece, eq + 1) + ph("cookie");
+        piece = valueEnd < 0 ? j : valueEnd;
+        found++;
+        if (openQuoted) break;
+      }
+    }
+    if (j >= regionEnd) break;
+    if (text[j] === ";") j++;
+  }
+  return {
+    end: j,
+    replaced: found === 0 ? null : out + text.slice(piece, j),
+    count: found,
+  };
+}
+
+/**
+ * One left-to-right pass over the `Cookie: ` headers of the text, one match per header value: after a value is
+ * scanned, `lastIndex` resumes past it, as the old matched-value regex did, so a `cookie:` inside a value is not
+ * scanned again. Counting is manual (there is no per-match callback), a header redacts nothing without copying its
+ * value, and the pass stays linear when a value runs to the end of a 1 MB line.
+ */
+function redactCookieHeaders(text: string, st: State): string {
+  if (!text.toLowerCase().includes("cookie")) return text;
+  const re = new RegExp(COOKIE_HEAD_SRC, "gi");
+  let out = "";
+  let from = 0;
+  let lineEnd = -1;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const headEnd = m.index + m[0]!.length;
+    if (lineEnd < headEnd) lineEnd = lineEndAt(text, headEnd);
+    const r = redactCookieValue(text, headEnd, lineEnd);
+    if (r.replaced !== null) {
+      out += text.slice(from, m.index) + m[0] + r.replaced;
+      from = r.end;
+      st.count += r.count;
+    }
+    // Resume past the value even when it was left as it is: re-scanning the same head would restart inside the
+    // region the value spans.
+    re.lastIndex = Math.max(r.end, headEnd);
+  }
+  return from === 0 ? text : out + text.slice(from);
 }
 
 const AUTH_SCHEMES = new Set(["bearer", "basic", "token", "digest", "negotiate", "bot"]);
@@ -992,7 +1177,7 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
   t = pass(t, st, BEARER, ["bearer"], true, (g) => (/\d/.test(g[2] as string) ? `${g[1]}${ph("bearer")}` : null));
   t = pass(t, st, AZURE_KEY, ["accountkey", "sharedaccesskey"], true, (g) => `${g[1]}${ph("azure-key")}`);
 
-  t = pass(t, st, COOKIE, ["cookie"], true, (g) => redactCookie(g, st));
+  t = redactCookieHeaders(t, st);
 
   if (opts.envFile) {
     t = redactEnvLines(t, st);
