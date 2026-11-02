@@ -31,6 +31,17 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ["scripts/**/*.{js,mjs}"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
+        fetch: "readonly",
+        process: "readonly",
+        setTimeout: "readonly",
+        URL: "readonly",
+      },
+    },
     rules: {
       "no-undef": "warn",
     },
