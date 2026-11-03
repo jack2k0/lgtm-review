@@ -367,6 +367,15 @@ function isAuthCredentialWord(w: string): boolean {
   );
 }
 
+/**
+ * A further `Authorization` token: a long credential word, or a shorter one (A7) of at least 12 characters that
+ * passes `isStrictValue` and has a letter after its last digit, so `Changeme123Now` is hidden while words such as
+ * `Version2`, `README1st` or `Changelog2024` stay.
+ */
+function isFurtherAuthWord(w: string): boolean {
+  return isAuthCredentialWord(w) || (w.length >= 12 && isStrictValue(w) && /\d[^\d]*[A-Za-z][^\d]*$/.test(w));
+}
+
 function consumeFurtherAuthTokens(tail: string): number {
   let consumed = 0;
   while (consumed < tail.length) {
@@ -381,13 +390,14 @@ function consumeFurtherAuthTokens(tail: string): number {
     if (punctMatch !== null) {
       const punctLen = punctMatch[0].length;
       const stripped = word.slice(0, word.length - punctLen);
-      if (isAuthCredentialWord(stripped)) {
+      // A short further credential (`Changeme123Now,`) is also hidden, per the password-like strict test (A7).
+      if (isFurtherAuthWord(stripped)) {
         consumed = j - punctLen;
       }
       break;
     }
 
-    if (!isAuthCredentialWord(word)) break;
+    if (!isFurtherAuthWord(word)) break;
     consumed = j;
   }
   return consumed;
@@ -839,6 +849,27 @@ function isStrictValue(word: string): boolean {
   return false;
 }
 
+/** A table column whose key is a password word: the five words, any case, `_`/`-` allowed between their parts. */
+const PASSWORD_KEY = /^(?:pass(?:[_-]?(?:word|wd|phrase))?|pwd)$/i;
+/** A password value of only letters and digits. */
+const PASSWORD_PLAIN_VALUE = /^[A-Za-z0-9]{8,}$/;
+/** An SQL type annotation such as `varchar255` or `string64`, not a literal. */
+const PASSWORD_SQL_TYPE = /^(?:var)?char\d+$|^n?varchar\d+$|^string\d+$|^u?int\d+$|^float\d+$|^bytes?\d+$|^text\d+$/i;
+/** A hash or key-derivation name such as `bcrypt12`, `sha256sum` or `argon2id`, which describes a password column. */
+const PASSWORD_HASH_NAME = /^(?:bcrypt|scrypt|argon2(?:id|i|d)?|pbkdf2|sha\d*|md5|blake2[bs]?)[a-z0-9]*$/i;
+
+function isPasswordKey(key: string): boolean {
+  return PASSWORD_KEY.test(key);
+}
+
+/**
+ * A short one-case password-cell value: at least eight characters of only `A-Za-z0-9` with at least one digit and
+ * one letter, not an SQL type annotation. Only checked for password keys; every other column keeps `isStrictValue`.
+ */
+function isPasswordValue(v: string): boolean {
+  return PASSWORD_PLAIN_VALUE.test(v) && /\d/.test(v) && /[A-Za-z]/.test(v) && !PASSWORD_SQL_TYPE.test(v) && !PASSWORD_HASH_NAME.test(v);
+}
+
 function redactNextLine(text: string, st: State): string {
   if (!text.includes("\n") || (!text.includes("=") && !text.includes(":"))) return text;
   const re = /(?<![A-Za-z0-9_.-])(["']?)(-{0,2}[A-Za-z_][A-Za-z0-9_.-]{0,60})\1([ \t]*[:=][ \t]*)(?:(""|'')[ \t]*)?(?=\r?\n)/gi;
@@ -874,32 +905,20 @@ function redactNextLine(text: string, st: State): string {
       continue;
     }
 
-    if (emptyQuotes !== undefined) {
-      if (/^[ \t]*-([ \t]|$)/.test(fullNextLine)) {
-        re.lastIndex = nextLineStart;
-        continue;
-      }
-      if (/\s/.test(trimmed) || !isStrictValue(trimmed)) {
-        re.lastIndex = nextLineStart;
-        continue;
-      }
-      const indentLen = fullNextLine.length - fullNextLine.trimStart().length;
-      const indent = fullNextLine.slice(0, indentLen);
-      const replacedLine = `${indent}${ph("secret")}`;
-      out += text.slice(from, nextLineStart) + replacedLine;
-      from = nextLineEnd;
-      st.count++;
-      re.lastIndex = nextLineEnd;
-      continue;
-    }
-
+    // A list item, also under an empty value (`password: ""`, then `- value`): the empty quotes stay.
     if (isSec) {
       const listMatch = /^([ \t]*-[ \t]+)(\S+)$/.exec(fullNextLine);
       if (listMatch !== null) {
         const listPrefix = listMatch[1]!;
         const listWord = listMatch[2]!;
-        if (isStrictValue(listWord)) {
-          const replacedLine = `${listPrefix}${ph("secret")}`;
+        // A quoted item `- "value"`: the inner value takes the list rule's test and is hidden alone, both quotes stay.
+        const quote =
+          listWord.length >= 2 && (listWord[0] === '"' || listWord[0] === "'") && listWord[listWord.length - 1] === listWord[0]
+            ? listWord[0]!
+            : null;
+        if (quote !== null ? isStrictValue(listWord.slice(1, -1)) : isStrictValue(listWord)) {
+          const replacedLine =
+            quote !== null ? `${listPrefix}${quote}${ph("secret")}${quote}` : `${listPrefix}${ph("secret")}`;
           out += text.slice(from, nextLineStart) + replacedLine;
           from = nextLineEnd;
           st.count++;
@@ -912,6 +931,21 @@ function redactNextLine(text: string, st: State): string {
         re.lastIndex = nextLineStart;
         continue;
       }
+    }
+
+    if (emptyQuotes !== undefined) {
+      if (/\s/.test(trimmed) || !isStrictValue(trimmed)) {
+        re.lastIndex = nextLineStart;
+        continue;
+      }
+      const indentLen = fullNextLine.length - fullNextLine.trimStart().length;
+      const indent = fullNextLine.slice(0, indentLen);
+      const replacedLine = `${indent}${ph("secret")}`;
+      out += text.slice(from, nextLineStart) + replacedLine;
+      from = nextLineEnd;
+      st.count++;
+      re.lastIndex = nextLineEnd;
+      continue;
     }
 
     let schemePrefix = "";
@@ -975,6 +1009,8 @@ function redactSecretTableCells(text: string, st: State): string {
   const lines = text.split("\n");
   let tableActive = false;
   let secretColumns = new Set<number>();
+  /** Columns whose key is a password word; their short one-case values are also hidden (A7). */
+  let passwordColumns = new Set<number>();
   let expectingSeparator = false;
   let changed = false;
 
@@ -987,6 +1023,7 @@ function redactSecretTableCells(text: string, st: State): string {
     if (!isTableRow(trimmed)) {
       tableActive = false;
       secretColumns.clear();
+      passwordColumns.clear();
       expectingSeparator = false;
       continue;
     }
@@ -998,10 +1035,12 @@ function redactSecretTableCells(text: string, st: State): string {
     if (!tableActive || nextIsSeparator) {
       tableActive = true;
       secretColumns.clear();
+      passwordColumns.clear();
       expectingSeparator = false;
 
       const parts = line.split("|");
       for (let c = 1; c < parts.length - 1; c++) {
+        if (isPasswordKey(parts[c]!.trim())) passwordColumns.add(c);
         if (isSecretKey(parts[c]!.trim())) {
           secretColumns.add(c);
         }
@@ -1013,7 +1052,7 @@ function redactSecretTableCells(text: string, st: State): string {
         if (isSecretKey(parts[c]!.trim())) {
           const nextRaw = parts[c + 1]!;
           const nextTrimmed = nextRaw.trim();
-          if (isStrictValue(nextTrimmed)) {
+          if (isStrictValue(nextTrimmed) || (isPasswordKey(parts[c]!.trim()) && isPasswordValue(nextTrimmed))) {
             const start = nextRaw.length - nextRaw.trimStart().length;
             const end = nextRaw.trimEnd().length;
             parts[c + 1] = nextRaw.slice(0, start) + ph("secret") + nextRaw.slice(end);
@@ -1044,7 +1083,7 @@ function redactSecretTableCells(text: string, st: State): string {
         if (col < parts.length - 1) {
           const rawCell = parts[col]!;
           const cellTrimmed = rawCell.trim();
-          if (isStrictValue(cellTrimmed)) {
+          if (isStrictValue(cellTrimmed) || (passwordColumns.has(col) && isPasswordValue(cellTrimmed))) {
             const start = rawCell.length - rawCell.trimStart().length;
             const end = rawCell.trimEnd().length;
             parts[col] = rawCell.slice(0, start) + ph("secret") + rawCell.slice(end);
@@ -1059,7 +1098,7 @@ function redactSecretTableCells(text: string, st: State): string {
       if (isSecretKey(parts[c]!.trim())) {
         const nextRaw = parts[c + 1]!;
         const nextTrimmed = nextRaw.trim();
-        if (isStrictValue(nextTrimmed)) {
+        if (isStrictValue(nextTrimmed) || (isPasswordKey(parts[c]!.trim()) && isPasswordValue(nextTrimmed))) {
           const start = nextRaw.length - nextRaw.trimStart().length;
           const end = nextRaw.trimEnd().length;
           parts[c + 1] = nextRaw.slice(0, start) + ph("secret") + nextRaw.slice(end);
@@ -1236,7 +1275,21 @@ function replaceRepoDir(text: string, dirIn: string, st: State): string {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HEX = /^[0-9a-fA-F]+$/;
-const CTX_WORDS = "(?:token|secret|passw(?:or)?d|api[ _-]?key|access[ _-]?key|credentials?|private[ _-]?key|bearer|authorization)";
+/** The known secret words, plus `<name> key` (CTX_KEY_NAME). */
+const CTX_WORDS_PART =
+  "token|secret|passw(?:or)?d|api[ _-]?key|access[ _-]?key|credentials?|private[ _-]?key|bearer|authorization";
+/** Words whose `key` is prose (`the key`, `primary key`), so `<name> key` must not open the secret context. */
+const CTX_KEY_NAME_BLOCKED =
+  "(?:a|an|the|this|that|my|your|our|their|its|his|her|primary|foreign|index|unique|composite|sort|partition|hash|cache|lookup|map|dict|object|registry|hot|shortcut|keyboard|press)";
+/**
+ * `<name> key` for any name word: one word of letters, digits, `_` or `-`, then a space, `_` or `-`, then `key`
+ * (case-insensitive; the separators after it are the ones CONTEXT already accepts). The name must not be one of
+ * CTX_KEY_NAME_BLOCKED: with such a word, `key` alone does not open the context. The lookahead tests the whole
+ * name word (a blocked word directly followed by the separator and `key`), so `x-the key` has the unblocked name
+ * `the-x` and opens, while `sort-key` has the blocked name `sort` and stays closed.
+ */
+const CTX_KEY_NAME = `(?<![A-Za-z0-9_-])(?!${CTX_KEY_NAME_BLOCKED}(?=[ _-]key))[A-Za-z0-9_-]+[ _-]key`;
+const CTX_WORDS = `(?:(?:${CTX_WORDS_PART})|${CTX_KEY_NAME})`;
 const CONTEXT = new RegExp(`${CTX_WORDS}[A-Za-z0-9_.-]{0,20}["']?[ \\t:=]{0,6}(?:(?:is|was|=>)[ \\t:]{1,3})?["'\`(<]{0,2}$`, "i");
 const ENT_MIN_CTX = 16;
 const ENT_MIN_FREE = 40;

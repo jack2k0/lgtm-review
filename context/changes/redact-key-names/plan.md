@@ -32,6 +32,12 @@ The name word must not be one of: `a an the this that my your our their its his 
 | `password: ""\n- Changeme123Now` | `password: ""\n- [redacted:secret]` |
 | `password: ''\n- 'Changeme123Now'` | `password: ''\n- '[redacted:secret]'` |
 
+| `Authorization: Bearer abc123def456 Changeme123Now for the API` | `Authorization: Bearer [redacted:auth-header] for the API` |
+
+`Authorization: Bearer abc123def456 for the API` and `... abc123def456 Important, see docs` keep everything after the first token: `[redacted:auth-header] for the API`. (Correction 2026-11-03: first listed as count 0 by mistake; main already hides the first token.)
+
+The row `password: ""\n- Changeme123Now` was a pinned unchanged row of `redact-known-leaks`. Hiding it is what the owner approved here, so that one expectation moves to this table; no other expectation changes.
+
 If a placeholder kind differs, stop and report the actual output.
 
 Unchanged byte for byte, count 0:
@@ -48,9 +54,7 @@ Unchanged byte for byte, count 0:
 - `| token | hunter2secret |`
 - `| name | token |\n|---|---|\n| x | gpt-4o-mini |`
 - `| password | v1.2.3-beta |`
-- `Authorization: Bearer abc123def456 for the API`
 - `Authorization: Bearer xyz for the API`
-- `Authorization: Bearer abc123def456 Important, see docs`
 - `password:\n- "item"`
 - `password:\n- "Important"`
 - `password: ""\n- Important`
