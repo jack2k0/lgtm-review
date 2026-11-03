@@ -1265,7 +1265,6 @@ describe("redact: four known redaction leaks", () => {
     'password: ""\nImportant',
     'password = ""\ngetPassword1()',
     'password: ""\nusername: alice1234',
-    'password: ""\n- Changeme123Now',
     'title: ""\nChangeme123Now',
     "| password | required |",
     "| password | see the vault |",
@@ -1286,9 +1285,8 @@ describe("redact: four known redaction leaks", () => {
 });
 
 describe("redact: value after any key name and the A7 gaps", () => {
-  // Rows of context/changes/redact-key-names/plan.md. The two rows for a list under an empty value
-  // (`password: ""\n- Changeme123Now` and its `''` shape) are pinned unchanged by the existing
-  // redact-known-leaks expectation above and are reported in the change report instead of tested here.
+  // Rows of context/changes/redact-key-names/plan.md. The list under an empty value was an unchanged row of
+  // redact-known-leaks; the owner approved hiding it on 2026-11-03 (A7), so that row moved here.
   const rows: [string, string, string][] = [
     ["the wireguard key <token> in config", "the wireguard key S3cr3tVpnToken0123456789 in config", "the wireguard key [redacted:secret] in config"],
     ["wireguard key: <token>", "wireguard key: S3cr3tVpnToken0123456789", "wireguard key: [redacted:secret]"],
@@ -1298,6 +1296,9 @@ describe("redact: value after any key name and the A7 gaps", () => {
     ["password column named pwd", "| user | pwd |\n|---|---|\n| alice | hunter2secret |", "| user | pwd |\n|---|---|\n| alice | [redacted:secret] |"],
     ["second short Bearer token, comma after it", "Authorization: Bearer abc123def456 Changeme123Now, see docs", "Authorization: Bearer [redacted:auth-header], see docs"],
     ["quoted list item under the key", 'password:\n- "Changeme123Now"', 'password:\n- "[redacted:secret]"'],
+    ["list under an empty value", 'password: ""\n- Changeme123Now', 'password: ""\n- [redacted:secret]'],
+    ["quoted list under an empty value", "password: ''\n- 'Changeme123Now'", "password: ''\n- '[redacted:secret]'"],
+    ["second short Bearer token, prose after it", "Authorization: Bearer abc123def456 Changeme123Now for the API", "Authorization: Bearer [redacted:auth-header] for the API"],
   ];
 
   test.each(rows)("%s", (_name, input, expected) => {

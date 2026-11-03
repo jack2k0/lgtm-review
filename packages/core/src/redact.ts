@@ -367,6 +367,11 @@ function isAuthCredentialWord(w: string): boolean {
   );
 }
 
+/** A further `Authorization` token: a long credential word, or a short one that passes `isStrictValue` (A7). */
+function isFurtherAuthWord(w: string): boolean {
+  return isAuthCredentialWord(w) || isStrictValue(w);
+}
+
 function consumeFurtherAuthTokens(tail: string): number {
   let consumed = 0;
   while (consumed < tail.length) {
@@ -382,13 +387,13 @@ function consumeFurtherAuthTokens(tail: string): number {
       const punctLen = punctMatch[0].length;
       const stripped = word.slice(0, word.length - punctLen);
       // A short further credential (`Changeme123Now,`) is also hidden, per the password-like strict test (A7).
-      if (isAuthCredentialWord(stripped) || isStrictValue(stripped)) {
+      if (isFurtherAuthWord(stripped)) {
         consumed = j - punctLen;
       }
       break;
     }
 
-    if (!isAuthCredentialWord(word)) break;
+    if (!isFurtherAuthWord(word)) break;
     consumed = j;
   }
   return consumed;
@@ -894,25 +899,7 @@ function redactNextLine(text: string, st: State): string {
       continue;
     }
 
-    if (emptyQuotes !== undefined) {
-      if (/^[ \t]*-([ \t]|$)/.test(fullNextLine)) {
-        re.lastIndex = nextLineStart;
-        continue;
-      }
-      if (/\s/.test(trimmed) || !isStrictValue(trimmed)) {
-        re.lastIndex = nextLineStart;
-        continue;
-      }
-      const indentLen = fullNextLine.length - fullNextLine.trimStart().length;
-      const indent = fullNextLine.slice(0, indentLen);
-      const replacedLine = `${indent}${ph("secret")}`;
-      out += text.slice(from, nextLineStart) + replacedLine;
-      from = nextLineEnd;
-      st.count++;
-      re.lastIndex = nextLineEnd;
-      continue;
-    }
-
+    // A list item, also under an empty value (`password: ""`, then `- value`): the empty quotes stay.
     if (isSec) {
       const listMatch = /^([ \t]*-[ \t]+)(\S+)$/.exec(fullNextLine);
       if (listMatch !== null) {
@@ -938,6 +925,21 @@ function redactNextLine(text: string, st: State): string {
         re.lastIndex = nextLineStart;
         continue;
       }
+    }
+
+    if (emptyQuotes !== undefined) {
+      if (/\s/.test(trimmed) || !isStrictValue(trimmed)) {
+        re.lastIndex = nextLineStart;
+        continue;
+      }
+      const indentLen = fullNextLine.length - fullNextLine.trimStart().length;
+      const indent = fullNextLine.slice(0, indentLen);
+      const replacedLine = `${indent}${ph("secret")}`;
+      out += text.slice(from, nextLineStart) + replacedLine;
+      from = nextLineEnd;
+      st.count++;
+      re.lastIndex = nextLineEnd;
+      continue;
     }
 
     let schemePrefix = "";
