@@ -1298,6 +1298,9 @@ describe("redact: value after any key name and the A7 gaps", () => {
     ["quoted list item under the key", 'password:\n- "Changeme123Now"', 'password:\n- "[redacted:secret]"'],
     ["list under an empty value", 'password: ""\n- Changeme123Now', 'password: ""\n- [redacted:secret]'],
     ["quoted list under an empty value", "password: ''\n- 'Changeme123Now'", "password: ''\n- '[redacted:secret]'"],
+    ["a version word after the token stays", "Authorization: Bearer abc123def456 Version2", "Authorization: Bearer [redacted:auth-header] Version2"],
+    ["a doc word after the token stays", "Authorization: Bearer abc123def456 README1st, see docs", "Authorization: Bearer [redacted:auth-header] README1st, see docs"],
+    ["a word ending in digits after the token stays", "Authorization: Bearer abc123def456 Changelog2024", "Authorization: Bearer [redacted:auth-header] Changelog2024"],
     ["second short Bearer token, prose after it", "Authorization: Bearer abc123def456 Changeme123Now for the API", "Authorization: Bearer [redacted:auth-header] for the API"],
   ];
 
@@ -1326,6 +1329,9 @@ describe("redact: value after any key name and the A7 gaps", () => {
     'password: ""\n- Important',
     'password: ""\n- gpt-4o-mini',
     'title: ""\n- Changeme123Now',
+    "index key createdAt2024Index",
+    "| password | bcrypt12 |",
+    "| password | sha256sum |",
   ];
 
   test.each(unchanged.map((t, i) => [`keep ${i + 1}`, t] as const))("unchanged: %s", (_name, input) => {

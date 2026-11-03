@@ -367,9 +367,13 @@ function isAuthCredentialWord(w: string): boolean {
   );
 }
 
-/** A further `Authorization` token: a long credential word, or a short one that passes `isStrictValue` (A7). */
+/**
+ * A further `Authorization` token: a long credential word, or a shorter one (A7) of at least 12 characters that
+ * passes `isStrictValue` and has a letter after its last digit, so `Changeme123Now` is hidden while words such as
+ * `Version2`, `README1st` or `Changelog2024` stay.
+ */
 function isFurtherAuthWord(w: string): boolean {
-  return isAuthCredentialWord(w) || isStrictValue(w);
+  return isAuthCredentialWord(w) || (w.length >= 12 && isStrictValue(w) && /\d[^\d]*[A-Za-z][^\d]*$/.test(w));
 }
 
 function consumeFurtherAuthTokens(tail: string): number {
@@ -851,6 +855,8 @@ const PASSWORD_KEY = /^(?:pass(?:[_-]?(?:word|wd|phrase))?|pwd)$/i;
 const PASSWORD_PLAIN_VALUE = /^[A-Za-z0-9]{8,}$/;
 /** An SQL type annotation such as `varchar255` or `string64`, not a literal. */
 const PASSWORD_SQL_TYPE = /^(?:var)?char\d+$|^n?varchar\d+$|^string\d+$|^u?int\d+$|^float\d+$|^bytes?\d+$|^text\d+$/i;
+/** A hash or key-derivation name such as `bcrypt12`, `sha256sum` or `argon2id`, which describes a password column. */
+const PASSWORD_HASH_NAME = /^(?:bcrypt|scrypt|argon2(?:id|i|d)?|pbkdf2|sha\d*|md5|blake2[bs]?)[a-z0-9]*$/i;
 
 function isPasswordKey(key: string): boolean {
   return PASSWORD_KEY.test(key);
@@ -861,7 +867,7 @@ function isPasswordKey(key: string): boolean {
  * one letter, not an SQL type annotation. Only checked for password keys; every other column keeps `isStrictValue`.
  */
 function isPasswordValue(v: string): boolean {
-  return PASSWORD_PLAIN_VALUE.test(v) && /\d/.test(v) && /[A-Za-z]/.test(v) && !PASSWORD_SQL_TYPE.test(v);
+  return PASSWORD_PLAIN_VALUE.test(v) && /\d/.test(v) && /[A-Za-z]/.test(v) && !PASSWORD_SQL_TYPE.test(v) && !PASSWORD_HASH_NAME.test(v);
 }
 
 function redactNextLine(text: string, st: State): string {
@@ -1274,7 +1280,7 @@ const CTX_WORDS_PART =
   "token|secret|passw(?:or)?d|api[ _-]?key|access[ _-]?key|credentials?|private[ _-]?key|bearer|authorization";
 /** Words whose `key` is prose (`the key`, `primary key`), so `<name> key` must not open the secret context. */
 const CTX_KEY_NAME_BLOCKED =
-  "(?:a|an|the|this|that|my|your|our|their|its|his|her|primary|foreign|unique|composite|sort|partition|hash|cache|lookup|map|dict|object|registry|hot|shortcut|keyboard|press)";
+  "(?:a|an|the|this|that|my|your|our|their|its|his|her|primary|foreign|index|unique|composite|sort|partition|hash|cache|lookup|map|dict|object|registry|hot|shortcut|keyboard|press)";
 /**
  * `<name> key` for any name word: one word of letters, digits, `_` or `-`, then a space, `_` or `-`, then `key`
  * (case-insensitive; the separators after it are the ones CONTEXT already accepts). The name must not be one of
