@@ -1284,3 +1284,90 @@ describe("redact: four known redaction leaks", () => {
     expect(redact(once.text).text).toBe(once.text);
   });
 });
+
+describe("redact: value after any key name and the A7 gaps", () => {
+  // Rows of context/changes/redact-key-names/plan.md. The two rows for a list under an empty value
+  // (`password: ""\n- Changeme123Now` and its `''` shape) are pinned unchanged by the existing
+  // redact-known-leaks expectation above and are reported in the change report instead of tested here.
+  const rows: [string, string, string][] = [
+    ["the wireguard key <token> in config", "the wireguard key S3cr3tVpnToken0123456789 in config", "the wireguard key [redacted:secret] in config"],
+    ["wireguard key: <token>", "wireguard key: S3cr3tVpnToken0123456789", "wireguard key: [redacted:secret]"],
+    ["the ssh key <token>", "the ssh key S3cr3tVpnToken0123456789", "the ssh key [redacted:secret]"],
+    ["signing_key = <token> (assignment rule guard)", "signing_key = S3cr3tVpnToken0123456789", "signing_key = [redacted:secret]"],
+    ["password cell beside its key", "| password | hunter2secret |", "| password | [redacted:secret] |"],
+    ["password column named pwd", "| user | pwd |\n|---|---|\n| alice | hunter2secret |", "| user | pwd |\n|---|---|\n| alice | [redacted:secret] |"],
+    ["second short Bearer token, comma after it", "Authorization: Bearer abc123def456 Changeme123Now, see docs", "Authorization: Bearer [redacted:auth-header], see docs"],
+    ["quoted list item under the key", 'password:\n- "Changeme123Now"', 'password:\n- "[redacted:secret]"'],
+  ];
+
+  test.each(rows)("%s", (_name, input, expected) => {
+    const once = redact(input);
+    expect(once.text).toBe(expected);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+
+  const unchanged: string[] = [
+    "the key point is S3cr3tVpnToken0123456789",
+    "primary key UserAccount2024IdValue",
+    "press the key Ctrl1Shift2P",
+    "the wireguard key is described in the docs",
+    "the ssh key file is ~/.ssh/id_ed25519",
+    "the monkey Abcdefghijklmnop1234",
+    "| password | varchar255 |",
+    "| password | string64 |",
+    "| password | required |",
+    "| token | hunter2secret |",
+    "| name | token |\n|---|---|\n| x | gpt-4o-mini |",
+    "| password | v1.2.3-beta |",
+    "Authorization: Bearer xyz for the API",
+    'password:\n- "item"',
+    'password:\n- "Important"',
+    'password: ""\n- Important',
+    'password: ""\n- gpt-4o-mini',
+    'title: ""\n- Changeme123Now',
+  ];
+
+  test.each(unchanged.map((t, i) => [`keep ${i + 1}`, t] as const))("unchanged: %s", (_name, input) => {
+    const once = redact(input);
+    expect(once.text).toBe(input);
+    expect(once.count).toBe(0);
+    expect(redact(once.text).text).toBe(once.text);
+  });
+
+  // The plan lists `Authorization: Bearer abc123def456 for the API` and `... abc123def456 Important, see docs`
+  // as byte-for-byte with count 0, but main already hides the first Bearer token there (the existing tests in the
+  // descriptions above expect it). These rows assert main's output: the new further-token rule hides no more than
+  // `for` and `Important` did before.
+  test("the sentence tail after a redacted first token stays visible", () => {
+    expect(redact("Authorization: Bearer abc123def456 for the API").text).toBe(
+      "Authorization: Bearer [redacted:auth-header] for the API",
+    );
+    expect(redact("Authorization: Bearer abc123def456 Important, see docs").text).toBe(
+      "Authorization: Bearer [redacted:auth-header] Important, see docs",
+    );
+  });
+
+  test("blocked names keep the context closed, any other name opens it", () => {
+    const t = "S3cr3tVpnToken0123456789";
+    // blocked name words (plan list) close the context on the entropy path
+    for (const name of ["the", "this", "that", "my", "your", "our", "their", "his", "her", "primary", "foreign", "unique", "composite", "sort", "partition", "hash", "cache", "lookup", "map", "dict", "object", "registry", "hot", "shortcut", "keyboard", "press"]) {
+      expect(redact(`${name} key ${t}`).count, name).toBe(0);
+    }
+    // separators the context already accepts, any case, and a name of digits / `_` / `-`
+    for (const head of ["db key ", "db_Key ", "1 key ", "wireguard key is ", "WireGuard key = ", "(server key "]) {
+      expect(redact(`${head}${t}`).count, head).toBeGreaterThanOrEqual(1);
+    }
+    // a blocked word as part of a longer name is not a blocked name
+    expect(redact(`the-x key ${t}`).count).toBeGreaterThanOrEqual(1);
+  });
+
+  test("password table columns keep non-literal values", () => {
+    for (const key of ["password", "PASSWD", "Pass_Word", "pass-phrase", "pwd", "pass"]) {
+      expect(redact(`| ${key} | varchar255 |`).count, key).toBe(0);
+      expect(redact(`| ${key} | required |`).count, key).toBe(0);
+      expect(redact(`| ${key} | hunter2secret |`).count, key).toBeGreaterThanOrEqual(1);
+    }
+    // a non-password secret column keeps `isStrictValue` only
+    expect(redact("| token | hunter2secret |").count).toBe(0);
+  });
+});

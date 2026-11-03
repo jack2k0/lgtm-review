@@ -288,4 +288,14 @@ describe("redact: performance (1 MB adversarial inputs)", () => {
     const [ms] = bestTimes([() => void redact(text)]);
     expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
   });
+
+  test.each([
+    ["`the ssh key ` repeats", "the ssh key "],
+    ["`wireguard key: ` repeats", "wireguard key: "],
+  ])("1 MB of %s", { timeout: 60_000 }, (_name, unit) => {
+    const text = unit.repeat(Math.ceil(MB / unit.length)).slice(0, MB);
+    expect(text.length).toBe(MB);
+    const [ms] = bestTimes([() => void redact(text)]);
+    expect(ms, `${ms!.toFixed(0)} ms`).toBeLessThan(500);
+  });
 });
