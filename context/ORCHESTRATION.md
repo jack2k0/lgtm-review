@@ -138,4 +138,5 @@ Etap A zakończony. MVP KOMPLETNE + v0.2 S-05 (review-hints + --summary) S-10-li
 - Odłożone z S-22/S-23: sekret 3-znakowy po `:` (test `token: abc` tego pilnuje); core ucina tekst promptu do 200 znaków przed redakcją, więc token na granicy cięcia zostawia krótki prefiks (także w `--summary`).
 - Odłożone z S-24: `pnpm lint --fix` nadal liczy się jako check, bo autofix jest ukryty za nazwą skryptu.
 - Znane luki redakcji, jawne także na `main`, do decyzji Jacka (szczegóły: `context/archive/redact-known-leaks/reviews/findings.md`, uwagi 2, 4 i 5): wiersz tabeli `password` z `hunter2secret` (świadomy koszt: bez wielkiej litery i poniżej 16 znaków); drugi token `Authorization` poniżej 16 znaków; `password:` i niżej `- "Changeme123Now"`; `password: ""` i niżej `- Changeme123Now`.
+- Wyciek A6 z `docs/review-2026-11-02.md`, do decyzji Jacka: `the wireguard key S3cr3tVpnToken0123456789 in config`, `wireguard key:`, `the ssh key` zostają jawne, a `the api key` jest ukryte.
 brak (S-04 import-map zmergowane i zarchiwizowane 2026-10-23; audyt realnych logów S-14 zrobiony)
