@@ -68,7 +68,7 @@ export function listFiles(
     try {
       runner(
         "git",
-        ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        ["--no-optional-locks", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         {
           cwd: dir,
           timeout: opts?.timeout ?? DEFAULT_LIST_FILES_TIMEOUT,
