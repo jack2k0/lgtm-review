@@ -72,6 +72,21 @@ export async function archiveSessions(projectDir: string, archiveDir: string): P
     warnings: [],
   };
 
+  // The leaf is lstat-ed before any mkdir/chmod/write: a symlinked archiveDir would redirect them elsewhere.
+  // (A symlinked archive root above it is deliberately left alone.)
+  try {
+    const leafSt = await lstat(archiveDir);
+    if (leafSt.isSymbolicLink() || !leafSt.isDirectory()) {
+      result.warnings.push(`archive path ${archiveDir} is ${leafSt.isSymbolicLink() ? "a symlink" : "not a directory"}, skipped`);
+      return result;
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      result.warnings.push(`archive path ${archiveDir} unreadable (${err instanceof Error ? err.message : String(err)})`);
+      return result;
+    }
+  }
+
   await mkdir(archiveDir, { recursive: true, mode: 0o700 });
   if (process.platform !== "win32") {
     await chmod(archiveDir, 0o700).catch(() => undefined);
