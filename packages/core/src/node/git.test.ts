@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -479,6 +479,32 @@ describe("gitCrosscheck (real git integration)", () => {
     } finally {
       rmSync(realRepo, { recursive: true, force: true });
       rmSync(symDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("read-only git (no optional locks)", () => {
+  it("does not rewrite .git/index when status would refresh the stat cache", async () => {
+    const repo = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-nolock-")));
+    try {
+      const git = (...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-C", repo, ...a], { stdio: "ignore" });
+      git("init", "-q", "-b", "main");
+      writeFileSync(join(repo, "f.txt"), "same\n");
+      git("add", ".");
+      git("commit", "-q", "-m", "init");
+      writeFileSync(join(repo, "f.txt"), "same\n");
+      const t = new Date(Date.now() + 5000);
+      utimesSync(join(repo, "f.txt"), t, t);
+      const idx = join(repo, ".git", "index");
+      const before = readFileSync(idx);
+      const mtime = statSync(idx).mtimeMs;
+      await gitCrosscheck({ dir: repo, branch: "main", startedAt: null, endedAtMs: 0, sessionFiles: [] });
+      await runGit(repo, ["status", "--porcelain=v1", "-z"]);
+      expect(readFileSync(idx).equals(before)).toBe(true);
+      expect(statSync(idx).mtimeMs).toBe(mtime);
+      expect(existsSync(join(repo, ".git", "index.lock"))).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
     }
   });
 });

@@ -5,11 +5,11 @@ import type { GitCrosscheckResponse, GitFileEntry } from "../schema.js";
 
 export type RunGit = (dir: string, args: readonly string[]) => Promise<string | null>;
 
-/** `git -C <dir> <args>` via execFile (fixed arguments, no shell, timeout 10 s, maxBuffer 32 MB, windowsHide, utf8); stdout, or null on any failure. */
+/** `git --no-optional-locks -C <dir> <args>` via execFile (read-only: no optional index.lock, no stat-cache refresh) (fixed arguments, no shell, timeout 10 s, maxBuffer 32 MB, windowsHide, utf8); stdout, or null on any failure. */
 export const runGit: RunGit = (dir, args) =>
   new Promise((resolve) => {
     try {
-      execFile("git", ["-C", dir, ...args], { timeout: 10_000, maxBuffer: 32 * 1024 * 1024, windowsHide: true, encoding: "utf8" }, (err, stdout) =>
+      execFile("git", ["--no-optional-locks", "-C", dir, ...args], { timeout: 10_000, maxBuffer: 32 * 1024 * 1024, windowsHide: true, encoding: "utf8" }, (err, stdout) =>
         resolve(err ? null : stdout),
       );
     } catch {
