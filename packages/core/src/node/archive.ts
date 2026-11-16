@@ -58,7 +58,7 @@ function isSafeName(name: string): boolean {
  * (`agent-*.jsonl` and `agent-*.meta.json`) in `<id>/subagents/` for each session id found.
  *
  * Session ids must match `[A-Za-z0-9_-]+`; other names are skipped. Skips symlinks (files and the
- * `<id>` / `subagents` source directories) and refuses to write through symlinks in the archive
+ * `<id>` / `subagents` source directories) and refuses to write through symlinks in the archive, a symlinked `archiveDir` included
  * (all with warnings). Logs are append-only: a destination larger than its source is never overwritten.
  * Unchanged files (same size, destination mtime within 1000ms of the source) are skipped. Atomic copies
  * use a temporary file created 0600 and cleaned up on error. Best-effort POSIX permissions 0700 for directories.
