@@ -20,3 +20,5 @@ allow: ^context/(changes|archive)/gate-coverage/
 deps: no
 schema: no
 ```
+
+Addendum (from git-no-locks review): 5. the `git` helper in `scripts/gate.mjs` (~line 170) passes `--no-optional-locks` first, so the gate's `git status` (~line 845) never rewrites `.git/index`. Test: the existing gate test helpers show the argument, or an index byte check like `packages/core/src/node/git.test.ts`.
