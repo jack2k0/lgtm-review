@@ -1,4 +1,5 @@
 reviewers: opus, haiku
+findings: none
 
 | # | Tag | file:line | Finding | Reviewer | Cross-check | Verdict | Evidence or reason | Caught late by |
 |---|---|---|---|---|---|---|---|---|
