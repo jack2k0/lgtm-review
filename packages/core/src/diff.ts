@@ -1,3 +1,4 @@
+import { cutForDisplay } from "./redact.js";
 import type { FileDiff, Hunk } from "./schema.js";
 
 /**
@@ -58,7 +59,7 @@ export function extractPatch(raw: unknown, maxLines: number = DIFF_LINES_MAX): R
       if (lines.length < left) {
         // The stored line keeps its one-character prefix, so the text itself is cut at DIFF_LINE_CHARS_MAX.
         if (l.length > DIFF_LINE_CHARS_MAX + 1) {
-          lines.push(l.slice(0, DIFF_LINE_CHARS_MAX + 1));
+          lines.push(cutForDisplay(l, DIFF_LINE_CHARS_MAX + 1, ""));
           cut = true;
         } else lines.push(l);
       } else cut = true;
@@ -89,7 +90,7 @@ export function createPatch(content: string, maxLines: number = DIFF_LINES_MAX):
     if (last) end = n;
     total++;
     if (lines.length < maxLines) {
-      const l = content.slice(start, Math.min(end, start + DIFF_LINE_CHARS_MAX));
+      const l = cutForDisplay(content.slice(start, end), DIFF_LINE_CHARS_MAX, "");
       if (end - start > DIFF_LINE_CHARS_MAX) cut = true;
       lines.push(`+${l}`);
     } else cut = true;
@@ -136,8 +137,8 @@ function toHunk(h: RawHunk, limit: number): Hunk {
   for (let i = 0; i < h.lines.length && i < limit; i++) {
     const l = h.lines[i] ?? "";
     const c = l.charAt(0);
-    if (c === "+" || c === "-" || c === " ") lines.push({ t: c, s: l.slice(1, 1 + DIFF_LINE_CHARS_MAX) });
-    else lines.push({ t: " ", s: l.slice(0, DIFF_LINE_CHARS_MAX) });
+    if (c === "+" || c === "-" || c === " ") lines.push({ t: c, s: cutForDisplay(l.slice(1), DIFF_LINE_CHARS_MAX, "") });
+    else lines.push({ t: " ", s: cutForDisplay(l, DIFF_LINE_CHARS_MAX, "") });
   }
   return { header: hunkHeader(h), lines };
 }

@@ -1,6 +1,6 @@
 import { createPatch, extractPatch, type RawPatch } from "./diff.js";
 import { emptyStats, EVIDENCE_LINES_MAX, scanContent, scanDiffLines, type EditStats } from "./hints.js";
-import { trimPartialSecret } from "./redact.js";
+import { cutForDisplay, trimPartialSecret } from "./redact.js";
 import type { Warning } from "./schema.js";
 
 /**
@@ -226,8 +226,18 @@ function countDiffLines(lines: unknown): { added: number; removed: number } {
 
 /** Text of a message `content` (string, or list of text blocks), truncated to `max`. */
 function blocksText(content: unknown, max: number, sep: string): string {
-  const tr = max === PROMPT_TEXT_MAX || max === QUOTE_MAX || max === HINT_MAX ? truncateText : truncate;
-  if (typeof content === "string") return tr(content, max);
+  return cutBlocks(blocksRaw(content, max, sep), max);
+}
+
+/** Display cut of a joined message text: prompts, quotes and hints keep `truncateText`; the rest goes through `cutForDisplay`. */
+function cutBlocks(s: string, max: number): string {
+  if (max === PROMPT_TEXT_MAX || max === QUOTE_MAX || max === HINT_MAX) return truncateText(s, max);
+  return cutForDisplay(s, max, "");
+}
+
+/** The text blocks of a message `content` joined with `sep`, read until at least `max` characters are in; not yet cut. */
+function blocksRaw(content: unknown, max: number, sep: string): string {
+  if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   let out = "";
   let first = true;
@@ -237,7 +247,7 @@ function blocksText(content: unknown, max: number, sep: string): string {
     first = false;
     if (out.length >= max) break;
   }
-  return tr(out, max);
+  return out;
 }
 
 /** Last `max` characters of a message `content` (string, or list of text blocks). */
@@ -455,10 +465,11 @@ export function createParser(opts: ParserOptions = {}): Parser {
           continue;
         }
         const isError = b.is_error === true;
-        const text = blocksText(b.content, RESULT_TEXT_MAX, "\n");
+        const rawText = blocksRaw(b.content, RESULT_TEXT_MAX, "\n");
+        const text = cutBlocks(rawText, RESULT_TEXT_MAX);
         const ev: ToolResultEvent = { type: "tool_result", toolUseId: id, isError, text, background: false, ts: nonEmptyStr(rec.timestamp) ?? null, line: lineNo };
         if (agentTag !== undefined) ev.agentId = agentTag;
-        if (text.length >= RESULT_TEXT_MAX) {
+        if (rawText.length >= RESULT_TEXT_MAX) {
           const tail = blocksTail(b.content, RESULT_TAIL_MAX);
           if (tail.length > 0) ev.tail = tail;
         }

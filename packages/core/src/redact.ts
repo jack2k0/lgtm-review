@@ -545,6 +545,29 @@ export function trimPartialSecret(cut: string): string {
   return cut;
 }
 
+/**
+ * Cuts log-derived text to at most `max` characters for display, ellipsis included. A cut that lands inside
+ * a token must not leave a secret prefix that later redaction no longer recognises, so the cut ends on the
+ * last whitespace of its final `wordWindow` (20) characters when there is one, then passes through `trimPartialSecret`.
+ * Text that already fits is returned unchanged.
+ */
+export function cutForDisplay(s: string, max: number, ellipsis = "…", wordWindow = 20): string {
+  if (s.length <= max) return s;
+  const keep = Math.max(0, max - ellipsis.length);
+  let cut = s.slice(0, keep);
+  if (keep < s.length && !/\s/.test(s[keep]!)) {
+    const from = Math.max(0, keep - wordWindow);
+    for (let i = cut.length - 1; i >= from; i--) {
+      if (/\s/.test(cut[i]!)) {
+        if (i > 0) cut = cut.slice(0, i);
+        break;
+      }
+    }
+  }
+  cut = trimPartialSecret(cut).trimEnd();
+  return cut === "" ? "" : cut + ellipsis;
+}
+
 /** Values that are references, types or masks rather than literals. A secret-like key disables the UUID and quoted-prose exemptions. */
 function isNonLiteral(v: string, quoted: boolean, secretContext = false): boolean {
   if (isPlaceholder(v)) return true;

@@ -5,7 +5,7 @@
  */
 
 import type { PromptAnalysis, PromptDetail } from "./schema.js";
-import { redact, type RedactOptions } from "./redact.js";
+import { cutForDisplay, redact, type RedactOptions } from "./redact.js";
 
 /** Bump when the system prompt or the condensed input shape changes. Part of the cache key. */
 export const TITLE_PROMPT_VERSION = "1";
@@ -217,10 +217,8 @@ function stripControls(s: string): string {
 function cutAtWord(s: string, max: number): string {
   const chars = [...s];
   if (chars.length <= max) return s;
-  const head = chars.slice(0, max - 1).join("");
-  const space = head.lastIndexOf(" ");
-  const body = (space > 0 ? head.slice(0, space) : head).trimEnd();
-  return body === "" ? "" : `${body}…`;
+  const headUnits = chars.slice(0, max - 1).join("").length;
+  return cutForDisplay(s, headUnits + 1, "…", Infinity);
 }
 
 function lineStartsWithThink(s: string): boolean {
