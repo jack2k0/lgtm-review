@@ -53,7 +53,7 @@ npx lgtm-review --summary  # markdown summary of a session for a PR description
 npx lgtm-review --export <id-prefix>  # self-contained HTML file of a session (redaction is best-effort)
 ```
 
-The `--raw` flag prints log text unredacted (only valid with `--list` or `--json`; by default secrets, repo paths, and usernames are redacted best-effort).
+The `--raw` flag prints log text unredacted (only valid with `--list` or `--json`; by default secrets (`[redacted:<kind>]`), the home directory (`~`), the repository directory (`<repo>`) and usernames (`<user>`) are redacted best-effort). Without `--raw`, `--json` shows the top-level `dir` as `<repo>`.
 
 Merge gate (run from a worktree; exit 0 pass, 1 hard fail, 2 needs a look):
 

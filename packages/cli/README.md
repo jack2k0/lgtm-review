@@ -67,7 +67,7 @@ Without a mode flag, the command starts a local web UI for the Claude Code sessi
 
 ### Other
 
-- `--raw` prints log text unredacted (only valid with `--list` or `--json`; by default secrets, repo paths, and usernames are redacted best-effort).
+- `--raw` prints log text unredacted (only valid with `--list` or `--json`; by default secrets (`[redacted:<kind>]`), the home directory (`~`), the repository directory (`<repo>`) and usernames (`<user>`) are redacted best-effort). Without `--raw`, `--json` shows the top-level `dir` as `<repo>`.
 - `--version` prints the version.
 - `--help` prints usage help.
 
@@ -213,7 +213,7 @@ npx lgtm-review --summary [--session <id-prefix>] [--no-titles]
 
 Prints markdown for a PR description: title, branch, date, a table of prompts (status, recommendation, title, file count, `+/-`) and, for every prompt that is unchecked, failing or has hints, its reason and hints (severity, rule, path; repeated warn/info hints of one rule collapse over 3). Paths below the repository are relative. A footer states that statuses are heuristic. `--summary` cannot be combined with `--list` or `--json` (exit 1).
 
-The summary contains no command output (a failing check shows only `<command> failed`), no file contents and no full prompt text. Titles are the prompt text with newlines collapsed to spaces and cut to 80 characters, with token-like text (API keys, `Bearer ...`, `password=...`, long hex or base64-like strings) replaced by `[redacted]`; this is best effort.
+The summary contains no command output (a failing check shows only `<command> failed`), no file contents and no full prompt text. Titles are the prompt text with newlines collapsed to spaces and cut to 80 characters, with token-like text (API keys, `Bearer ...`, `password=...`, long hex or base64-like strings) replaced by `[redacted:<kind>]`; your OS user name becomes `<user>` and the repository directory `<repo>`. This is best effort.
 
 Privacy: prompt titles and file paths can still reveal internal names, so read the text before you paste it into a public PR, or use `--no-titles` to print "Prompt N" instead of titles. Markdown-special characters (`|`, backticks, `*`, `_`, brackets, `<`, `>`) in titles and paths are escaped and newlines are collapsed.
 
