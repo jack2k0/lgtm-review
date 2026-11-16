@@ -1,6 +1,6 @@
 // Pack packages/cli, verify tarball contents, run it via npx in isolation.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, realpathSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,9 +36,9 @@ function fail(reason) {
 }
 
 try {
-  const packDir = mkdtempSync(join(tmpdir(), "lgtm-smoke-pack-"));
+  const packDir = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-smoke-pack-")));
   dirs.push(packDir);
-  const runDir = mkdtempSync(join(tmpdir(), "lgtm-smoke-run-"));
+  const runDir = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-smoke-run-")));
   dirs.push(runDir);
 
   execFileSync("pnpm", ["pack", "--pack-destination", packDir], { cwd: cliDir, stdio: "pipe" });

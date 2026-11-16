@@ -49,13 +49,13 @@ export function parseWorktreeList(stdout: string): WorktreeList {
   return { main, worktrees };
 }
 
-/** `git -C <dir> worktree list --porcelain -z`; null on any failure (git missing, not a repository, `dir` missing). */
+/** `git --no-optional-locks -C <dir> worktree list --porcelain -z`; null on any failure (git missing, not a repository, `dir` missing). */
 export function listWorktrees(dir: string): Promise<WorktreeList | null> {
   return new Promise((resolve) => {
     try {
       execFile(
         "git",
-        ["-C", dir, "worktree", "list", "--porcelain", "-z"],
+        ["--no-optional-locks", "-C", dir, "worktree", "list", "--porcelain", "-z"],
         { timeout: 5000, maxBuffer: 1024 * 1024, windowsHide: true, encoding: "utf8" },
         (err, stdout) => resolve(err ? null : parseWorktreeList(stdout)),
       );
