@@ -1,7 +1,10 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { removedLines } from "./gate.mjs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, utimesSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { removedLines, run, tierOf } from "./gate.mjs";
 
 function hasHistory() {
   try {
@@ -370,5 +373,96 @@ test("a", () => {
 
     const removed = removedLines(diff, () => oldContent);
     assert.deepEqual(removed, ["s.test.ts:2: // expect(f(1)).toBe(2);"]);
+  });
+});
+
+/** Temp repo with a base commit on main; `edit` runs on a change branch; `inspect(dir)` runs after the gate. */
+function gateIn(base, edit, argv = ["--base", "main"], inspect = () => {}) {
+  const dir = mkdtempSync(join(tmpdir(), "gate-cov-"));
+  const cwd = process.cwd();
+  const sh = (...a) => execFileSync("git", a, { cwd: dir, stdio: "ignore" });
+  const put = (rel, text) => {
+    mkdirSync(join(dir, rel, ".."), { recursive: true });
+    writeFileSync(join(dir, rel), text);
+  };
+  try {
+    sh("init", "-q", "-b", "main");
+    sh("config", "user.email", "t@t");
+    sh("config", "user.name", "t");
+    for (const [k, v] of Object.entries(base)) put(k, v);
+    sh("add", "-A");
+    sh("commit", "-q", "-m", "base");
+    sh("checkout", "-q", "-b", "change");
+    process.chdir(dir);
+    edit({ dir, put, sh });
+    let text = "";
+    const code = run(argv, process.env, (t) => (text += t));
+    inspect(dir);
+    return { code, text };
+  } finally {
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe("gate coverage (S-39)", () => {
+  const fx = "packages/core/fixtures/sessions/a.jsonl";
+  test("modified existing session fixture is a hard fail", () => {
+    const r = gateIn({ [fx]: "{}\n" }, ({ put }) => put(fx, '{"x":1}\n'));
+    assert.equal(r.code, 1);
+    assert.match(r.text, /FAIL ground-truth.*session fixture/);
+  });
+  test("deleted existing session fixture is a hard fail", () => {
+    const r = gateIn({ [fx]: "{}\n" }, ({ dir }) => rmSync(join(dir, fx)));
+    assert.equal(r.code, 1);
+    assert.match(r.text, /FAIL ground-truth/);
+  });
+  test("a new session fixture stays allowed", () => {
+    const r = gateIn({ "README.md": "x\n" }, ({ put }) => put(fx, "{}\n"));
+    assert.match(r.text, /PASS ground-truth/);
+  });
+  test("pnpm-workspace.yaml needs deps: yes", () => {
+    const r = gateIn({ "pnpm-workspace.yaml": "a: 1\n" }, ({ put }) => put("pnpm-workspace.yaml", "a: 2\n"));
+    assert.equal(r.code, 1);
+    assert.match(r.text, /FAIL dependencies/);
+  });
+  test("removed expectation in .mjs, .spec and perf tests is reported", () => {
+    for (const f of ["scripts/x.test.mjs", "packages/a/src/y.spec.ts", "scripts/z.perf.test.mjs"]) {
+      const r = gateIn({ [f]: 'test("a", () => {\n  assert.equal(1, 1);\n});\n' }, ({ put }) => put(f, 'test("a", () => {\n});\n'));
+      assert.equal(r.code, 2, f);
+      assert.match(r.text, /EYES removed-expectations/, f);
+    }
+  });
+  test("tiers: new High files, spec/mjs tests Low, gate.test.mjs High", () => {
+    for (const f of [
+      "packages/cli/src/format.ts",
+      "packages/cli/src/map.ts",
+      "packages/cli/src/llm.ts",
+      "packages/cli/src/paths.ts",
+      "packages/core/src/llm-input.ts",
+      "packages/core/src/steps.ts",
+      "packages/core/src/node/discover.ts",
+      "packages/core/src/node/worktrees.ts",
+      "scripts/gate.test.mjs",
+    ]) assert.equal(tierOf(f), "High", f);
+    for (const f of ["packages/a/src/x.spec.ts", "scripts/other.test.mjs"]) assert.equal(tierOf(f), "Low", f);
+  });
+  test("gate does not rewrite .git/index (git --no-optional-locks)", () => {
+    let before;
+    let after;
+    gateIn(
+      { "a.txt": "a\n" },
+      ({ dir, put }) => {
+        put("b.txt", "b\n");
+        execFileSync("git", ["add", "-A"], { cwd: dir });
+        execFileSync("git", ["commit", "-q", "-m", "c"], { cwd: dir });
+        const t = new Date(Date.now() + 5000); // stale stat cache: a plain `git status` would refresh the index
+        utimesSync(join(dir, "b.txt"), t, t);
+        before = readFileSync(join(dir, ".git", "index"));
+      },
+      ["--base", "main", "--merge"],
+      (dir) => (after = readFileSync(join(dir, ".git", "index")))
+    );
+    assert.ok(before.equals(after));
   });
 });
