@@ -390,6 +390,40 @@ Options: **A** declare Linux and macOS only, in the README and `engines`-style n
 
 The macOS failure is one test: `worktrees.test.ts:75` hard-codes `../../elsewhere/wt`. Proposed: expect `relative(tmp, "/elsewhere/wt")`. It needs the owner's OK because it changes an existing expectation.
 
+## v0.5 extension: review findings (proposed 2026-11-16)
+
+> From the whole-repo review of 2026-11-16 at `dde9d90` (Fable 5.2 high, Grok 4.7 xhigh; the Gemini 3.8 pass was still running when this was written and is added when it lands). No new product requirements: every slice hardens an existing FR, guardrail or NFR. Reviewer IDs: `F#` = Fable finding, `G#` = Grok finding. **Verified** = the orchestrator confirmed the code path by reading the source; **repro first** = only the reviewer's reproduction so far, so the slice starts by turning it into a failing test.
+
+**Sequencing goal:** trust first (secrets leaving the machine), then the "read-only git" promise, then a green `pnpm check` on every supported OS, then the status rule (needs owner decisions and a real-log audit), then gate and archive hardening.
+
+| ID   | Change ID           | Outcome (user can …)                                                                                                   | Size | Tier         | Prerequisites | Source (evidence)                     | PRD refs                     | Status   |
+| ---- | ------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---- | ------------ | ------------- | ------------------------------------- | ---------------------------- | -------- |
+| S-32 | redact-cut          | rely on every display cut (labels, step command, check excerpt, diff lines, titles) never leaving a partial secret       | S    | High         | —             | F3 + G1 (verified)                    | FR-008, Guardrail no secrets | proposed |
+| S-33 | redact-outputs      | rely on `--summary` hiding the OS user name and `--json` hiding the repo path, as the README promises                   | S    | High         | —             | F2 (verified), F10 + G4 docs nit      | FR-008, Guardrail no secrets | proposed |
+| S-34 | redact-shapes-2     | rely on redaction for secret-named values that look like references and for common credential shapes                   | M    | High         | S-32          | F1, F10 (repro first)                 | FR-008, Guardrail no secrets | proposed |
+| S-35 | git-no-locks        | trust that opening the Git view never rewrites `.git/index` or takes `index.lock`                                      | S    | High         | —             | F7 (verified)                         | NFR read-only git            | proposed |
+| S-36 | check-macos-release | run `pnpm check` green on macOS and publish from a `v*` tag                                                             | S    | High         | —             | F8, F9 (verified)                     | NFR packaging                | proposed |
+| S-37 | status-tree         | trust `checked` only when the check ran on the edited tree (no stash, sibling or agent worktree, unplaced scope)        | M    | High + audit | owner (SC-4)  | F4 (repro first), G2, G3 (verified)   | FR-002, FR-004, FR-017       | proposed |
+| S-38 | status-evidence     | trust `checked` only when the check's result was observed and no unrelated later pass hides a failure                  | L    | High + audit | S-37, owner   | F5, F6 (repro first)                  | FR-002, FR-004               | proposed |
+| S-39 | gate-coverage       | rely on the gate for fixture inputs, workspace overrides, `.mjs`/`.spec` expectations and High-risk files tiered High   | S    | High         | —             | F11 (repro first)                     | Process (REVIEW.md)          | proposed |
+| S-40 | archive-leaf-link   | rely on `--archive` refusing a symlinked per-project archive directory                                                 | S    | High         | —             | F12 (repro first)                     | FR-008 (archive)             | proposed |
+
+Order: S-32 → S-33 ‖ S-35 → S-34 → S-36 → S-37 → S-38, with S-39 and S-40 filling free slots. At most two in flight. S-37 and S-38 change the status rule and stay one at a time.
+
+**Slice notes**
+
+- **S-32 redact-cut.** One `cutForDisplay()` helper that ends on whitespace and calls `trimPartialSecret`. Use it in `labelOf` (`check-patterns-classify.ts:578`), `oneLine` (`steps.ts`), `failureExcerpt` (`steps.ts:125`), the result head (`parse.ts:229`), diff lines (`diff.ts:139`) and the session title. Add a boundary test that forbids a raw `.slice(0, …_MAX)` on log text. Tests: a DSN password cut before `@`, and an AWS key id cut mid-body, both through `--summary` and `--export`.
+- **S-33 redact-outputs.** In `packages/cli/src/summary.ts:25` the `...opts` spread overwrites the `usernames` default with `undefined`. Put the spread first. Redact `dir` in `--json`, or document it as kept. Change the README placeholder text to `[redacted:<kind>]`.
+- **S-34 redact-shapes-2.** `isNonLiteral` (`redact.ts:549`) exempts values of secret-named keys too broadly (`hvs.…`, Discord tokens, `$uper$ecret`, `<k3y-…>`). Add per-tool password flags (`docker login -p`, `redis-cli -a`), `.netrc` `password`, XML secret elements, `=>`, and the literal after `||`/`??`/`getenv(…, default)`. A table-driven corpus covers (context × secret shape) across all output paths.
+- **S-35 git-no-locks.** `runGit` adds `--no-optional-locks` to every call; route `map.ts:71` and `worktrees.ts:58` through it. Test: `.git/index` is byte-identical after `gitCrosscheck` and after each git API route.
+- **S-36 check-macos-release.** Wrap `mkdtempSync` in `realpathSync` in `scripts/smoke-pack.mjs` and `llm.perf.test.ts`. Add `fetch-depth: 0` to `release.yml`, or make `gate.test.mjs` case 8 build its own history. Run full `pnpm check` in the macOS CI job.
+- **S-37 status-tree.** Track the "tree reverted" state (`git stash`, `checkout -- .`, `restore` until `stash pop`). A root under `.claude/worktrees/<id>` covers only files under that prefix (`scope.ts:143`). An unplaced scope (`null`) stops meaning the whole project (`scope.ts:182`). **Owner decision:** this contradicts SC-4 (`analyze.test.ts:730`), which locks the current rule. Per AGENTS.md the expectation is not changed without the owner's OK. Needs a real-log PRE/POST audit.
+- **S-38 status-evidence.** Keep the newest result per check family, so a later lint or build does not erase a failing test. Treat a shell `&`, discarded output or a count-only pipe as "result not observed". Extend `FAILURE_SIGNALS` (`error TS…`, `error[E…]`, `npm ERR!`, `make: ***`, `command not found`, …). Add `--showConfig`/`--init`/`--list`-style no-ops. **Owner decision:** this changes the PRD wording "last check after last edit passed". Needs a real-log audit.
+- **S-39 gate-coverage.** In `scripts/gate.mjs`: fail on a modified existing fixture `.jsonl`, add `pnpm-workspace.yaml` to `DEP_RE`, and widen the expectation scan to `\.(test|spec)\.(mjs|tsx?)$`. Move `format.ts`, `map.ts`, `worktrees.ts`, `llm.ts`, `llm-input.ts`, `paths.ts`, `steps.ts` and `discover.ts` to High.
+- **S-40 archive-leaf-link.** In `ensureDestDir` (`node/archive.ts:75`), `lstat` the leaf before `mkdir`/`chmod` and skip with the existing symlink warning.
+
+**Open questions for the owner (block S-37/S-38):** (a) may an unplaced check scope stop counting as full coverage, changing SC-4? (b) may a failing test stay `failing` after a later passing check of a different family, changing the PRD wording?
+
 ## Backlog Handoff
 
 | Roadmap ID | Change ID            | Suggested issue title                                         | Ready for `/10x-plan` | Notes                                  |
