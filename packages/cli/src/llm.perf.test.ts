@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,7 +13,7 @@ const cli = join(here, "../dist/cli.js");
 
 describe("title request shutdown", () => {
   test("SIGINT during a hung title request exits within 2s", async () => {
-    const tmp = mkdtempSync(join(tmpdir(), "lgtm-llm-stop-"));
+    const tmp = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-llm-stop-")));
     const repo = join(tmp, "repo");
     const projects = join(tmp, "projects");
     const archive = join(tmp, "archive");
@@ -153,7 +153,7 @@ describe("title request shutdown", () => {
 
 describe("title request timing", () => {
   test("a non-loopback endpoint settles without waiting for the timeout", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "lgtm-llm-remote-"));
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "lgtm-llm-remote-")));
     try {
       const t = createTitler({ endpoint: new URL("http://10.0.0.1:1/v1/chat/completions"), model: "qwen3:4b", cacheDir: join(dir, "cache"), timeoutMs: 200 });
       const started = Date.now();
