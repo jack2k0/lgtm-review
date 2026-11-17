@@ -30,16 +30,18 @@ export const TIERS = {
   High: [
     /^packages\/core\/src\/(analyze|(check-patterns|shell-edits)(-[a-z-]+)?|parse|subagents|redact|schema|inherit|hints|scope)\.ts$/,
     /^packages\/cli\/src\/(server|security|export|export-html|summary|api)\.ts$/,
-    /^packages\/core\/src\/node\/(git|archive|read|subagents)\.ts$/,
+    /^packages\/core\/src\/node\/(git|archive|read|subagents|worktrees|discover)\.ts$/,
+    /^packages\/core\/src\/(llm-input|steps)\.ts$/,
+    /^packages\/cli\/src\/(format|map|llm|paths)\.ts$/,
     /^packages\/web\/src\/token\.ts$/,
     /\.labels\.json$/,
     /^\.github\//,
     /(^|\/)package\.json$/,
     /^pnpm-lock\.yaml$/,
-    /^scripts\/(smoke-pack|build-demo|gate)\.mjs$/,
+    /^scripts\/(smoke-pack|build-demo|gate)(\.test)?\.mjs$/,
     /^(REVIEW|AGENTS|CLAUDE)\.md$/,
   ],
-  Low: [/\.md$/, /^context\//, /^docs\//, /\.test\.tsx?$/, /(^|\/)__golden__\//],
+  Low: [/\.md$/, /^context\//, /^docs\//, /\.(test|spec)\.(mjs|cjs|js|tsx?)$/, /(^|\/)__golden__\//],
   Medium: [/^packages\/[^/]+\/src\//, /^scripts\//],
 };
 const RANK = { Low: 0, Medium: 1, High: 2 };
@@ -48,7 +50,9 @@ export const REVIEWERS = { Low: 0, Medium: 1, High: 2 };
 const VERDICTS = ["fixed", "rejected", "deferred"];
 const LIST_CAP = 15;
 const LABELS_RE = /^packages\/core\/fixtures\/sessions\/[^/]+\.labels\.json$/;
-const DEP_RE = /(^|\/)package\.json$|^pnpm-lock\.yaml$/;
+const FIXTURE_RE = /^packages\/core\/fixtures\/sessions\/[^/]+\.jsonl$/;
+const TEST_RE = /\.(test|spec)\.(mjs|cjs|js|tsx?)$/;
+const DEP_RE = /(^|\/)package\.json$|^pnpm-lock\.yaml$|^pnpm-workspace\.yaml$/;
 const SCHEMA = "packages/core/src/schema.ts";
 const EXPECT_RE = /expect\(|assert| it\(|test\(|^\s*\[/;
 
@@ -167,7 +171,8 @@ export function parseLedger(text) {
   return { reviewers, rows, none: /^findings\s*:\s*none\s*$/im.test(text) };
 }
 
-const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+// --no-optional-locks: the gate is read-only, so `git status` must not refresh (rewrite) .git/index.
+const git = (args) => execFileSync("git", ["--no-optional-locks", ...args], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
 
 const EACH_CALL_RE = /\b(test|it|describe)(?:\s*\.\s*[a-zA-Z0-9_$]+)*\s*\.\s*each(?:\s*<[^;{}()]*>)?\s*$/;
 const EACH_TAGGED_RE = /\b(test|it|describe)(?:\s*\.\s*[a-zA-Z0-9_$]+)*\s*\.\s*each\s*$/;
@@ -804,10 +809,23 @@ export function removedLines(diff, getOldFile) {
 }
 
 function parseStatus(text) {
-  return text.split("\n").filter(Boolean).map((l) => {
-    const [s, ...p] = l.split("\t");
-    return { status: s[0], path: p.join("\t") };
-  });
+  // `--name-status -z --no-renames`: "S\0path\0" pairs (NUL-separated, so git never C-quotes a path).
+  const f = text.split("\0");
+  const out = [];
+  for (let i = 0; i + 1 < f.length; i += 2) out.push({ status: f[i][0], path: f[i + 1] });
+  return out;
+}
+
+/** Paths of `status --porcelain -z`: "XY path\0", a rename/copy adds the old path as a further entry. */
+function porcelainPaths(text) {
+  const f = text.split("\0");
+  const out = [];
+  for (let i = 0; i < f.length; i++) {
+    if (!f[i]) continue;
+    out.push(f[i].slice(3));
+    if (/[RC]/.test(f[i].slice(0, 2))) out.push(f[++i]);
+  }
+  return out;
 }
 
 function short(sha) {
@@ -830,9 +848,9 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
 
   // Files changed since the merge-base. Renames are split into delete + add so a moved file counts on both sides.
   const target = values.head ? [mb, headSha] : [mb];
-  const files = parseStatus(git(["diff", "--name-status", "--no-renames", ...target]));
+  const files = parseStatus(git(["diff", "--name-status", "-z", "--no-renames", ...target]));
   if (!values.head) {
-    for (const p of git(["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean)) files.push({ status: "A", path: p });
+    for (const p of git(["ls-files", "-z", "--others", "--exclude-standard"]).split("\0").filter(Boolean)) files.push({ status: "A", path: p });
   }
   const paths = files.map((f) => f.path);
 
@@ -842,7 +860,7 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
 
   // 0. Committed: a merge takes the branch commits, so with --merge the worktree must hold nothing uncommitted.
   if (values.merge && !values.head) {
-    const dirty = git(["status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"]).split("\n").filter(Boolean).map((l) => l.slice(3));
+    const dirty = porcelainPaths(git(["status", "--porcelain", "-z", "--untracked-files=all", "--ignore-submodules=none"]));
     if (!bad("committed", dirty, "uncommitted or untracked file(s); a merge would leave them out")) add("committed", "PASS", "worktree clean");
   }
 
@@ -859,10 +877,12 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
 
   // 3. Ground truth
   const labels = files.filter((f) => LABELS_RE.test(f.path));
+  const fixtures = files.filter((f) => FIXTURE_RE.test(f.path) && f.status !== "A").map((f) => `${f.status} ${f.path}`);
   const touched = labels.filter((f) => f.status !== "A").map((f) => `${f.status} ${f.path}`);
   const added = labels.filter((f) => f.status === "A").map((f) => `A ${f.path}`);
   const labelsMode = gate?.labels ?? "new-only";
-  if (touched.length) add("ground-truth", "FAIL", `${touched.length} existing label file(s) modified/deleted (a label change means the rule is wrong)`, touched);
+  if (fixtures.length) add("ground-truth", "FAIL", `${fixtures.length} existing session fixture(s) modified/deleted (a changed input moves the ground truth)`, [...fixtures, ...touched]);
+  else if (touched.length) add("ground-truth", "FAIL", `${touched.length} existing label file(s) modified/deleted (a label change means the rule is wrong)`, touched);
   else if (added.length && labelsMode !== "new-only") add("ground-truth", "FAIL", `${added.length} new label file(s) but labels: ${labelsMode}`, added);
   else add("ground-truth", "PASS", added.length ? `${added.length} new label file(s) only` : "no label changes", added);
 
@@ -876,10 +896,10 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
   }
 
   // 5. Removed expectations
-  const testPaths = paths.filter((p) => /\.test\.tsx?$/.test(p));
+  const testPaths = paths.filter((p) => TEST_RE.test(p));
   const removed = testPaths.length
     ? removedLines(
-        git(["diff", "-U0", "--no-renames", ...target, "--", "*.test.ts", "*.test.tsx"]),
+        git(["-c", "core.quotePath=false", "diff", "-U0", "--no-renames", ...target, "--", ...testPaths.map((p) => `:(literal)${p}`)]),
         (p) => {
           try {
             return git(["show", `${mb}:${p}`]);
