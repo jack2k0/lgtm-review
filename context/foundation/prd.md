@@ -57,7 +57,7 @@ PR reviewer in a team who receives a report from a colleague's agent session (no
 
 #### Acceptance Criteria
 - A prompt whose last edit came after its last passing check shows `unchecked` with a reason ("N edits after last check" / "no checks ran")
-- A prompt whose last check failed shows `failing` with the failing command and a short excerpt
+- A prompt whose newest check of some family failed shows `failing` with the failing command and a short excerpt
 - A prompt without edits shows `no-changes`
 - Unknown or malformed log records are skipped and listed as warnings, not fatal
 
@@ -77,7 +77,7 @@ PR reviewer in a team who receives a report from a colleague's agent session (no
 - FR-001: Developer can list Claude Code sessions for the current repo (title, branch, time, prompt count, status counts) in terminal and web. Priority: must-have
   > Socrates: Counter-argument considered: "Claude Code already has a session picker; a list duplicates it." Resolution: kept; list is the entry point, value is the status counts per session. No worktree filter in MVP (all sessions of repo path).
 - FR-002: Developer can see, for each prompt, a status (checked / unchecked / failing / no-changes) with a reason. Priority: must-have
-  > Socrates: Counter-argument considered: "A green check does not prove the edited files were verified (e.g. a test run scoped to one folder while edits are elsewhere)." Resolution: kept; checked means "last check after last edit passed" and UI states it does not prove coverage; "partially checked" deferred to v2; check patterns configurable and the repo's own test/check scripts auto-detected to reduce false unchecked.
+  > Socrates: Counter-argument considered: "A green check does not prove the edited files were verified (e.g. a test run scoped to one folder while edits are elsewhere)." Resolution: kept; checked means "the newest check of every family that ran after the last edit succeeded" and UI states it does not prove coverage; "partially checked" deferred to v2; check patterns configurable and the repo's own test/check scripts auto-detected to reduce false unchecked.
 - FR-003: Developer can see, for each prompt, active time split into Read / Write / Check / Fix with a one-sentence headline. Priority: must-have
   > Socrates: Counter-argument considered: "Timestamp-difference times are approximate and mislead." Resolution: kept; UI labels times approximate and emphasizes proportions over seconds.
 - FR-004: Developer can see, for each prompt, the changed files with added / changed / deleted markers and line deltas. Priority: must-have
@@ -111,7 +111,7 @@ For each prompt in an agent session, the product classifies every agent action a
 
 Inputs the reviewer sees: the prompts of a session and what the agent did in response to each (reads, edits, command runs and their results, timing). Output: a status with a reason, a split of active time across the four phases, and the list of changed files. The reviewer meets the rule in the prompt list (status dots, time bars) and in the Steps view. A failed check followed by edits counts as Fix, not Write; time waiting for the user is excluded from active time.
 
-Statuses: `checked` (last check after last edit succeeded), `unchecked` (edits after last check, or no check ran), `failing` (last check in the prompt failed), `no-changes` (no edits).
+Statuses: `checked` (the newest check of every family that ran after the last edit succeeded; families: test, typecheck, lint, build, other), `unchecked` (edits after last check, or no check ran), `failing` (the newest check of some family failed; a later passing check of another family does not clear it), `no-changes` (no edits).
 
 ## Access Control
 

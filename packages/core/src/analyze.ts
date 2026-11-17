@@ -1,4 +1,4 @@
-import { classifyCommand, findMaskedFailure, placeCheckScope, treeOps, type PlacedScope, type RepoScripts, type TreeOp } from "./check-patterns.js";
+import { CHECK_FAMILIES, checkFamilies, classifyCommand, findMaskedFailure, placeCheckScope, resultUnobserved, treeOps, unobservedSegments, type CheckFamily, type PlacedScope, type RepoScripts, type TreeOp } from "./check-patterns.js";
 import { classifyShellMutation, normalizePath, resolveTarget, SHELL_EDIT_FILE, type ShellMutation } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, isDocPath, isScratchPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
@@ -106,7 +106,7 @@ interface CheckRec {
    */
   coveredSeq: number;
   completed: boolean;
-  /** The command did not run (tool error without an exit code): not a check outcome at all. */
+  /** The command did not run (tool error without an exit code) or its result was not observed: not a check outcome at all. */
   ignored: boolean;
   /** `null`: a background check reported as failed without an exit code. */
   exit: number | null;
@@ -117,6 +117,14 @@ interface CheckRec {
   /** Exit 130/137/143/144, foreground or from a notification: neither passed nor failed (Q5). Not `stopped`. */
   signalStop: boolean;
   label: string;
+  /** Families the result belongs to (test, typecheck, lint, build, other); the status keeps the newest result of each. */
+  families: CheckFamily[];
+  /** A pass counts for every family (`pnpm check`); a failure is kept under `other` only. */
+  aggregate: boolean;
+  /** The result cannot be observed (trailing `&`, discarded output behind a masked exit, count-only pipe): not a check outcome at all. */
+  unobserved: boolean;
+  /** The result was not observed (`unobserved`, and no failure showed): the check is `ignored`, but a later one still leaves the status open. */
+  hidden: boolean;
   unreliable: boolean;
   /** A command after the check may have reverted the edits (`; git checkout file`). */
   probe: boolean;
@@ -379,6 +387,39 @@ function noteEdit(p: PromptState, e: EditRec): void {
   for (const f of e.files) p.tree.delete(editedAbs(e, f) ?? f.path);
 }
 
+/** A completed check that failed: a non-zero or unknown exit code, or failures in the output of an exit-0 run (masked). */
+function checkFailed(c: CheckRec): boolean {
+  return c.masked || c.exit !== 0;
+}
+
+function failureReason(c: CheckRec, via: (thread: string) => string): string {
+  if (c.masked) return `${c.label} output indicates failures (exit code masked)${via(c.thread)}`;
+  if (c.exit === null) return `${c.label}: background check failed${via(c.thread)}`;
+  const out = failureOutput(c.output);
+  return (out === "" ? `${c.label} failed (exit ${c.exit})` : `${c.label} failed: ${out}`) + via(c.thread);
+}
+
+/**
+ * The newest failed check whose family has no newer pass, among the covering checks after the last edit (S-38).
+ * Each family keeps its newest result; a pass of an aggregate counts for every family, its failure only for `other`.
+ */
+function hiddenFailure(completed: readonly CheckRec[], lastEdit: number): CheckRec | null {
+  const newest = new Map<CheckFamily, CheckRec>();
+  const ordered = completed
+    .filter((c) => c.coveredSeq > lastEdit)
+    .sort((a, b) => a.coveredSeq - b.coveredSeq || a.resultSeq - b.resultSeq);
+  for (const c of ordered) {
+    const families: readonly CheckFamily[] = c.aggregate && !checkFailed(c) ? CHECK_FAMILIES : c.families;
+    for (const f of families) newest.set(f, c);
+  }
+  let found: CheckRec | null = null;
+  for (const c of newest.values()) {
+    if (!checkFailed(c)) continue;
+    if (found === null || c.coveredSeq > found.coveredSeq || (c.coveredSeq === found.coveredSeq && c.resultSeq > found.resultSeq)) found = c;
+  }
+  return found;
+}
+
 function judge(p: PromptState, by: (thread: string) => string): { status: Status; reason: string; outOfScope: Map<string, string> } {
   const via = (thread: string): string => (thread === "" ? "" : ` (by subagent ${by(thread)})`);
   if (p.edits.length === 0) return { status: "no-changes", reason: "no edits", outOfScope: new Map() };
@@ -393,6 +434,7 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
     return { status: "no-changes", reason: `no code edits (${what})`, outOfScope: new Map() };
   }
   const lastEdit = edits.reduce((m, e) => Math.max(m, e.seq), -1);
+  // An unobserved result (trailing `&`, hidden output behind a masked exit, count-only pipe) is not an outcome: the check does not count.
   const real = p.checks.filter((c) => !c.ignored);
   // An agent-worktree check that passed but covers none of the edited files proves nothing about them.
   // The same holds for a check that ran in another tree (an agent worktree, or the main tree for edits made only in a
@@ -425,19 +467,20 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
   const passCovers = lastCompleted !== null && lastCompleted.coveredSeq > lastEdit && lastCompleted.exit === 0 && !lastCompleted.masked;
   const bgQuiet = incomplete.length > 0 && incomplete.every((c) => c.background) && passCovers;
   if (incomplete.length > 0 && !bgQuiet) return { status: "unchecked", reason: "check did not complete", outOfScope: new Map() };
+  // A check whose result was not observed, run after the last result, leaves the status open like an incomplete one.
+  // Alone, or after a failure, it changes nothing ("no checks ran" / the failure).
+  if (passCovers && lastCompleted !== null && p.checks.some((c) => c.hidden && c.useSeq > lastEdit && c.useSeq > lastCompleted.resultSeq)) {
+    return { status: "unchecked", reason: "check did not complete", outOfScope: new Map() };
+  }
 
   if (lastCompleted !== null && lastCompleted.coveredSeq > lastEdit) {
-    if (lastCompleted.masked) {
-      return {
-        status: "failing",
-        reason: `${lastCompleted.label} output indicates failures (exit code masked)${via(lastCompleted.thread)}`,
-        outOfScope: new Map(),
-      };
-    }
-    if (lastCompleted.exit === null) {
-      return { status: "failing", reason: `${lastCompleted.label}: background check failed${via(lastCompleted.thread)}`, outOfScope: new Map() };
-    }
+    if (checkFailed(lastCompleted)) return { status: "failing", reason: failureReason(lastCompleted, via), outOfScope: new Map() };
     if (lastCompleted.exit === 0) {
+      // A later pass of another family does not clear a failure: the newest result of every family counts.
+      const hidden = hiddenFailure(completed, lastEdit);
+      if (hidden !== null) {
+        return { status: "failing", reason: `${failureReason(hidden, via)} (not cleared by the later ${lastCompleted.label} pass)`, outOfScope: new Map() };
+      }
       const note = lastCompleted.probe ? " (edits may have been reverted)" : lastCompleted.unreliable ? " (exit code not verified)" : "";
       const docsAfter = p.edits.filter((e) => e.doc && !e.gitOp && e.seq > lastCompleted.coveredSeq).length;
       const nonCodeAfter = p.edits.filter((e) => !e.gitOp && (e.doc || e.scratch) && e.seq > lastCompleted.coveredSeq).length;
@@ -468,6 +511,20 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
         }
         scopeNote = ` (${[...notes].join("; ")})`;
       }
+      // A scoped pass after a failing run of the whole project clears that failure (same family, newest result), but it proves less.
+      const supersedes =
+        lastCompleted.scope !== null &&
+        completed.some(
+          (c) =>
+            checkFailed(c) &&
+            c.scope === null &&
+            c.coveredSeq > lastEdit &&
+            c.coveredSeq < lastCompleted.coveredSeq &&
+            c.families.some((f) => (lastCompleted.aggregate ? true : lastCompleted.families.includes(f))),
+        );
+      if (supersedes) {
+        scopeNote = scopeNote === "" ? ` (scoped to ${lastCompleted.scope?.label}; earlier full run failed)` : `${scopeNote} (earlier full run failed)`;
+      }
       const docsTail = docsAfter > 0 ? `; ${plural(docsAfter, "documentation edit")} after it` : "";
       const bgTail = bgQuiet ? "; a later background check did not report" : "";
       return {
@@ -476,12 +533,6 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
         outOfScope,
       };
     }
-    const out = failureOutput(lastCompleted.output);
-    return {
-      status: "failing",
-      reason: (out === "" ? `${lastCompleted.label} failed (exit ${lastCompleted.exit})` : `${lastCompleted.label} failed: ${out}`) + via(lastCompleted.thread),
-      outOfScope: new Map(),
-    };
   }
 
   // After every covering completion: a signal that outlives the last edit did not complete, and it is not a failure.
@@ -695,6 +746,9 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               stopped: false,
               signalStop: false,
               label: cls.label,
+              ...checkFamilies(ev.input.command, opts.repo, unobservedSegments(ev.input.command, opts.repo)),
+              hidden: false,
+              unobserved: resultUnobserved(ev.input.command, opts.repo),
               unreliable: cls.unreliable,
               probe: cls.mutationProbe,
               masked: false,
@@ -775,7 +829,12 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               use.check.masked = true;
               use.check.maskedLine = line;
             }
-            setFailing(use.prompt, use.thread, line !== null);
+            // A result that shows no failure and cannot be observed is no outcome at all: it neither passes nor opens Fix.
+            if (line === null && use.check.unobserved) {
+              use.check.completed = false;
+              use.check.ignored = true;
+              use.check.hidden = true;
+            } else setFailing(use.prompt, use.thread, line !== null);
           }
         }
         const edited = !ev.isError && use.name === "Bash" && ev.bashEditDiff !== undefined && ev.bashEditDiff.length > 0;
@@ -790,7 +849,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           if (use.check) {
             // A signal has no verdict. `exitCode` stays null so the step title is "no result", not "failed (exit N)".
             const signal = use.check.signalStop;
-            const exitCode = signal ? null : ev.isError ? (ev.exitCode ?? null) : ev.background ? null : 0;
+            const exitCode = signal || (use.check.ignored && !ev.isError) ? null : ev.isError ? (ev.exitCode ?? null) : ev.background ? null : 0;
             const masked = use.check.masked;
             act.check = {
               command: use.input.command ?? "",

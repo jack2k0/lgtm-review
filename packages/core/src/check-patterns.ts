@@ -52,12 +52,21 @@ export {
  */
 export { treeOps, type TreeOp } from "./check-patterns-tree.js";
 
+/**
+ * Re-exported check families (test, typecheck, lint, build, other) and the "result not observed" detection.
+ */
+export { checkFamilies, CHECK_FAMILIES, type CheckFamily, type CheckFamilies } from "./check-patterns-family.js";
+export { resultUnobserved, unobservedSegments } from "./check-patterns-evidence.js";
+
 // --- Masked exit codes ------------------------------------------------------------------------
 
 /** How much of a result's tail is inspected for failure signals. */
 export const MASKED_TAIL_MAX = 4096;
 const TRACEBACK_LINES = 12;
 
+const ESC = String.fromCharCode(27);
+/** Start of a line: blanks and ANSI colour codes may precede the text. */
+const LINE_START = `^\\s*(?:${ESC}\\[[0-9;]*m)*\\s*`;
 const EXIT_NUM = "(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d?)";
 const FAILURE_SIGNALS: RegExp[] = [
   /^\s*FAIL(?:[\s:]|$)/, // jest/vitest `FAIL src/x.test.ts`, go `FAIL\tpkg` and a bare `FAIL`
@@ -73,6 +82,15 @@ const FAILURE_SIGNALS: RegExp[] = [
   /\bnot ok\b/,
   /\bFailed!/,
   /\bFailed:\s+[1-9]/,
+  // The signals below name tool output at the start of a line (after blanks and colour codes); a test title or log text
+  // that merely mentions them does not count under a masked exit.
+  new RegExp(`${LINE_START}(?:\\S+(?:\\(\\d+,\\d+\\)|:\\d+:\\d+)\\s*[:-]\\s*)?error TS\\d+\\b`), // tsc `src/a.ts(1,1): error TS2304: ...`
+  new RegExp(`${LINE_START}error\\[E\\d+\\]`), // rustc `error[E0425]: ...`
+  new RegExp(`${LINE_START}npm ERR!`),
+  /^make(?:\[\d+\])?: \*\*\*/, // `make: *** [test] Error 1`
+  new RegExp(`${LINE_START}(?:[\\w./-]+: )(?:line \\d+: )?(?:[\\w./+-]+: )?command not found\\b`), // `bash: vitest: command not found`, `zsh: command not found: pytest`
+  new RegExp(`${LINE_START}ERR_PNPM_\\w+`), // `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`
+  // pytest's `FAILED tests/x.py::t - ...` summary line is already matched by `\bFAILED\b` above.
 ];
 const TRACEBACK = /Traceback \(most recent call last\)/;
 /** Explicitly negative phrases ("0 failed", "no errors", "errors: 0", "All tests passed"). */
