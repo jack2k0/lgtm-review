@@ -403,6 +403,27 @@ describe("archiveSessions safety", () => {
       expect(r.warnings.filter((w) => w.includes("symlink")).length).toBeGreaterThanOrEqual(3);
     }));
 
+  test.skipIf(process.platform === "win32")("a symlinked per-project archive directory is skipped, nothing written or chmod-ed through it", () =>
+    withTmp(async (dir) => {
+      const projectDir = join(dir, "live");
+      const archiveRoot = join(dir, "archive");
+      const outside = join(dir, "outside");
+      mkdirSync(projectDir);
+      mkdirSync(archiveRoot);
+      mkdirSync(outside, { mode: 0o755 });
+      chmodSync(outside, 0o755);
+      writeFileSync(join(outside, "keep.txt"), "keep\n");
+      writeFileSync(join(projectDir, "s.jsonl"), "{}\n");
+      const archiveDir = join(archiveRoot, "proj");
+      symlinkSync(outside, archiveDir);
+
+      const r = await archiveSessions(projectDir, archiveDir);
+      expect(readdirSync(outside)).toEqual(["keep.txt"]);
+      expect((await stat(outside)).mode & 0o777).toBe(0o755);
+      expect(r.copied).toBe(0);
+      expect(r.warnings.some((w) => w.includes("is a symlink, skipped"))).toBe(true);
+    }));
+
   test.skipIf(process.platform === "win32")("temp file is created 0600 (not chmod'ed afterwards)", () =>
     withTmp(async (dir) => {
       const { projectDir, archiveDir } = setup(dir);

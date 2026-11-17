@@ -48,9 +48,9 @@ export function redactAnalysis(
   sessionRoots?: Map<string, string>,
 ): Analysis {
   const baseOpts: RedactOptions = {
+    ...defaultOpts,
     usernames: defaultOpts?.usernames ?? osUsernames(),
     repoDir: defaultOpts?.repoDir ?? analysis.dir,
-    ...defaultOpts,
   };
 
   function redactValue(val: unknown, key?: string, currentOpts: RedactOptions = baseOpts): unknown {
@@ -108,9 +108,9 @@ export function sortSessions(sessions: SessionAnalysis[]): SessionAnalysis[] {
 
 export function formatText(sessions: SessionAnalysis[], opts: FormatOptions): string {
   const redactOpts: RedactOptions = {
+    ...opts.redact,
     usernames: opts.redact?.usernames ?? osUsernames(),
     repoDir: opts.redact?.repoDir ?? opts.dir,
-    ...opts.redact,
   };
   const red = opts.raw ? (s: string) => s : (s: string) => (s === "" ? "" : coreRedact(s, redactOpts).text);
   const out: string[] = [];
