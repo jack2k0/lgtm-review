@@ -1,4 +1,5 @@
 import { splitSegments, stripHeredocs } from "./check-patterns-segments.js";
+import { stripRedirects } from "./check-patterns-scope.js";
 import { matchSegment, normalizeFirstToken, stripPrefixes, tokens, unquote, type RepoScripts } from "./check-patterns-classify.js";
 
 /**
@@ -29,15 +30,25 @@ function pathArgs(args: readonly string[]): string[] | null {
   return out;
 }
 
+/** `-f`, `--force`, `--discard-changes` (also inside a short-flag group): the working tree is thrown away. */
+const FORCE = /^(?:--force|--discard-changes|-[a-zA-Z]*f[a-zA-Z]*)$/;
+
 function gitOp(toks: readonly string[]): TreeOp | null {
-  // `-C dir` / `-c k=v` / `--git-dir`: another tree or repository; not this one.
+  // Global options are transparent: `-c k=v` and `-C dir` take a value, `--no-pager` and the like do not.
+  // `-C dir` changes what a relative path means, so a path-specific revert under it reverts everything.
   let i = 1;
+  let moved = false;
   while (i < toks.length && (toks[i] as string).startsWith("-")) {
-    if (toks[i] === "-c") i += 2;
-    else return null;
+    if (toks[i] === "-c" || toks[i] === "-C") {
+      if (toks[i] === "-C") moved = true;
+      i += 2;
+    } else i++;
   }
-  const sub = toks[i];
-  const rest = toks.slice(i + 1);
+  const op = subOp(toks[i], toks.slice(i + 1));
+  return op !== null && op.kind === "revert" && moved ? { kind: "revert", paths: null } : op;
+}
+
+function subOp(sub: string | undefined, rest: readonly string[]): TreeOp | null {
   if (sub === "stash") {
     const verb = rest[0];
     if (verb === "pop" || verb === "apply") return { kind: "restore" };
@@ -63,6 +74,7 @@ function gitOp(toks: readonly string[]): TreeOp | null {
     if (staged && !worktree) return null;
     return { kind: "revert", paths: pathArgs(paths) };
   }
+  if ((sub === "checkout" || sub === "switch") && rest.some((t) => FORCE.test(t))) return { kind: "revert", paths: null };
   if (sub === "checkout") {
     if (rest.some((t) => t === "-b" || t === "-B" || t === "--orphan")) return null;
     const dd = rest.indexOf("--");
@@ -82,7 +94,7 @@ export function treeOps(command: string, repo?: RepoScripts): TreeOp[] {
     for (const seg of splitSegments(stripHeredocs(command))) {
       const s = normalizeFirstToken(stripPrefixes(seg.text));
       if (GIT.test(s)) {
-        const op = gitOp(tokens(s).map(unquote));
+        const op = gitOp(stripRedirects(tokens(s).map(unquote)));
         if (op !== null) out.push(op);
       } else if (matchSegment(seg.text, repo)) out.push({ kind: "check" });
     }

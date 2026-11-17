@@ -272,7 +272,7 @@ function segmentRoots(toks: string[], s: string): string[] | null {
 const REDIRECT_RE = /^(?:\d+|&)?(?:>>?\|?)(?:\S*)$|^(?:\d+|&)?<(?:\S*)$/;
 
 /** Drops shell redirections (`> out`, `2>&1`, `< in`) from a segment's tokens; they are not arguments. */
-function stripRedirects(toks: string[]): string[] {
+export function stripRedirects(toks: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i] as string;
@@ -286,17 +286,36 @@ function stripRedirects(toks: string[]): string[] {
   return out;
 }
 
-/** Outcome of placing a check command: its roots, the whole project (no scope), or a scope that cannot be placed. */
-export type PlacedScope = string[] | "whole" | "unplaced";
+/**
+ * Outcome of placing a check command: its roots, the whole project (no scope), or a package selected by name
+ * (`unplaced`), which cannot be placed without the file system. `unplaced` lists the selected package names
+ * without scope (`@acme/core` gives `core`); an exclusion (`!web`) selects none.
+ */
+export type PlacedScope = string[] | "whole" | { unplaced: string[] };
 
-/** A package name as written in a filter (`@acme/web`, `web`, `...web`, `web...`); not a path, a glob or an exclusion. */
-const NAMED_PACKAGE = /^(?:\.\.\.)?\^?@?[A-Za-z0-9_][\w.@/-]*(?:\.\.\.)?$/;
+/** A package name as written in a filter (`@acme/web`, `web`, `...web`, `web...`, `!web`); not a path or a glob. */
+const NAMED_PACKAGE = /^!?(?:\.\.\.)?\^?@?[A-Za-z0-9_][\w.@/-]*(?:\.\.\.)?$/;
 
-/** Does a package-manager or turbo segment select a package by name (`--filter @acme/web`, `-w web`, `yarn workspace web`)? */
-function namesPackage(toks: readonly string[]): boolean {
+/** Package name of a filter value without scope, selectors and ellipses (`@acme/core...` gives `core`); `null` for an exclusion. */
+function packageNameOf(value: string): string | null {
+  if (value.startsWith("!")) return null;
+  const bare = value.replace(/^(?:\.\.\.)?\^?/, "").replace(/(?:\.\.\.)?$/, "");
+  const last = bare.slice(bare.lastIndexOf("/") + 1);
+  return last === "" ? null : last.toLowerCase();
+}
+
+/** Package names a package-manager or turbo segment selects (`--filter @acme/web`, `-w web`), or `null` when it names none. */
+function namedPackages(toks: readonly string[]): string[] | null {
   const head = toks[0];
-  if (head !== "pnpm" && head !== "npm" && head !== "yarn" && head !== "bun" && head !== "turbo") return false;
-  if (head === "yarn" && toks[1] === "workspace" && toks[2] !== undefined) return true;
+  if (head !== "pnpm" && head !== "npm" && head !== "yarn" && head !== "bun" && head !== "turbo") return null;
+  const names: string[] = [];
+  let found = false;
+  const take = (v: string): void => {
+    found = true;
+    const n = packageNameOf(v);
+    if (n !== null) names.push(n);
+  };
+  if (head === "yarn" && toks[1] === "workspace" && toks[2] !== undefined) take(toks[2]);
   for (let i = 1; i < toks.length; i++) {
     const t = toks[i] as string;
     if (t === "--") break;
@@ -305,11 +324,11 @@ function namesPackage(toks: readonly string[]): boolean {
     else if (t.startsWith("--filter=")) value = t.slice("--filter=".length);
     else if (head === "npm" && (t === "-w" || t === "--workspace")) {
       const v = toks[i + 1];
-      if (v !== undefined && (!v.includes("/") || v.startsWith("@"))) return true;
+      if (v !== undefined && (!v.includes("/") || v.startsWith("@"))) take(v);
     }
-    if (value !== undefined && !/^(?:\.{1,2}\/|\/)/.test(value) && NAMED_PACKAGE.test(value)) return true;
+    if (value !== undefined && !/^(?:\.{1,2}\/|\/)/.test(value) && NAMED_PACKAGE.test(value)) take(value);
   }
-  return false;
+  return found ? names : null;
 }
 
 /**
@@ -322,6 +341,7 @@ export function placeCheckScope(command: string, repo?: RepoScripts, legacy = fa
     let prefix: string | null = null;
     const outerPrefixes: (string | null)[] = [];
     const roots: string[] = [];
+    const unplacedNames: string[] = [];
     let unplaced = false;
     for (const seg of splitSegments(stripHeredocs(command))) {
       for (let i = 0; i < seg.opens; i++) outerPrefixes.push(prefix);
@@ -336,14 +356,17 @@ export function placeCheckScope(command: string, repo?: RepoScripts, legacy = fa
       } else if (matchSegment(seg.text, repo)) {
         const r = segmentRoots(toks, s);
         // A named package adds no root: it covers nothing the other segments do not.
-        if (r === null && (legacy || !namesPackage(toks))) return "whole";
-        if (r === null) unplaced = true;
-        else for (const x of r) roots.push(joinPrefix(prefix, x));
+        const names = r === null && !legacy ? namedPackages(toks) : null;
+        if (r === null && names === null) return "whole";
+        if (names !== null) {
+          unplaced = true;
+          unplacedNames.push(...names);
+        } else if (r !== null) for (const x of r) roots.push(joinPrefix(prefix, x));
       }
       // A `cd` inside `( … )` only affects that subshell: restore the outer prefix when it closes.
       for (let i = 0; i < seg.closes; i++) prefix = outerPrefixes.pop() ?? null;
     }
-    if (roots.length === 0) return unplaced ? "unplaced" : "whole";
+    if (roots.length === 0) return unplaced ? { unplaced: [...new Set(unplacedNames)] } : "whole";
     return [...new Set(roots)];
   } catch {
     return "whole";
@@ -357,5 +380,5 @@ export function placeCheckScope(command: string, repo?: RepoScripts, legacy = fa
  */
 export function checkScope(command: string, repo?: RepoScripts): string[] | null {
   const placed = placeCheckScope(command, repo, true);
-  return typeof placed === "string" ? null : placed;
+  return Array.isArray(placed) ? placed : null;
 }

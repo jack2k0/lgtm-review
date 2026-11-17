@@ -830,9 +830,24 @@ describe("treeOps (S-37)", () => {
   });
 
   test("read-only and unrelated forms are not operations", () => {
-    for (const c of ["git stash list", "git stash show -p", "git stash drop", "git restore --staged a.ts", "git checkout -b x", "git checkout main", "git status", "git -C ../other stash", "", "ls"]) {
+    for (const c of ["git stash list", "git stash show -p", "git stash drop", "git restore --staged a.ts", "git checkout -b x", "git checkout main", "git status", "", "ls"]) {
       expect(treeOps(c), c).toEqual([]);
     }
+  });
+
+  test("redirections and transparent git options do not hide a revert", () => {
+    for (const c of ["git stash 2>&1", "git stash >/dev/null 2>&1", "git --no-pager stash", "git -c core.x=1 stash", "git -C ../repo stash"]) {
+      expect(treeOps(c), c).toEqual([{ kind: "revert", paths: null }]);
+    }
+    expect(treeOps("git -C sub checkout -- a.ts")).toEqual([{ kind: "revert", paths: null }]);
+    expect(treeOps("git stash pop >/dev/null")).toEqual([{ kind: "restore" }]);
+  });
+
+  test("a forced checkout or switch throws the changes away", () => {
+    for (const c of ["git checkout -f main", "git checkout --force main", "git switch -f main", "git switch --discard-changes main", "git checkout -fq main"]) {
+      expect(treeOps(c), c).toEqual([{ kind: "revert", paths: null }]);
+    }
+    expect(treeOps("git switch main")).toEqual([]);
   });
 
   test("a glob or a variable path reverts everything", () => {
@@ -843,7 +858,11 @@ describe("treeOps (S-37)", () => {
 
 describe("placeCheckScope (S-37)", () => {
   test("a named package selector is unplaced; the other unplaced shapes stay whole-project", () => {
-    for (const c of ["pnpm --filter @a/web test", "pnpm -F web test", "turbo run test --filter=web", "npm test -w web"]) expect(placeCheckScope(c), c).toBe("unplaced");
+    expect(placeCheckScope("pnpm --filter @a/web test")).toEqual({ unplaced: ["web"] });
+    expect(placeCheckScope("pnpm -F web... -F '!db' test")).toEqual({ unplaced: ["web"] });
+    for (const c of ["pnpm -F web test", "turbo run test --filter=web", "npm test -w web"]) expect(placeCheckScope(c), c).toEqual({ unplaced: ["web"] });
+    // An exclusion selects a package by name too, but covers none.
+    expect(placeCheckScope("pnpm --filter '!web' test")).toEqual({ unplaced: [] });
     expect(placeCheckScope("pnpm test")).toEqual(["."]);
     for (const c of ["pnpm -r test", "pnpm --filter './packages/*' test", "nx run web:test", "bash scripts/check.sh", "cd $X && pnpm test"]) expect(placeCheckScope(c), c).toBe("whole");
     expect(placeCheckScope("pnpm -C packages/web test")).toEqual(["packages/web"]);

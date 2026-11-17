@@ -3,7 +3,7 @@ import { classifyShellMutation, normalizePath, resolveTarget, SHELL_EDIT_FILE, t
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, isDocPath, isScratchPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
 import { createParser, type Event, type TaskNotificationEvent, type ToolInput, type ToolResultEvent } from "./parse.js";
-import { agentWorktreeRoot, resolveCheckScope, resolveWorktreeScope, scopeCovers, scopeGaps, type ResolvedScope } from "./scope.js";
+import { agentWorktreeRoot, resolveCheckScope, resolveWorktreeScope, scopeCoversPath, scopeGaps, unplacedScope, type ResolvedScope } from "./scope.js";
 import { ACTIONS_MAX, buildSteps, failureExcerpt, kindOf, oneLine, QUOTES_PER_STEP, type ActionRec } from "./steps.js";
 import { actionPhase, createTimingTracker, parseTs, type TimingTracker } from "./timing.js";
 import { createSubagentCollector, emptyFlags, mergeSubagents, planContinuations, textWeight, type MergeContext, type MergeFlags, type SubagentTranscript } from "./subagents.js";
@@ -155,8 +155,11 @@ interface PromptState {
   truncated: boolean;
   /** Retained diff lines per file path. */
   patchLines: Map<string, number>;
-  /** Per thread: edited files the working tree has reverted right now (`git stash`, `checkout --`, `restore`) and not yet brought back. */
-  tree: Map<string, Set<string>>;
+  /**
+   * Edited files a working tree has reverted right now (`git stash`, `checkout --`, `restore`) and not yet brought back.
+   * One set for the prompt: a subagent without worktree isolation shares the main checkout, and paths tell the trees apart.
+   */
+  tree: Set<string>;
 }
 
 interface PendingUse {
@@ -314,7 +317,10 @@ function plural(n: number, word: string): string {
 /** Scope of a check run from `cwd`; inside an agent worktree it is always the worktree (or a directory in it). */
 function checkScopeOf(placed: PlacedScope, cwd: string | null, sessionRoot: string | null): ResolvedScope | null {
   const wt = agentWorktreeRoot(cwd);
-  return wt === null ? resolveCheckScope(placed, cwd, sessionRoot) : resolveWorktreeScope(typeof placed === "string" ? null : placed, cwd as string, wt, sessionRoot);
+  if (wt === null) return resolveCheckScope(placed, cwd, sessionRoot);
+  // An unplaced filter inside a worktree covers no more of it than it does of the main checkout.
+  if (typeof placed === "object" && !Array.isArray(placed)) return unplacedScope(placed.unplaced, wt);
+  return resolveWorktreeScope(Array.isArray(placed) ? placed : null, cwd as string, wt, sessionRoot);
 }
 
 /** Absolute path of an edited file: as logged, or a relative edit-tool path resolved against the call's directory; `null` when unknown. */
@@ -326,44 +332,51 @@ function editedAbs(e: EditRec, f: FileTouch): string | null {
 
 const REVERT_NOTE = "edit reverted when it ran";
 
-/** Applies one tree operation of `thread` to the prompt's reverted-file state. */
-function applyTreeOp(p: PromptState, thread: string, op: TreeOp, cwd: string | null, hasCd: boolean): void {
+/** Tree a path or a working directory belongs to: its agent worktree root, or `""` for the main checkout. */
+const treeOf = (path: string | null): string => agentWorktreeRoot(path) ?? "";
+
+/** Commands cut by the parser at this length (`parse.ts` `COMMAND_MAX`): what follows the cut is unknown. */
+const COMMAND_CUT = 4000;
+
+/** Applies one tree operation to the prompt's reverted-file state; the operation acts on the tree of `cwd`. */
+function applyTreeOp(p: PromptState, op: TreeOp, cwd: string | null, hasCd: boolean, truncated: boolean): void {
   if (op.kind === "check") return;
-  let state = p.tree.get(thread);
-  if (state === undefined) p.tree.set(thread, (state = new Set()));
+  const tree = treeOf(cwd);
   if (op.kind === "restore") {
-    state.clear();
+    for (const x of [...p.tree]) if (treeOf(x) === tree) p.tree.delete(x);
     return;
   }
   const base = cwd !== null && cwd.startsWith("/") ? cwd : null;
-  // A `cd` in the command changes what a relative path means: revert everything.
+  // A `cd` changes what a relative path means and a cut command lists unknown paths: revert everything.
   const prefixes =
-    op.paths === null || hasCd ? null : op.paths.map((x) => (x.startsWith("/") ? normalizePath(x) : base === null ? null : normalizePath(`${base}/${x}`)));
+    op.paths === null || hasCd || truncated ? null : op.paths.map((x) => (x.startsWith("/") ? normalizePath(x) : base === null ? null : normalizePath(`${base}/${x}`)));
   for (const e of p.edits) {
-    if (e.thread !== thread || e.gitOp) continue;
+    if (e.gitOp) continue;
     for (const f of e.files) {
       if (f.cls !== "code") continue;
       const abs = editedAbs(e, f);
+      if (treeOf(abs ?? f.path) !== tree) continue;
       const hit = prefixes === null || (abs !== null && prefixes.some((r) => r === null || abs === r || abs.startsWith(r.endsWith("/") ? r : `${r}/`)));
-      if (hit) state.add(abs ?? f.path);
+      if (hit) p.tree.add(abs ?? f.path);
     }
   }
 }
 
 /** Applies the tree operations of a command; at each check segment adds the reverted files to `into`. */
-function runTreeOps(p: PromptState, thread: string, ops: readonly TreeOp[], cwd: string | null, hasCd: boolean, into: Set<string> | null): void {
+function runTreeOps(p: PromptState, ops: readonly TreeOp[], command: string, cwd: string | null, into: Set<string> | null, restoreOnly = false): void {
+  const hasCd = /\b(?:cd|pushd)\b/.test(command);
+  const truncated = command.length >= COMMAND_CUT;
   for (const op of ops) {
     if (op.kind === "check") {
-      if (into !== null) for (const x of p.tree.get(thread) ?? []) into.add(x);
-    } else applyTreeOp(p, thread, op, cwd, hasCd);
+      if (into !== null) for (const x of p.tree) into.add(x);
+    } else if (!restoreOnly || op.kind === "restore") applyTreeOp(p, op, cwd, hasCd, truncated);
   }
 }
 
 /** An edit of a file brings it back into the tree: it is no longer reverted. */
-function noteEdit(p: PromptState, thread: string, e: EditRec): void {
-  const state = p.tree.get(thread);
-  if (state === undefined || state.size === 0 || e.gitOp) return;
-  for (const f of e.files) state.delete(editedAbs(e, f) ?? f.path);
+function noteEdit(p: PromptState, e: EditRec): void {
+  if (p.tree.size === 0 || e.gitOp) return;
+  for (const f of e.files) p.tree.delete(editedAbs(e, f) ?? f.path);
 }
 
 function judge(p: PromptState, by: (thread: string) => string): { status: Status; reason: string; outOfScope: Map<string, string> } {
@@ -389,14 +402,13 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
     const abs = editedAbs(e, f);
     if (abs !== null) editedPaths.add(abs);
   }
+  // Per edited path: the check must have run in that path's tree, the path must not be reverted, and inside a worktree
+  // the check's own scope must reach it. A scoped check of the main checkout that misses a main-tree file still counts (SC-1).
   const coversNone = (c: CheckRec): boolean => {
     if (c.exit !== 0 || c.masked || editedPaths.size === 0) return false;
-    const otherTree = c.scope === null || c.scope.worktree !== undefined;
-    if (!otherTree && c.reverted.size === 0) return false;
+    const tree = c.scope?.worktree ?? null;
     return ![...editedPaths].some(
-      (path) =>
-        !c.reverted.has(path) &&
-        (c.scope === null ? agentWorktreeRoot(path) === null : c.scope.worktree === undefined || c.scope.roots.some((r) => scopeCovers(r, path))),
+      (path) => !c.reverted.has(path) && agentWorktreeRoot(path) === tree && (c.scope === null || c.scope.worktree === undefined || scopeCoversPath(c.scope, path)),
     );
   };
   const completed = real.filter((c) => c.completed && !coversNone(c));
@@ -659,7 +671,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           quoteBufs: new Map(),
           truncated: false,
           patchLines: new Map(),
-          tree: new Map(),
+          tree: new Set(),
         };
         prompts.push(cur);
         return;
@@ -694,7 +706,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             };
             cur.checks.push(check);
             // The tree as this command leaves it: a check after a stash or checkout in the same command ran on the old tree.
-            runTreeOps(cur, thread, treeOps(ev.input.command, opts.repo), ev.cwd ?? parser.meta().cwd, /\b(?:cd|pushd)\b/.test(ev.input.command), check.reverted);
+            runTreeOps(cur, treeOps(ev.input.command, opts.repo), ev.input.command, ev.cwd ?? parser.meta().cwd, check.reverted);
           }
         }
         let action: ActionRec | null = null;
@@ -796,11 +808,11 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           bgChecks.set(`use:${ev.toolUseId}`, entry);
           if (ev.backgroundTaskId !== undefined) bgChecks.set(`task:${ev.backgroundTaskId}`, entry);
         }
-        if (ev.isError) return;
+        // A failed `git stash pop` may still have applied the changes: bringing the edits back counts even on error.
         if (use.check === null && use.name === "Bash" && use.input.command !== undefined) {
-          const command = use.input.command;
-          runTreeOps(use.prompt, use.thread, treeOps(command, opts.repo), use.cwd ?? parser.meta().cwd, /\b(?:cd|pushd)\b/.test(command), null);
+          runTreeOps(use.prompt, treeOps(use.input.command, opts.repo), use.input.command, use.cwd ?? parser.meta().cwd, null, ev.isError);
         }
+        if (ev.isError) return;
         let touches: FileTouch[] = [];
         if (EDIT_TOOLS.has(use.name)) {
           const t = editTouch(use, ev, phase === "fix", classify(use.input.filePath ?? "", use));
@@ -877,7 +889,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             const doc = g.files.every((t) => isDocPath(t.path));
             const rec: EditRec = { seq: seqAt, files: g.files, gitOp: g.gitOp, doc, scratch: !doc && g.files.every((t) => t.cls !== "code"), thread: use.thread, cwd: null };
             use.prompt.edits.push(rec);
-            noteEdit(use.prompt, use.thread, rec);
+            noteEdit(use.prompt, rec);
           }
         }
         if (groups.length === 0 && touches.length > 0) {
@@ -892,7 +904,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             cwd: EDIT_TOOLS.has(use.name) ? (use.cwd ?? parser.meta().cwd) : null,
           };
           use.prompt.edits.push(rec);
-          noteEdit(use.prompt, use.thread, rec);
+          noteEdit(use.prompt, rec);
         }
         if (touches.length > 0 && act) act.edits = touches.map((t) => ({ path: t.path, kind: t.kind, added: t.added, removed: t.removed }));
         return;
