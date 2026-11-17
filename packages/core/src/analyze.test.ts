@@ -1732,3 +1732,47 @@ describe("status-evidence (S-38) phase 1: the newest result per check family", (
     expect(run(bash("b1", "pnpm check", { exit: 1 }), bash("b2", "pnpm check")).status).toBe("checked");
   });
 });
+
+describe("status-evidence (S-38) phase 2: result not observed", () => {
+  const run = (...steps: string[][]) => one([prompt("q"), ...edit("e1"), ...steps.flat()]);
+
+  test.each([
+    "pnpm test &",
+    "pnpm test > /dev/null 2>&1 || true",
+    "pnpm test &>/dev/null; echo done",
+    "pnpm test | wc -l",
+    "pnpm test | grep -c FAIL",
+  ])("%s does not make the prompt checked", (cmd) => {
+    expect(run(bash("b1", cmd, { output: "" }))).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("an observed check is unchanged: output discarded without a masked exit, a tail pipe, a plain pass", () => {
+    for (const cmd of ["pnpm test > /dev/null 2>&1", "pnpm test 2>&1 | tail -3", "pnpm test"]) {
+      expect(run(bash("b1", cmd, { output: "12 passed" })).status).toBe("checked");
+    }
+  });
+
+  test("a hidden pass does not hide an earlier failure, and a failing exit code is still read", () => {
+    expect(run(bash("b1", "pnpm test", { exit: 1 }), bash("b2", "pnpm test > /dev/null 2>&1 || true", { output: "" }))).toMatchObject({
+      status: "failing",
+      reason: "pnpm test failed (exit 1)",
+    });
+    expect(run(bash("b1", "pnpm test | wc -l", { output: "3 failed" })).status).toBe("failing");
+  });
+
+  test("a hidden pass next to a real pass changes nothing", () => {
+    expect(run(bash("b1", "pnpm test"), bash("b2", "pnpm lint &", { output: "" })).status).toBe("checked");
+  });
+
+  test("a masked failure of a discarded-output check still shows when a later command prints it", () => {
+    expect(run(bash("b1", "pnpm test >/dev/null 2>&1; echo EXIT=$?", { output: "EXIT=1" })).status).toBe("failing");
+  });
+
+  test("detail mode: the hidden check has no verdict", () => {
+    const a = createAnalyzer({ detail: true });
+    for (const l of [prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test &", { output: "" })]) a.push(l);
+    a.finish();
+    const check = a.details()[0]!.steps.find((s) => s.check !== undefined)!;
+    expect(check.check).toMatchObject({ exitCode: null, passed: null });
+  });
+});

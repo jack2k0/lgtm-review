@@ -53,9 +53,10 @@ export {
 export { treeOps, type TreeOp } from "./check-patterns-tree.js";
 
 /**
- * Re-exported check families (test, typecheck, lint, build, other).
+ * Re-exported check families (test, typecheck, lint, build, other) and the "result not observed" detection.
  */
 export { checkFamilies, CHECK_FAMILIES, type CheckFamily, type CheckFamilies } from "./check-patterns-family.js";
+export { resultUnobserved } from "./check-patterns-evidence.js";
 
 // --- Masked exit codes ------------------------------------------------------------------------
 
@@ -78,6 +79,13 @@ const FAILURE_SIGNALS: RegExp[] = [
   /\bnot ok\b/,
   /\bFailed!/,
   /\bFailed:\s+[1-9]/,
+  /\berror TS\d+\b/, // tsc `src/a.ts(1,1): error TS2304: ...`
+  /\berror\[E\d+\]/, // rustc `error[E0425]: ...`
+  /\bnpm ERR!/,
+  /^make(?:\[\d+\])?: \*\*\*/, // `make: *** [test] Error 1`
+  /\bcommand not found\b/, // `bash: vitest: command not found`
+  /\bERR_PNPM_\w+/, // `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`
+  // pytest's `FAILED tests/x.py::t - ...` summary line is already matched by `\bFAILED\b` above.
 ];
 const TRACEBACK = /Traceback \(most recent call last\)/;
 /** Explicitly negative phrases ("0 failed", "no errors", "errors: 0", "All tests passed"). */

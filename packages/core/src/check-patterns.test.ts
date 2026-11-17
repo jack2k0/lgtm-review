@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { classifyShellMutation } from "./shell-edits.js";
-import { checkFamilies, checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, placeCheckScope, stripHeredocs, treeOps, type RepoScripts } from "./check-patterns.js";
+import { checkFamilies, checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, placeCheckScope, resultUnobserved, stripHeredocs, treeOps, type RepoScripts } from "./check-patterns.js";
 
 const repo: RepoScripts = { packageScripts: ["verify"], makeTargets: ["ci"], scriptFiles: ["tools/run-all.sh"] };
 
@@ -914,5 +914,99 @@ describe("checkFamilies (S-38)", () => {
   test("never throws; a non-check is other", () => {
     expect(fam("")).toEqual({ families: ["other"], aggregate: false });
     expect(fam("echo hi")).toEqual({ families: ["other"], aggregate: false });
+  });
+});
+
+describe("status-evidence (S-38) phase 2", () => {
+  // [output, failure signal expected?]
+  const signals: [string, boolean][] = [
+    ["src/a.ts(3,5): error TS2304: Cannot find name 'x'.", true],
+    ["error TS5083: Cannot read file 'tsconfig.json'.", true],
+    ["error[E0425]: cannot find value `x` in this scope", true],
+    ["npm ERR! code ELIFECYCLE", true],
+    ["make: *** [test] Error 1", true],
+    ["make[2]: *** [all] Error 2", true],
+    ["bash: vitest: command not found", true],
+    ["zsh: command not found: pytest", true],
+    [" ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL @acme/core@1.0.0 test: `vitest run`", true],
+    ["FAILED tests/test_a.py::test_x - assert 1 == 2", true],
+    ["=== short test summary info ===\nFAILED tests/test_a.py::test_x", true],
+    // prose and clean output that must not match
+    ["The error TS codes are documented in the handbook", false],
+    ["error TSConfig is not a code", false],
+    ["error[E] is not a rust code", false],
+    ["use the command to see if a file was not found", false],
+    ["make: Nothing to be done for 'test'.", false],
+    ["ERR is short for error; PNPM runs scripts", false],
+    ["npm notice created a lockfile", false],
+    ["Failed tests: 0\nAll tests passed", false],
+  ];
+  test.each(signals)("signal %j", (output, failing) => {
+    expect(findMaskedFailure(output) !== null).toBe(failing);
+  });
+
+  const noops: [string, boolean][] = [
+    ["tsc --showConfig", false],
+    ["npx tsc -p tsconfig.json --showConfig", false],
+    ["tsc --init", false],
+    ["eslint --init", false],
+    ["pnpm eslint --init", false],
+    ["jest --init", false],
+    ["jest --list", false],
+    ["jest --listTests", false],
+    ["pnpm test -- --listTests", false],
+    ["pnpm vitest --list", false],
+    ["vitest --version", false],
+    ["eslint --version", false],
+    ["pytest --help", false],
+    ["tsc --noEmit", true],
+    ["tsc -p tsconfig.json", true],
+    ["eslint .", true],
+    ["jest --coverage", true],
+    ["pnpm test", true],
+    ["vitest run --reporter=verbose", true],
+    ["bash scripts/check.sh --list", true],
+  ];
+  test.each(noops)("no-op %j -> isCheck %s", (cmd, isCheck) => {
+    expect(classifyCommand(cmd).isCheck).toBe(isCheck);
+  });
+
+  const unobserved: [string, boolean][] = [
+    ["pnpm test &", true],
+    ["pnpm test & echo started", true],
+    ["pnpm test > /dev/null 2>&1 &", true],
+    ["pnpm test > /dev/null 2>&1 || true", true],
+    ["pnpm test >/dev/null 2>&1; echo done", true],
+    ["pnpm test &>/dev/null || true", true],
+    ["pnpm test &> /dev/null; true", true],
+    ["pnpm test 2>/dev/null >/dev/null || true", true],
+    ["pnpm test | wc -l", true],
+    ["pnpm test 2>&1 | wc -l", true],
+    ["pnpm test | grep -c FAIL", true],
+    ["pnpm test | grep --count FAIL", true],
+    ["pytest -q | grep FAIL | wc -l", true],
+    // observed: unchanged
+    ["pnpm test", false],
+    ["pnpm test > /dev/null 2>&1", false],
+    ["pnpm test &>/dev/null", false],
+    ["pnpm test > /dev/null 2>&1 && echo ok", false],
+    ["pnpm test > out.log 2>&1 || true", false],
+    ["pnpm test > /dev/null || true", false],
+    ["pnpm test 2>&1 | tail -5", false],
+    ["pnpm test | grep FAIL", false],
+    ["pnpm test | tee out.log", false],
+    ["set -o pipefail; pnpm test | wc -l", false],
+    ["pnpm test; echo EXIT=$?", false],
+    ["echo hi | wc -l", false],
+    ["ls > /dev/null 2>&1 || true", false],
+    ["pnpm test && pnpm lint &", true],
+  ];
+  test.each(unobserved)("unobserved %j -> %s", (cmd, hidden) => {
+    expect(resultUnobserved(cmd)).toBe(hidden);
+  });
+
+  test("never throws", () => {
+    expect(resultUnobserved(undefined as unknown as string)).toBe(false);
+    expect(resultUnobserved("")).toBe(false);
   });
 });

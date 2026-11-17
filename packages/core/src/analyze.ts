@@ -1,4 +1,4 @@
-import { CHECK_FAMILIES, checkFamilies, classifyCommand, findMaskedFailure, placeCheckScope, treeOps, type CheckFamily, type PlacedScope, type RepoScripts, type TreeOp } from "./check-patterns.js";
+import { CHECK_FAMILIES, checkFamilies, classifyCommand, findMaskedFailure, placeCheckScope, resultUnobserved, treeOps, type CheckFamily, type PlacedScope, type RepoScripts, type TreeOp } from "./check-patterns.js";
 import { classifyShellMutation, normalizePath, resolveTarget, SHELL_EDIT_FILE, type ShellMutation } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, isDocPath, isScratchPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
@@ -106,7 +106,7 @@ interface CheckRec {
    */
   coveredSeq: number;
   completed: boolean;
-  /** The command did not run (tool error without an exit code): not a check outcome at all. */
+  /** The command did not run (tool error without an exit code) or its result was not observed: not a check outcome at all. */
   ignored: boolean;
   /** `null`: a background check reported as failed without an exit code. */
   exit: number | null;
@@ -121,6 +121,8 @@ interface CheckRec {
   families: CheckFamily[];
   /** A pass counts for every family (`pnpm check`); a failure is kept under `other` only. */
   aggregate: boolean;
+  /** The result cannot be observed (trailing `&`, discarded output behind a masked exit, count-only pipe): not a check outcome at all. */
+  unobserved: boolean;
   unreliable: boolean;
   /** A command after the check may have reverted the edits (`; git checkout file`). */
   probe: boolean;
@@ -724,6 +726,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               signalStop: false,
               label: cls.label,
               ...checkFamilies(ev.input.command, opts.repo),
+              unobserved: resultUnobserved(ev.input.command, opts.repo),
               unreliable: cls.unreliable,
               probe: cls.mutationProbe,
               masked: false,
@@ -804,7 +807,11 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               use.check.masked = true;
               use.check.maskedLine = line;
             }
-            setFailing(use.prompt, use.thread, line !== null);
+            // A result that shows no failure and cannot be observed is no outcome at all: it neither passes nor opens Fix.
+            if (line === null && use.check.unobserved) {
+              use.check.completed = false;
+              use.check.ignored = true;
+            } else setFailing(use.prompt, use.thread, line !== null);
           }
         }
         const edited = !ev.isError && use.name === "Bash" && ev.bashEditDiff !== undefined && ev.bashEditDiff.length > 0;
@@ -819,7 +826,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           if (use.check) {
             // A signal has no verdict. `exitCode` stays null so the step title is "no result", not "failed (exit N)".
             const signal = use.check.signalStop;
-            const exitCode = signal ? null : ev.isError ? (ev.exitCode ?? null) : ev.background ? null : 0;
+            const exitCode = signal || (use.check.ignored && !ev.isError) ? null : ev.isError ? (ev.exitCode ?? null) : ev.background ? null : 0;
             const masked = use.check.masked;
             act.check = {
               command: use.input.command ?? "",
