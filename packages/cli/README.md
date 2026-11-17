@@ -236,7 +236,7 @@ What is redacted:
 - PEM blocks (private keys, certificates) and vendor token formats (for example GitHub, AWS, Slack, JWT).
 - `Authorization` / `Cookie` style headers, credentials in URLs, and cookies.
 - `key=value` / `key: value` assignments with secret-like names (`password`, `token`, `secret`, `api_key`, ...), `--password <value>` style flags, and every value in `.env*` files.
-- Tool password flags (`docker login -p`, `redis-cli -a`, `mysql -p<value>`, `sshpass -p`), `.netrc` entries (`machine h login u password <value>`), the text of XML elements named like a secret (`<password>...</password>`), `=>` assignments (`'password' => '...'`, `:token => "..."`), and the literal default of a secret-named variable (`process.env.API_TOKEN || "..."`, `os.environ.get("X", "...")`, `getenv("X", "...")`).
+- Tool password flags (`docker login -p`, `redis-cli -a`, `mysql -p<value>`, `sshpass -p`), `.netrc` entries (`machine h login u password <value>`), the text of XML elements whose name ends in a secret word (`<password>`, `<dbPassword>`, `<apiKey>`; not `<passwordPolicy>`), `=>` assignments (`'password' => '...'`, `:token => "..."`), and the literal default of a secret-named variable (`process.env.API_TOKEN || "..."`, `os.environ.get("X", "...")`, `getenv("X", "...")`).
 - References and placeholders are left as they are: `${DB_PASSWORD}`, `$TOKEN`, `%TOKEN%`, `<your-api-key>`, `YOUR_PASSWORD`, `CHANGE_ME`.
 - High-entropy strings with a secret-like context or a known prefix.
 - E-mail addresses, the repository directory (shown as `<repo>`), the home directory (`~`) and your OS user name (`<user>`).
@@ -246,7 +246,7 @@ Known gaps (these can stay in the file):
 - A secret shorter than 6 characters without quotes.
 - A high-entropy string shorter than 40 characters with neither a context word nor a known prefix.
 - Passwords made only of capital letters and `_`.
-- A literal default in a shell expansion (`${TOKEN:-value}`), and an XML value split over several lines.
+- A literal default in a shell expansion (`${TOKEN:-value}`).
 - Windows paths inside JSON strings (escaped backslashes).
 - The user name match is case-sensitive.
 - A directory that has the same name as the user (for example `/home/dashboard` when the user is `dashboard`) is rewritten to `~`, which can hide real paths.

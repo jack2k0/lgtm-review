@@ -134,3 +134,64 @@ describe("redact corpus: ordinary text stays unchanged", () => {
     expect(redact(text)).toEqual({ text, count: 0 });
   });
 });
+
+describe("review round 1", () => {
+  const HUNTER = "Hunter2SecretPw9";
+  const LONG = "A1b2C3d4".repeat(75);
+
+  test.each([
+    "<passwordPolicy>strict</passwordPolicy>",
+    "<passwordHint>Use your birthday</passwordHint>",
+    "<tokenType>Bearer</tokenType>",
+    "<secretName>db-main</secretName>",
+    "<tokenExpiresIn>3600</tokenExpiresIn>",
+    "<passwordMinLength>128</passwordMinLength>",
+    "<token_type>bearer-x</token_type>",
+    "'password' => 'The password field is required.',",
+    "'password' => 'Your password is incorrect.',",
+    "'token' => 'Token has expired',",
+    "'password' => 'The password must be at least :min characters.',",
+    "password: Config.PasswordMaxLength256",
+    "<password>replace-with-a-strong-password</password>",
+    "<apiKey>your_api_key_here</apiKey>",
+    "postgres://admin:${DB_PASSWORD}@localhost/app",
+    "postgres://admin:%DB_PASSWORD%@localhost/app",
+    "postgres://admin:$(cat /run/pw)@localhost/app".replace(" ", ""),
+    "postgres://admin:{{db_password}}@localhost/app",
+  ])("unchanged: %s", (text) => {
+    expect(redact(text)).toEqual({ text, count: 0 });
+  });
+
+  test.each([
+    ["xml: secret word ends the tag (camelCase)", `<dbPassword>${HUNTER}</dbPassword>`],
+    ["xml: client_secret", `<client_secret>${HUNTER}</client_secret>`],
+    ["xml: apiToken", `<apiToken>${HUNTER}</apiToken>`],
+    ["doc placeholder prefix with a literal after it", "<password>example.Hunter2xyzABC</password>"],
+    ["doc placeholder prefix, underscore", "<secret>sample_9fA2xQ7mLpWv4NbYz</secret>"],
+    ["xml value on the following lines", `<password>\n${HUNTER}\n</password>`],
+    ["xml value above the old cap", `<token>${LONG}</token>`],
+    ["xml cdata over lines", `<secret><![CDATA[\n${HUNTER}\n]]></secret>`],
+    ["netrc default", "default login bob password hunter2xyz"],
+    ["netrc default, new lines", "default\nlogin bob\npassword hunter2xyz"],
+    ["url, unclosed ${", `postgres://admin:\${${HUNTER}@localhost/app`],
+    ["url, unclosed {{", `postgres://admin:{{${HUNTER}@localhost/app`],
+    ["url, unclosed $(", `postgres://admin:$(${HUNTER}@localhost/app`],
+    ["url, percent word", `postgres://admin:%${HUNTER}%@localhost/app`],
+    ["fat arrow passphrase of lowercase words", "'password' => 'correct horse battery staple',"],
+    ["fat arrow sentence-like value with digits", "'password' => 'Pa55 word 9 here',"],
+    ["dotted value, token-like segment", "password: hvs." + "CAESIJ7xk2mQpLr9tWv4NbYz"],
+  ])("redacts: %s", (_n, text) => {
+    const r = redact(text);
+    expect(r.count).toBeGreaterThan(0);
+    expect(r.text).not.toContain(HUNTER);
+    expect(r.text).not.toContain(LONG);
+    expect(r.text).not.toContain("hunter2xyz");
+    expect(r.text).not.toMatch(/example\.Hunter|sample_9fA|correct horse|Pa55 word|CAESIJ7/);
+    expect(redact(r.text).text).toBe(r.text);
+  });
+
+  test("xml: line count is kept when a multi-line value is redacted", () => {
+    const r = redact(`<password>\n${HUNTER}\n</password>`);
+    expect(r.text.split("\n").length).toBe(3);
+  });
+});
