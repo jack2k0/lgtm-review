@@ -52,6 +52,11 @@ export {
  */
 export { treeOps, type TreeOp } from "./check-patterns-tree.js";
 
+/**
+ * Re-exported check families (test, typecheck, lint, build, other).
+ */
+export { checkFamilies, CHECK_FAMILIES, type CheckFamily, type CheckFamilies } from "./check-patterns-family.js";
+
 // --- Masked exit codes ------------------------------------------------------------------------
 
 /** How much of a result's tail is inspected for failure signals. */

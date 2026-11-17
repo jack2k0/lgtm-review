@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { classifyShellMutation } from "./shell-edits.js";
-import { checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, placeCheckScope, stripHeredocs, treeOps, type RepoScripts } from "./check-patterns.js";
+import { checkFamilies, checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, placeCheckScope, stripHeredocs, treeOps, type RepoScripts } from "./check-patterns.js";
 
 const repo: RepoScripts = { packageScripts: ["verify"], makeTargets: ["ci"], scriptFiles: ["tools/run-all.sh"] };
 
@@ -866,5 +866,53 @@ describe("placeCheckScope (S-37)", () => {
     expect(placeCheckScope("pnpm test")).toEqual(["."]);
     for (const c of ["pnpm -r test", "pnpm --filter './packages/*' test", "nx run web:test", "bash scripts/check.sh", "cd $X && pnpm test"]) expect(placeCheckScope(c), c).toBe("whole");
     expect(placeCheckScope("pnpm -C packages/web test")).toEqual(["packages/web"]);
+  });
+});
+
+describe("checkFamilies (S-38)", () => {
+  const fam = (c: string, repo?: Parameters<typeof checkFamilies>[1]) => checkFamilies(c, repo);
+  test.each([
+    ["pnpm test", ["test"]],
+    ["pnpm -r test:unit", ["test"]],
+    ["npx vitest run", ["test"]],
+    ["pnpm vitest", ["test"]],
+    ["pytest -q", ["test"]],
+    ["python -m pytest", ["test"]],
+    ["go test ./...", ["test"]],
+    ["cargo test", ["test"]],
+    ["tsc --noEmit", ["typecheck"]],
+    ["pnpm typecheck", ["typecheck"]],
+    ["mypy src", ["typecheck"]],
+    ["cargo check", ["typecheck"]],
+    ["pnpm lint", ["lint"]],
+    ["eslint .", ["lint"]],
+    ["ruff check .", ["lint"]],
+    ["cargo clippy", ["lint"]],
+    ["go vet ./...", ["lint"]],
+    ["pnpm build", ["build"]],
+    ["go build ./...", ["build"]],
+    ["cargo build", ["build"]],
+    ["make test", ["test"]],
+    ["just lint", ["lint"]],
+    ["turbo run test lint", ["test", "lint"]],
+    ["pnpm lint && pnpm test", ["test", "lint"]],
+    ["gh pr checks", ["other"]],
+    ["pnpm exec vitest", ["test"]],
+  ])("%s -> %j", (cmd, families) => {
+    expect(fam(cmd)).toEqual({ families, aggregate: false });
+  });
+
+  test.each(["pnpm check", "make check", "bash scripts/verify.sh", "scripts/ci.sh"])("aggregate: %s", (cmd) => {
+    expect(fam(cmd).aggregate).toBe(true);
+  });
+
+  test("a repo script that is not named after a family is other", () => {
+    expect(fam("pnpm e2e", { packageScripts: ["e2e"], makeTargets: [], scriptFiles: [] })).toEqual({ families: ["other"], aggregate: false });
+    expect(fam("bash scripts/smoke.sh")).toEqual({ families: ["other"], aggregate: false });
+  });
+
+  test("never throws; a non-check is other", () => {
+    expect(fam("")).toEqual({ families: ["other"], aggregate: false });
+    expect(fam("echo hi")).toEqual({ families: ["other"], aggregate: false });
   });
 });
