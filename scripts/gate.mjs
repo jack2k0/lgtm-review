@@ -809,10 +809,23 @@ export function removedLines(diff, getOldFile) {
 }
 
 function parseStatus(text) {
-  return text.split("\n").filter(Boolean).map((l) => {
-    const [s, ...p] = l.split("\t");
-    return { status: s[0], path: p.join("\t") };
-  });
+  // `--name-status -z --no-renames`: "S\0path\0" pairs (NUL-separated, so git never C-quotes a path).
+  const f = text.split("\0");
+  const out = [];
+  for (let i = 0; i + 1 < f.length; i += 2) out.push({ status: f[i][0], path: f[i + 1] });
+  return out;
+}
+
+/** Paths of `status --porcelain -z`: "XY path\0", a rename/copy adds the old path as a further entry. */
+function porcelainPaths(text) {
+  const f = text.split("\0");
+  const out = [];
+  for (let i = 0; i < f.length; i++) {
+    if (!f[i]) continue;
+    out.push(f[i].slice(3));
+    if (/[RC]/.test(f[i].slice(0, 2))) out.push(f[++i]);
+  }
+  return out;
 }
 
 function short(sha) {
@@ -835,9 +848,9 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
 
   // Files changed since the merge-base. Renames are split into delete + add so a moved file counts on both sides.
   const target = values.head ? [mb, headSha] : [mb];
-  const files = parseStatus(git(["diff", "--name-status", "--no-renames", ...target]));
+  const files = parseStatus(git(["diff", "--name-status", "-z", "--no-renames", ...target]));
   if (!values.head) {
-    for (const p of git(["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean)) files.push({ status: "A", path: p });
+    for (const p of git(["ls-files", "-z", "--others", "--exclude-standard"]).split("\0").filter(Boolean)) files.push({ status: "A", path: p });
   }
   const paths = files.map((f) => f.path);
 
@@ -847,7 +860,7 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
 
   // 0. Committed: a merge takes the branch commits, so with --merge the worktree must hold nothing uncommitted.
   if (values.merge && !values.head) {
-    const dirty = git(["status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"]).split("\n").filter(Boolean).map((l) => l.slice(3));
+    const dirty = porcelainPaths(git(["status", "--porcelain", "-z", "--untracked-files=all", "--ignore-submodules=none"]));
     if (!bad("committed", dirty, "uncommitted or untracked file(s); a merge would leave them out")) add("committed", "PASS", "worktree clean");
   }
 
@@ -886,7 +899,7 @@ export function run(argv, env = process.env, out = (s) => process.stdout.write(s
   const testPaths = paths.filter((p) => TEST_RE.test(p));
   const removed = testPaths.length
     ? removedLines(
-        git(["diff", "-U0", "--no-renames", ...target, "--", ...testPaths.map((p) => `:(literal)${p}`)]),
+        git(["-c", "core.quotePath=false", "diff", "-U0", "--no-renames", ...target, "--", ...testPaths.map((p) => `:(literal)${p}`)]),
         (p) => {
           try {
             return git(["show", `${mb}:${p}`]);

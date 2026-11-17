@@ -421,6 +421,18 @@ describe("gate coverage (S-39)", () => {
     const r = gateIn({ "README.md": "x\n" }, ({ put }) => put(fx, "{}\n"));
     assert.match(r.text, /PASS ground-truth/);
   });
+  test("non-ASCII session fixture name is still caught", () => {
+    const f = "packages/core/fixtures/sessions/caf\u00e9.jsonl";
+    const r = gateIn({ [f]: "{}\n" }, ({ put }) => put(f, '{"x":1}\n'));
+    assert.equal(r.code, 1);
+    assert.match(r.text, /FAIL ground-truth/);
+  });
+  test("removed expectation in a non-ASCII test file name is reported", () => {
+    const f = "packages/a/src/caf\u00e9.test.ts";
+    const r = gateIn({ [f]: 'test("a", () => {\n  expect(1).toBe(1);\n});\n' }, ({ put }) => put(f, 'test("a", () => {\n});\n'));
+    assert.equal(r.code, 2);
+    assert.match(r.text, /EYES removed-expectations/);
+  });
   test("pnpm-workspace.yaml needs deps: yes", () => {
     const r = gateIn({ "pnpm-workspace.yaml": "a: 1\n" }, ({ put }) => put("pnpm-workspace.yaml", "a: 2\n"));
     assert.equal(r.code, 1);
