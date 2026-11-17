@@ -46,4 +46,12 @@ describe("redacted CLI outputs (S-33)", () => {
     const none = JSON.parse(run(["--projects-dir", projects, "--dir", "/home/user/other", "--json"]).stdout) as { dir: string };
     expect(none.dir).toBe("<repo>");
   });
+
+  test.each(["team@example.com", "password=hunter2secret"])("--json dir is <repo> even when the path contains %s", (part) => {
+    const dir = join(tmp, part, "proj");
+    mkdirSync(dir, { recursive: true });
+    const r = run(["--projects-dir", projects, "--dir", dir, "--json"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect((JSON.parse(r.stdout) as { dir: string }).dir).toBe("<repo>");
+  });
 });
