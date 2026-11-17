@@ -83,12 +83,13 @@ export function findMaskedFailure(output: string): string | null {
     if (typeof output !== "string" || output === "") return null;
     let tail = output;
     if (output.length > MASKED_TAIL_MAX) {
-      // A tail that starts mid-line would start mid-token (a secret cut at its start no longer redacts): drop the partial line.
+      // A tail that starts mid-token would keep a secret's suffix, which no longer redacts: drop the partial token only,
+      // so a failure signal later on the same line still counts.
       const start = output.length - MASKED_TAIL_MAX;
       tail = output.slice(start);
-      if (output[start - 1] !== "\n") {
-        const nl = tail.indexOf("\n");
-        tail = nl === -1 ? "" : tail.slice(nl + 1);
+      if (!/\s/.test(output[start - 1] ?? "\n")) {
+        const ws = tail.search(/\s/);
+        tail = ws === -1 ? "" : tail.slice(ws);
       }
     }
     const lines = tail.split("\n");

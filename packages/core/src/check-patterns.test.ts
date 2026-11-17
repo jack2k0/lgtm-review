@@ -516,10 +516,12 @@ describe("findMaskedFailure", () => {
     expect(findMaskedFailure(`${"x".repeat(5000)}\n3 failed\n`)).toBe("3 failed");
   });
 
-  test("a tail that would start mid-line drops the partial first line, so no secret is cut at its start", () => {
+  test("a tail that would start mid-token drops the partial token, so no secret is cut at its start", () => {
     // The 4096-character tail would start inside the key and the output would keep "IOSFODNN7EXAMPLE 2 failed".
     const out = "AKIAIOSFODNN7EXAMPLE 2 failed\n" + "o".repeat(4070);
-    expect(findMaskedFailure(out)).toBeNull();
+    expect(findMaskedFailure(out)).toBe("2 failed");
+    // One long line: the signal after the cut token still counts.
+    expect(findMaskedFailure("AKIAIOSFODNN7EXAMPLE 2 failed " + "o".repeat(4075))).toMatch(/^2 failed/);
     // A tail that starts exactly at a line start keeps its first line.
     expect(findMaskedFailure("x".repeat(100) + "\n3 failed\n" + "o".repeat(4096 - 11))).toBe("3 failed");
   });
