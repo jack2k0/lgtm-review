@@ -568,16 +568,34 @@ export function cutForDisplay(s: string, max: number, ellipsis = "…", wordWind
   return cut === "" ? "" : cut + ellipsis;
 }
 
+/**
+ * A value that names a secret instead of holding it: `${NAME}` or `$(cmd` (also cut before the closing), `$NAME`,
+ * `%NAME%`, `%s` / `%(name)s`, `<<EOF`, `<(cmd`, and an angle-bracket placeholder of words (`<your-api-key>`,
+ * `<PASSWORD>`). A leading `$`, `%` or `<` alone is not enough: `$uper$ecret99`, `%21Xk9pQ2vLm8nR4tZ` and
+ * `<k3y-9fA2xQ>` are literals, so each form is matched whole.
+ */
+const REFERENCE = /^(?:\$[{(]|\$[A-Za-z_][A-Za-z0-9_]*$|%[A-Za-z_][A-Za-z0-9_]*%$|%(?:[sd]|\([A-Za-z_]\w*\)s)$|<<|<\(|<[A-Za-z][A-Za-z _.-]*>?$|<[A-Z][A-Z0-9_]*>$)/;
+
+function isReference(v: string): boolean {
+  return REFERENCE.test(v);
+}
+
+/** One dotted segment that looks random (a token body): at least 12 characters, both letter cases and two digits. */
+function isRandomSegment(seg: string): boolean {
+  return seg.length >= 12 && /[a-z]/.test(seg) && /[A-Z]/.test(seg) && (seg.match(/\d/g)?.length ?? 0) >= 2;
+}
+
 /** Values that are references, types or masks rather than literals. A secret-like key disables the UUID and quoted-prose exemptions. */
 function isNonLiteral(v: string, quoted: boolean, secretContext = false): boolean {
   if (isPlaceholder(v)) return true;
   if (!secretContext && UUID_VALUE.test(v)) return true;
   if (VALUE_STOPLIST.has(v.toLowerCase())) return true;
   if (/^[*x\u2022.]+$/i.test(v)) return true;
-  if (/^(?:\$|%|<|\{\{|\{|\()/.test(v)) return true;
+  if (isReference(v)) return true;
+  if (/^(?:\{\{|\{|\()/.test(v)) return true;
   if (quoted && !secretContext) return /\s/.test(v) && v.length > 40;
   if (/[([{]/.test(v)) return true;
-  if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(v)) return true;
+  if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(v)) return !(secretContext && v.split(".").some(isRandomSegment));
   if (/^[A-Z][A-Z_]*_[A-Z_]*$/.test(v)) return true;
   return false;
 }
@@ -1542,12 +1560,17 @@ function redactStable(input: string, opts: RedactOptions): RedactResult {
 
 const MAX_ROUNDS = 6;
 
+/** A URL password that is a template (`%VAR%`, `${VAR}`, `$VAR`, `$(cmd)`, `{{var}}`), not a literal. `%21Xk...` and `$uper$ecret` are literals. */
+function isUrlTemplate(pw: string): boolean {
+  return /^(?:%[A-Za-z_][A-Za-z0-9_]*%|\$\{[^}]*\}?|\$\([^)]*\)?|\$[A-Za-z_][A-Za-z0-9_]*|\{\{[^}]*\}{0,2}|\{[A-Za-z_][A-Za-z0-9_]*\})$/.test(pw);
+}
+
 function redactOnce(input: string, opts: RedactOptions, st: State): string {
   let t = input;
 
   t = redactPem(t, st);
 
-  t = pass(t, st, URL_CREDS, ["://"], false, (g) => (isPlaceholder(g[2] as string) || /^[$%{]/.test(g[3] as string) ? null : `${g[1]}${ph("url-credentials")}@`));
+  t = pass(t, st, URL_CREDS, ["://"], false, (g) => (isPlaceholder(g[2] as string) || isUrlTemplate(g[3] as string) ? null : `${g[1]}${ph("url-credentials")}@`));
 
   for (const p of TOKEN_PATTERNS) {
     t = pass(t, st, p.re, p.gate, false, (g) => (p.guard && !p.guard(g[0] as string) ? null : ph(p.kind)));
