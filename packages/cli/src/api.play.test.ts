@@ -52,7 +52,7 @@ const rec = (type: string, cwd: string, extra: Record<string, unknown>): string 
 };
 
 function projectDir(root: string, cwd: string): string {
-  const d = join(root, "projects", cwd.replace(/[/.]/g, "-"));
+  const d = join(root, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
   mkdirSync(d, { recursive: true });
   return d;
 }
