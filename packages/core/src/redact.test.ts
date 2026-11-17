@@ -1428,3 +1428,50 @@ describe("cutForDisplay", () => {
     expect(cutForDisplay("AKIAIOSFODNN7EXAMPLE tail", 10)).toBe("");
   });
 });
+
+describe("redact-shapes-2 phase 1: URL credentials and reference exemptions", () => {
+  const PW = "%" + "21Xk9pQ2vLm8nR4tZ";
+  const VAULT = "hvs" + ".CAESIJ7xk2mQpLr9tWv4NbYz";
+  const DISCORD = "MTA4NjQ5ODc2NTQzMjEwOTg3Ng" + "." + "GxYz12" + "." + "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+  const DOLLAR = "$" + "uper$" + "ecret99";
+  const ANGLE = "<k3y-" + "9fA2xQ>";
+
+  test.each([
+    ["percent-encoded password", `postgres://admin:${PW}@localhost:5432/app`, PW],
+    ["percent-encoded password, lone %", `redis://u:%${"Zq8Lm2Nx7Rt4"}@h:6379`, "Zq8Lm2Nx7Rt4"],
+    ["vault token", `token: ${VAULT}`, VAULT],
+    ["discord bot token", `token: ${DISCORD}`, DISCORD],
+    ["dollar-containing password", `password: ${DOLLAR}`, DOLLAR],
+    ["dollar-containing password (=)", `password=${DOLLAR}`, DOLLAR],
+    ["angle-wrapped random secret", `secret: ${ANGLE}`, "k3y-9fA2xQ"],
+  ])("redacts: %s", (_n, text, secret) => {
+    const r = redact(text);
+    expect(r.text).not.toContain(secret);
+    expect(r.count).toBeGreaterThan(0);
+  });
+
+  test.each([
+    "postgres://admin:%DB_PASSWORD%@localhost:5432/app",
+    "postgres://admin:${DB_PASSWORD}@localhost:5432/app",
+    "postgres://admin:$DB_PASSWORD@localhost:5432/app",
+    "postgres://admin:$(cat /run/secret)@localhost:5432/app",
+    "password: ${DB_PASSWORD}",
+    "token: $GITHUB_TOKEN",
+    "api_key: <your-api-key>",
+    "password: process.env.DB_PASS",
+    'secret: os.environ["X"]',
+    "password: <password>",
+    "secret: <secret>",
+    "password: $PASSWORD",
+    "password: $(vault read -field=pw secret/db)",
+    "postgres://admin:{DB_PASSWORD}@localhost:5432/app",
+    "postgres://admin:{{ db_password }}@localhost/app".replace(/ /g, ""),
+    "token: config.api.token1",
+    "secret: settings.DB_SECRET_2",
+    "password: %(password)s",
+    "token: <your-token-here>",
+    "password: <PASSWORD_1>",
+  ])("unchanged: %s", (text) => {
+    expect(redact(text)).toEqual({ text, count: 0 });
+  });
+});

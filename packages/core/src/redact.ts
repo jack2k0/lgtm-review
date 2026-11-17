@@ -568,16 +568,37 @@ export function cutForDisplay(s: string, max: number, ellipsis = "…", wordWind
   return cut === "" ? "" : cut + ellipsis;
 }
 
+/**
+ * A value that names a secret instead of holding it: `${NAME}` or `$(cmd` (also cut before the closing), `$NAME`,
+ * `%NAME%`, `%s` / `%(name)s`, `<<EOF`, `<(cmd`, and an angle-bracket placeholder of words (`<your-api-key>`,
+ * `<PASSWORD>`). A leading `$`, `%` or `<` alone is not enough: `$uper$ecret99`, `%21Xk9pQ2vLm8nR4tZ` and
+ * `<k3y-9fA2xQ>` are literals, so each form is matched whole.
+ */
+const REFERENCE = /^(?:\$[{(]|\$[A-Za-z_][A-Za-z0-9_]*$|%[A-Z_][A-Z0-9_]*%$|%(?:[sd]|\([A-Za-z_]\w*\)s)$|<<|<\(|<[A-Za-z][A-Za-z _.-]*>?$|<[A-Z][A-Z0-9_]*>$)/;
+
+function isReference(v: string): boolean {
+  return REFERENCE.test(v);
+}
+
+/**
+ * One dotted segment that looks random (a token body): at least 12 characters, both letter cases, and digits
+ * between letters. An identifier that ends in a number (`PasswordMaxLength256`) has no digit before a letter.
+ */
+function isRandomSegment(seg: string): boolean {
+  return seg.length >= 12 && /[a-z]/.test(seg) && /[A-Z]/.test(seg) && /[A-Za-z]\d+[A-Za-z]/.test(seg);
+}
+
 /** Values that are references, types or masks rather than literals. A secret-like key disables the UUID and quoted-prose exemptions. */
 function isNonLiteral(v: string, quoted: boolean, secretContext = false): boolean {
   if (isPlaceholder(v)) return true;
   if (!secretContext && UUID_VALUE.test(v)) return true;
   if (VALUE_STOPLIST.has(v.toLowerCase())) return true;
   if (/^[*x\u2022.]+$/i.test(v)) return true;
-  if (/^(?:\$|%|<|\{\{|\{|\()/.test(v)) return true;
+  if (isReference(v)) return true;
+  if (/^(?:\{\{|\{|\()/.test(v)) return true;
   if (quoted && !secretContext) return /\s/.test(v) && v.length > 40;
   if (/[([{]/.test(v)) return true;
-  if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(v)) return true;
+  if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(v)) return !(secretContext && v.split(".").some(isRandomSegment));
   if (/^[A-Z][A-Z_]*_[A-Z_]*$/.test(v)) return true;
   return false;
 }
@@ -1141,7 +1162,7 @@ function redactSecretTableCells(text: string, st: State): string {
 }
 
 /** `--password hunter2xyz` style flags (space separated). */
-const CLI_FLAG = /(?<![A-Za-z0-9-])(--?[A-Za-z][A-Za-z-]{0,30}[ \t]+)(?:"([^"\r\n]{4,300})"|'([^'\r\n]{4,300})'|([^\s"'\-/.~$<(\[{][^\s"']{3,200}))/g;
+const CLI_FLAG = /(?<![A-Za-z0-9-])(--?[A-Za-z][A-Za-z-]{0,30}[ \t]+)(?:"([^"\r\n]{4,300})"|'([^'\r\n]{4,300})'|([^\s"'\-/.~<(\[{][^\s"']{3,200}))/g;
 
 function redactFlag(g: Groups): string | null {
   const flag = (g[1] as string).trim();
@@ -1181,6 +1202,123 @@ function redactSshpass(text: string, st: State): string {
     const q = g[2] !== undefined ? '\\"' : g[3] !== undefined ? "\\'" : g[4] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
     return `sshpass${prefix}${q}${ph("secret")}${q}`;
   });
+}
+
+// ---------------------------------------------------------------- tool password flags, .netrc, XML, `=>`, env defaults
+
+/** `docker login -u u -p <v>` (also podman, nerdctl): `-p` is the password only after `login`. */
+const DOCKER_LOGIN_P =
+  /(?<![A-Za-z0-9_.-])((?:docker|podman|nerdctl)(?:\.exe)?[ \t]+(?:[a-z-]+[ \t]+)?login\b[^\r\n;|&]{0,500}?[ \t]+-p[ \t]+)(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"'\-][^\s"';&|]{0,300}))/g;
+/** `redis-cli -a <v>` (also valkey-cli): `-a` is the password; `-p` is the port and stays. */
+const REDIS_A =
+  /(?<![A-Za-z0-9_.-])((?:redis|valkey)-cli(?:\.exe)?\b[^\r\n;|&]{0,500}?[ \t]+-a[ \t]+)(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"'\-][^\s"';&|]{0,300}))/g;
+
+function redactToolFlag(text: string, st: State, re: RegExp, gate: string): string {
+  return pass(text, st, re, [gate], true, (g) => {
+    const v = (g[2] ?? g[3] ?? g[4]) as string;
+    if (v.length < 3 || isPlaceholder(v) || isNonLiteral(v, g[4] === undefined, true)) return null;
+    const q = g[2] !== undefined ? '"' : g[3] !== undefined ? "'" : "";
+    return `${g[1]}${q}${ph("secret")}${q}`;
+  });
+}
+
+/**
+ * `.netrc`: `machine h login u password <v>` or `default login u password <v>`, also one keyword per line. A `login`
+ * entry is required, so prose such as "machine password policy" is not touched.
+ */
+const NETRC =
+  /(?<![A-Za-z0-9_.-])((?:machine[ \t]+\S{1,255}|default)[ \t\r\n]+login[ \t]+\S{1,255}(?:[ \t\r\n]+(?:account|port)[ \t]+\S{1,255}){0,2}?[ \t\r\n]+password[ \t]+)(?:"([^"\r\n]{1,300})"|([^\s"']{3,300}))/g;
+
+function redactNetrc(text: string, st: State): string {
+  return pass(text, st, NETRC, ["machine", "default"], false, (g) => {
+    const v = (g[2] ?? g[3]) as string;
+    if (v.length < 3 || isPlaceholder(v) || isNonLiteral(v, g[3] === undefined, true)) return null;
+    const q = g[2] !== undefined ? '"' : "";
+    return `${g[1]}${q}${ph("secret")}${q}`;
+  });
+}
+
+/** Text that documents a value instead of holding one: `your-api-key`, `CHANGE_ME`, `YOUR_PASSWORD`, `changeme`. */
+const DOC_PLACEHOLDER = /^(?:(?:your|my|insert|enter|put|replace|change|example|dummy|sample)(?:[-_ .][a-z]+)+|changeme|[A-Z]+(?:[ _-][A-Z]+)+)$/;
+
+/** XML element names: the secret word must end the name (`password`, `dbPassword`, `client_secret`, `apiKey`), not lead it (`passwordPolicy`, `tokenType`). */
+const XML_SECRET_END = /(?:password|passwd|passphrase|pwd|pass|secret|token|apikey|accesskey|authkey|privatekey|signingkey|webhookkey|stripekey|credentials?)$/;
+
+function isSecretXmlTag(tag: string): boolean {
+  return isSecretKey(tag) && XML_SECRET_END.test(tag.toLowerCase().replace(/[^a-z0-9]/g, ""));
+}
+
+/**
+ * `<password>v</password>`: inner text of an element whose name ends in a secret word (same-case closing tag, or CDATA).
+ * The text may run over lines and has no length cap: it ends at the next angle bracket, so the scan is linear, and a
+ * long value is redacted rather than left (fail closed).
+ */
+const XML_SECRET =
+  /(<([A-Za-z_][A-Za-z0-9_.:-]{0,60})(?:[ \t][^<>\r\n]{0,200})?>)(?:<!\[CDATA\[([^\]]+)\]\]>|([^<>]+))(<\/\2[ \t]*>)/g;
+
+function redactXml(text: string, st: State): string {
+  return pass(text, st, XML_SECRET, ["</"], false, (g) => {
+    if (!isSecretXmlTag(g[2] as string)) return null;
+    const cdata = g[3] !== undefined;
+    const raw = (g[3] ?? g[4]) as string;
+    const v = raw.trim();
+    if (v.length < 3 || isPlaceholder(v) || isNonLiteral(v, false, true) || DOC_PLACEHOLDER.test(v)) return null;
+    // Whitespace around the value stays, so the line count does not change.
+    const lead = /^\s*/.exec(raw)![0];
+    const trail = raw.slice(lead.length + v.length);
+    return cdata ? `${g[1]}<![CDATA[${lead}${ph("secret")}${trail}]]>${g[5]}` : `${g[1]}${lead}${ph("secret")}${trail}${g[5]}`;
+  });
+}
+
+/**
+ * `'password' => 'v'` (PHP, Perl), `:token => "v"` (Ruby). A bare or quoted key takes a string literal; an
+ * unquoted value is taken only after a quoted or symbol key, so `token => token.value` is untouched. A key with a
+ * dot is a message key (`'password.required' => 'The password is required'`), so its prose stays.
+ */
+const FAT_ARROW =
+  /(?<![A-Za-z0-9_.-])(["':]?)([A-Za-z_][A-Za-z0-9_.-]{0,60})\1?([ \t]*=>[ \t]*)(?:"((?:[^"\\\r\n]|\\.){1,500})"|'((?:[^'\\\r\n]|\\.){1,500})'|([^\s"',;)}\]]{3,300}))/g;
+
+/** A message, not a passphrase: at least two words made of letters (and `:name` placeholders), starting with a capital or ending in a full stop. */
+function readsAsProse(v: string): boolean {
+  const words = v.trim().split(/\s+/);
+  if (words.length < 2 || !words.every((w) => /^(?::[a-z_]+|[A-Za-z][A-Za-z'’-]*)[.,!?:;]?$/.test(w))) return false;
+  return /^[A-Z]/.test(words[0]!) || /[.!?]$/.test(words[words.length - 1]!);
+}
+
+function redactFatArrow(text: string, st: State): string {
+  return pass(text, st, FAT_ARROW, ["=>"], false, (g) => {
+    const key = g[2] as string;
+    if (!isSecretKey(key)) return null;
+    const q = g[4] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
+    const v = (g[4] ?? g[5] ?? g[6]) as string;
+    if (q === "" && g[1] === "") return null;
+    if (v.length < 3 || isPlaceholder(v) || isNonLiteral(v, q !== "", true)) return null;
+    if (q !== "" && /\s/.test(v) && (key.includes(".") || readsAsProse(v))) return null;
+    return `${g[1]}${key}${g[1] === ":" ? "" : g[1]}${g[3]}${q}${ph("secret")}${q}`;
+  });
+}
+
+/** Literal default of a secret-named variable: `process.env.X || "v"`, `ENV['X'] ?? 'v'`, `os.environ.get("X", "v")`, `getenv("X", "v")`. */
+const ENV_DEFAULT_OP =
+  /((?:process\.env|import\.meta\.env|\bENV|os\.environ|\$_ENV|\$_SERVER)(?:\.([A-Za-z_]\w*)|\[[ \t]*["']([A-Za-z_]\w*)["'][ \t]*\])[ \t]*(?:\|\||\?\?|\bor\b)[ \t]*)(?:"([^"\r\n]{3,300})"|'([^'\r\n]{3,300})')/g;
+const ENV_DEFAULT_CALL =
+  /((?<![A-Za-z0-9_$])(?:getenv|environ\.get|environ\.setdefault|ENV\.fetch|env)\([ \t]*["']([A-Za-z_]\w*)["'][ \t]*,[ \t]*)(?:"([^"\r\n]{3,300})"|'([^'\r\n]{3,300})')/g;
+
+function redactEnvDefaults(text: string, st: State): string {
+  let t = pass(text, st, ENV_DEFAULT_OP, ["env", "||", "??", " or "], false, (g) => {
+    const name = (g[2] ?? g[3]) as string;
+    const v = (g[4] ?? g[5]) as string;
+    if (!isSecretKey(name) || isPlaceholder(v) || isNonLiteral(v, true, true)) return null;
+    const q = g[4] !== undefined ? '"' : "'";
+    return `${g[1]}${q}${ph("secret")}${q}`;
+  });
+  t = pass(t, st, ENV_DEFAULT_CALL, ["env"], true, (g) => {
+    const v = (g[3] ?? g[4]) as string;
+    if (!isSecretKey(g[2] as string) || isPlaceholder(v) || isNonLiteral(v, true, true)) return null;
+    const q = g[3] !== undefined ? '"' : "'";
+    return `${g[1]}${q}${ph("secret")}${q}`;
+  });
+  return t;
 }
 
 /** `curl -u user:password` and `wget --user=user:password` flags. */
@@ -1542,12 +1680,17 @@ function redactStable(input: string, opts: RedactOptions): RedactResult {
 
 const MAX_ROUNDS = 6;
 
+/** A URL password that is a template (`%VAR%`, `${VAR}`, `$VAR`, `$(cmd)`, `{{var}}`), not a literal. `%21Xk...` and `$uper$ecret` are literals. */
+function isUrlTemplate(pw: string): boolean {
+  return /^(?:%[A-Z_][A-Z0-9_]*%|\$\{[^{}]*\}|\$\([^()]*\)|\$[A-Za-z_][A-Za-z0-9_]*|\{\{[^{}]*\}\}|\{[A-Za-z_][A-Za-z0-9_]*\})$/.test(pw);
+}
+
 function redactOnce(input: string, opts: RedactOptions, st: State): string {
   let t = input;
 
   t = redactPem(t, st);
 
-  t = pass(t, st, URL_CREDS, ["://"], false, (g) => (isPlaceholder(g[2] as string) || /^[$%{]/.test(g[3] as string) ? null : `${g[1]}${ph("url-credentials")}@`));
+  t = pass(t, st, URL_CREDS, ["://"], false, (g) => (isPlaceholder(g[2] as string) || isUrlTemplate(g[3] as string) ? null : `${g[1]}${ph("url-credentials")}@`));
 
   for (const p of TOKEN_PATTERNS) {
     t = pass(t, st, p.re, p.gate, false, (g) => (p.guard && !p.guard(g[0] as string) ? null : ph(p.kind)));
@@ -1570,6 +1713,12 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
   t = redactMysql(t, st);
   t = redactSshpass(t, st);
   t = redactCurl(t, st);
+  t = redactToolFlag(t, st, DOCKER_LOGIN_P, "login");
+  t = redactToolFlag(t, st, REDIS_A, "-cli");
+  t = redactNetrc(t, st);
+  t = redactXml(t, st);
+  t = redactFatArrow(t, st);
+  t = redactEnvDefaults(t, st);
 
   t = pass(t, st, EMAIL, ["@"], false, redactEmail);
 
