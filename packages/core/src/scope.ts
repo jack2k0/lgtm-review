@@ -8,7 +8,12 @@ export interface ResolvedScope {
   label: string;
   /** Root of the agent worktree the check ran in; it covers only files under that worktree. */
   worktree?: string;
+  /** The check's scope could not be placed (a named package filter, an unknown `cd`): it covers no edited file. */
+  unplaced?: true;
 }
+
+/** Label of the scope of a check that could not be placed. */
+export const UNPLACED_LABEL = "unplaced scope";
 
 /** Folder names that hold tests; a root made only of these is the whole test suite. */
 const TEST_DIRS = new Set(["test", "tests", "__tests__", "spec", "specs", "e2e"]);
@@ -44,6 +49,24 @@ export function resolveScope(raw: readonly string[] | null, base: string | null,
     if (!roots.includes(root)) roots.push(root);
   }
   return { roots, label: labelOf(roots, sessionPrefix) };
+}
+
+/**
+ * Scope of a check as `placeCheckScope` reported it, resolved against the working directory and the session
+ * root. `null` is the whole project (a root-level run). A scope that cannot be placed is not the whole project:
+ * it covers no edited file (S-37), and so is a root list that cannot be resolved because the directory is unknown.
+ */
+export function resolveCheckScope(placed: readonly string[] | "whole" | "unplaced", base: string | null, sessionRoot: string | null): ResolvedScope | null {
+  if (placed === "whole") return null;
+  if (placed === "unplaced") return unplacedScope();
+  const resolved = resolveScope(placed, base, sessionRoot);
+  if (resolved !== null) return resolved;
+  const known = base !== null && isAbs(base) && sessionRoot !== null && isAbs(sessionRoot);
+  return known ? null : unplacedScope();
+}
+
+function unplacedScope(): ResolvedScope {
+  return { roots: [], label: UNPLACED_LABEL, unplaced: true };
 }
 
 function labelOf(roots: readonly string[], sessionPrefix: string): string {
@@ -141,6 +164,8 @@ function hasExtension(path: string): boolean {
 
 /** Does a check that ran on `root` cover the edited `file`? Both absolute. */
 export function scopeCovers(root: string, file: string): boolean {
+  // An agent worktree is its own tree: a root in it covers only files in the same worktree, and a root outside it none of its files.
+  if (agentWorktreeRoot(root) !== agentWorktreeRoot(file)) return false;
   if (file === root || file.startsWith(childPrefix(root))) return true;
   const key = keyOf(root);
   if (key === null) return false;
@@ -160,7 +185,7 @@ export interface ScopeCheck {
   /** Sequence number at which the check finished. */
   coveredSeq: number;
   passed: boolean;
-  /** `null` when the check covers the whole project. */
+  /** `null` when the check covers the whole project of the main tree (never a file in an agent worktree). */
   scope: ResolvedScope | null;
 }
 
@@ -179,7 +204,10 @@ export function scopeGaps(files: readonly EditedFile[], checks: readonly ScopeCh
   for (const f of files) {
     if (!isAbs(f.path)) continue;
     const covered = checks.some(
-      (c) => c.passed && c.coveredSeq > f.lastSeq && (c.scope === null || c.scope.roots.some((r) => scopeCovers(r, f.path))),
+      (c) =>
+        c.passed &&
+        c.coveredSeq > f.lastSeq &&
+        (c.scope === null ? agentWorktreeRoot(f.path) === null : c.scope.roots.some((r) => scopeCovers(r, f.path))),
     );
     if (!covered) gaps.push(f.path);
   }

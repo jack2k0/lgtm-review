@@ -1,9 +1,9 @@
-import { checkScope, classifyCommand, findMaskedFailure, type RepoScripts } from "./check-patterns.js";
+import { classifyCommand, findMaskedFailure, placeCheckScope, type PlacedScope, type RepoScripts } from "./check-patterns.js";
 import { classifyShellMutation, normalizePath, resolveTarget, SHELL_EDIT_FILE, type ShellMutation } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, isDocPath, isScratchPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
 import { createParser, type Event, type TaskNotificationEvent, type ToolInput, type ToolResultEvent } from "./parse.js";
-import { agentWorktreeRoot, resolveScope, resolveWorktreeScope, scopeCovers, scopeGaps, type ResolvedScope } from "./scope.js";
+import { agentWorktreeRoot, resolveCheckScope, resolveWorktreeScope, scopeCovers, scopeGaps, type ResolvedScope } from "./scope.js";
 import { ACTIONS_MAX, buildSteps, failureExcerpt, kindOf, oneLine, QUOTES_PER_STEP, type ActionRec } from "./steps.js";
 import { actionPhase, createTimingTracker, parseTs, type TimingTracker } from "./timing.js";
 import { createSubagentCollector, emptyFlags, mergeSubagents, planContinuations, textWeight, type MergeContext, type MergeFlags, type SubagentTranscript } from "./subagents.js";
@@ -91,6 +91,8 @@ interface EditRec {
   scratch: boolean;
   /** Agent id of the subagent that made the edit; `""` for the parent thread. */
   thread: string;
+  /** Working directory of an edit-tool call, which resolves a relative file path; `null` for shell edits. */
+  cwd: string | null;
 }
 
 interface CheckRec {
@@ -306,9 +308,16 @@ function plural(n: number, word: string): string {
 }
 
 /** Scope of a check run from `cwd`; inside an agent worktree it is always the worktree (or a directory in it). */
-function checkScopeOf(raw: string[] | null, cwd: string | null, sessionRoot: string | null): ResolvedScope | null {
+function checkScopeOf(placed: PlacedScope, cwd: string | null, sessionRoot: string | null): ResolvedScope | null {
   const wt = agentWorktreeRoot(cwd);
-  return wt === null ? resolveScope(raw, cwd, sessionRoot) : resolveWorktreeScope(raw, cwd as string, wt, sessionRoot);
+  return wt === null ? resolveCheckScope(placed, cwd, sessionRoot) : resolveWorktreeScope(typeof placed === "string" ? null : placed, cwd as string, wt, sessionRoot);
+}
+
+/** Absolute path of an edited file: as logged, or a relative edit-tool path resolved against the call's directory; `null` when unknown. */
+function editedAbs(e: EditRec, f: FileTouch): string | null {
+  if (f.path.startsWith("/")) return f.path;
+  if (f.path === SHELL_EDIT_FILE || f.path.startsWith("~") || e.cwd === null || !e.cwd.startsWith("/")) return null;
+  return normalizePath(`${e.cwd}/${f.path}`);
 }
 
 function judge(p: PromptState, by: (thread: string) => string): { status: Status; reason: string; outOfScope: Map<string, string> } {
@@ -327,14 +336,19 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
   const lastEdit = edits.reduce((m, e) => Math.max(m, e.seq), -1);
   const real = p.checks.filter((c) => !c.ignored);
   // An agent-worktree check that passed but covers none of the edited files proves nothing about them.
+  // The same holds for a check that ran in another tree (an agent worktree, or the main tree for edits made only in a
+  // worktree): it ran on the other tree.
   const editedPaths = new Set<string>();
-  for (const e of edits) for (const f of e.files) if (f.cls === "code" && f.path.startsWith("/")) editedPaths.add(f.path);
-  const coversNone = (c: CheckRec): boolean =>
-    c.scope?.worktree !== undefined &&
-    c.exit === 0 &&
-    !c.masked &&
-    editedPaths.size > 0 &&
-    ![...editedPaths].some((path) => c.scope!.roots.some((r) => scopeCovers(r, path)));
+  for (const e of edits) for (const f of e.files) if (f.cls === "code") {
+    const abs = editedAbs(e, f);
+    if (abs !== null) editedPaths.add(abs);
+  }
+  const coversNone = (c: CheckRec): boolean => {
+    if (c.exit !== 0 || c.masked || editedPaths.size === 0) return false;
+    const otherTree = c.scope === null || c.scope.worktree !== undefined;
+    if (!otherTree) return false;
+    return ![...editedPaths].some((path) => (c.scope === null ? agentWorktreeRoot(path) === null : c.scope.roots.some((r) => scopeCovers(r, path))));
+  };
   const completed = real.filter((c) => c.completed && !coversNone(c));
   const lastCompleted = completed.reduce<CheckRec | null>(
     (m, c) => (m === null || c.coveredSeq > m.coveredSeq || (c.coveredSeq === m.coveredSeq && c.resultSeq > m.resultSeq) ? c : m),
@@ -381,8 +395,8 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
       const outOfScope = new Map<string, string>();
       let scopeNote = "";
       if (gaps.length > 0) {
-        // An unscoped passing check that finished after the last edit covers every file, so gaps imply a scope.
-        const label = lastCompleted.scope!.label;
+        // A root-level run of the main tree has gaps only for files of an agent worktree.
+        const label = lastCompleted.scope === null ? "main checkout" : lastCompleted.scope.label;
         scopeNote = ` (scoped to ${label})`;
         for (const gap of gaps) outOfScope.set(gap, label);
       }
@@ -618,7 +632,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               maskedLine: "",
               output: "",
               thread,
-              scope: checkScopeOf(checkScope(ev.input.command, opts.repo), ev.cwd ?? parser.meta().cwd, parser.meta().cwd),
+              scope: checkScopeOf(placeCheckScope(ev.input.command, opts.repo), ev.cwd ?? parser.meta().cwd, parser.meta().cwd),
             };
             cur.checks.push(check);
           }
@@ -797,12 +811,22 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           for (const g of groups) {
             const seqAt = g.gitOp ? seq : orderedSeq(seq, sm.order);
             const doc = g.files.every((t) => isDocPath(t.path));
-            use.prompt.edits.push({ seq: seqAt, files: g.files, gitOp: g.gitOp, doc, scratch: !doc && g.files.every((t) => t.cls !== "code"), thread: use.thread });
+            const rec: EditRec = { seq: seqAt, files: g.files, gitOp: g.gitOp, doc, scratch: !doc && g.files.every((t) => t.cls !== "code"), thread: use.thread, cwd: null };
+            use.prompt.edits.push(rec);
           }
         }
         if (groups.length === 0 && touches.length > 0) {
           const doc = touches.every((t) => isDocPath(t.path));
-          use.prompt.edits.push({ seq, files: touches, gitOp: false, doc, scratch: !doc && touches.every((t) => t.cls !== "code"), thread: use.thread });
+          const rec: EditRec = {
+            seq,
+            files: touches,
+            gitOp: false,
+            doc,
+            scratch: !doc && touches.every((t) => t.cls !== "code"),
+            thread: use.thread,
+            cwd: EDIT_TOOLS.has(use.name) ? (use.cwd ?? parser.meta().cwd) : null,
+          };
+          use.prompt.edits.push(rec);
         }
         if (touches.length > 0 && act) act.edits = touches.map((t) => ({ path: t.path, kind: t.kind, added: t.added, removed: t.removed }));
         return;

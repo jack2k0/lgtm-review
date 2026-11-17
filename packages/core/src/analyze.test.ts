@@ -727,10 +727,10 @@ describe("scoped checks (FR-017)", () => {
     expect(scoped(p)).toEqual([]);
   });
 
-  test("SC-4: a named package filter cannot be placed, so nothing is flagged", () => {
+  test("SC-4: a named package filter cannot be placed, so it covers no edited file and the file is flagged", () => {
     const p = one([prompt("q"), ...edit("e1", CORE), ...bash("b1", "pnpm --filter @acme/web test")]);
     expect(p.status).toBe("checked");
-    expect(scoped(p)).toEqual([]);
+    expect(scoped(p)).toEqual([CORE]);
   });
 
   test("SC-5: the record cwd scopes the check", () => {
@@ -1460,5 +1460,69 @@ describe("C18: documentation after an untrusted absolute cd", () => {
     expect(checked.files.map((f) => f.path)).toContain("/abs/notes/plan.md");
     const unchecked = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bash("b2", heredoc("a.ts"))]);
     expect(unchecked.status).toBe("unchecked");
+  });
+});
+
+describe("status-tree (S-37): the check ran on the edited tree", () => {
+  const P = "/home/user/project";
+  const WT = `${P}/.claude/worktrees/wt-1`;
+  const SRC = `${P}/src/a.ts`;
+  const WTSRC = `${WT}/src/a.ts`;
+  const inCwd = (lines: string[], cwd: string): string[] =>
+    lines.map((l) => {
+      const o = JSON.parse(l) as Record<string, unknown>;
+      o.cwd = cwd;
+      return JSON.stringify(o);
+    });
+  const withSub = (parent: string[], sub: string[]) => {
+    const a = createAnalyzer();
+    for (const l of [prompt("go"), ...parent, toolUse("ag", "Agent", { description: "d", isolation: "worktree" }), toolResult("ag", "done")]) a.push(l);
+    a.addSubagent("ag", sub, { agentId: "a1", description: "d" });
+    return a.finish().prompts[0]!;
+  };
+  const scopedPaths = (p: ReturnType<typeof one>): (string | null)[] => p.hints.filter((h) => h.rule === "check-scope").map((h) => h.path);
+
+  test("unplaced named filters flag the edited file; other package selectors stay whole-project", () => {
+    for (const cmd of ["pnpm --filter @acme/web test", "pnpm -F web test", "pnpm --filter=web test", "turbo run test --filter=web", "npm test -w web"]) {
+      const p = one([prompt("q"), ...edit("e1", SRC), ...bash("b1", cmd)]);
+      expect(scopedPaths(p), cmd).toEqual([SRC]);
+    }
+    for (const cmd of ["pnpm -r test", "pnpm --filter './packages/*' test", "nx run web:test", "pnpm test"]) {
+      const p = one([prompt("q"), ...edit("e1", SRC), ...bash("b1", cmd)]);
+      expect(scopedPaths(p), cmd).toEqual([]);
+    }
+  });
+
+  test("an unplaced filter next to a root-level run is still whole-project", () => {
+    const p = one([prompt("q"), ...edit("e1", SRC), ...bash("b1", "pnpm test && pnpm --filter web test")]);
+    expect(scopedPaths(p)).toEqual([]);
+  });
+
+  test("a root-level check in the main tree does not cover an edit made only in an agent worktree", () => {
+    const p = withSub(bash("pb", "pnpm test"), inCwd([prompt("t"), ...edit("s1", WTSRC)], WT));
+    expect(p.status).toBe("unchecked");
+  });
+
+  test("a main-tree edit stays unchecked next to a worktree check even when a test-file root shares its stem", () => {
+    const p = withSub(edit("e1", SRC), inCwd([prompt("t"), ...bash("sb", "pnpm vitest run src/a.test.ts")], WT));
+    expect(p.status).toBe("unchecked");
+  });
+
+  test("a worktree check covers a main-tree file by folder name only inside its own tree", () => {
+    const p = withSub(
+      [...edit("e1", `${P}/src/api/x.ts`), ...edit("e2", `${P}/src/api/y.ts`)],
+      inCwd([prompt("t"), ...edit("s1", `${WT}/src/api/x.ts`), ...bash("sb", "pnpm vitest run src/api")], WT),
+    );
+    expect(p.status).toBe("checked");
+    expect(scopedPaths(p)).toEqual([`${P}/src/api/x.ts`, `${P}/src/api/y.ts`]);
+  });
+
+  test("a relative edit path is resolved: a worktree check that covers nothing does not make it checked", () => {
+    const relEdit = [
+      toolUse("e1", "Edit", { file_path: "src/a.ts", old_string: "a", new_string: "b" }),
+      toolResult("e1", "File updated.", { toolUseResult: patchResult(["b"], ["a"]) }),
+    ];
+    const p = withSub(relEdit, inCwd([prompt("t"), ...bash("sb", "pnpm test")], WT));
+    expect(p.status).toBe("unchecked");
   });
 });

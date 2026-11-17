@@ -159,7 +159,7 @@
       "uuid": "00000000-0000-4000-8000-000000000029",
       "text": "Test the web package by name.",
       "status": "checked",
-      "reason": "pnpm --filter @acme/web test passed after last edit",
+      "reason": "pnpm --filter @acme/web test passed after last edit (scoped to unplaced scope)",
       "files": [
         {
           "path": "/home/user/project/packages/core/src/b.ts",
@@ -178,7 +178,14 @@
       },
       "activeMs": 4000,
       "headline": "Mostly writing (50%), 1 check",
-      "hints": [],
+      "hints": [
+        {
+          "rule": "check-scope",
+          "severity": "warn",
+          "path": "/home/user/project/packages/core/src/b.ts",
+          "reason": "outside the scope of the passing check (unplaced scope)"
+        }
+      ],
       "recommendation": "skim"
     },
     {

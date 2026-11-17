@@ -40,8 +40,10 @@
       "index": 4,
       "expectedStatus": "checked",
       "expectedRecommendation": "skim",
-      "expectedHints": [],
-      "note": "named package filter is not resolved: the check is treated as whole-project"
+      "expectedHints": [
+        "check-scope:packages/core/src/b.ts"
+      ],
+      "note": "named package filter is unplaced: the check covers no edited file, so the core file is flagged"
     },
     {
       "index": 5,

@@ -43,6 +43,8 @@ export {
  */
 export {
   checkScope,
+  placeCheckScope,
+  type PlacedScope,
 } from "./check-patterns-scope.js";
 
 // --- Masked exit codes ------------------------------------------------------------------------

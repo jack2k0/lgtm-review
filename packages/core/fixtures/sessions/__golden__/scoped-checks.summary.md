@@ -35,6 +35,12 @@ Branch: `main` · Date: 2026-01-01 · Session: `scoped-c`
 - Review: Skim
 - **warn** `check-scope`: `src/orders.py`
 
+### Prompt 5: Test the web package by name.
+
+- Status: checked (pnpm --filter @acme/web test passed after last edit (scoped to unplaced scope))
+- Review: Skim
+- **warn** `check-scope`: `packages/core/src/b.ts`
+
 ### Prompt 6: Fix foo and bar, test foo.
 
 - Status: checked (go test ./internal/foo/... passed after last edit (scoped to internal/foo))
