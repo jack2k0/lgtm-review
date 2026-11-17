@@ -10,7 +10,7 @@ import {
   discoverRootSessions,
   sessionRoots,
 } from "@lgtm/core/node";
-import { markInherited, redact as coreRedact } from "@lgtm/core";
+import { markInherited } from "@lgtm/core";
 import type { Analysis } from "@lgtm/core";
 import { osUsernames, runExport } from "./export.js";
 import { formatText, redactAnalysis, sortSessions } from "./format.js";
@@ -378,9 +378,7 @@ export async function runArchive(roots: readonly SessionRoot[], projectsDir: str
 }
 
 /** The repository directory as shown in `--json` without `--raw`: `<repo>`. */
-function redactDir(dir: string): string {
-  return coreRedact(dir, { usernames: osUsernames(), repoDir: dir }).text;
-}
+const REPO_PLACEHOLDER = "<repo>";
 
 export async function runListOrJson(
   dir: string,
@@ -398,7 +396,7 @@ export async function runListOrJson(
     const analysis: Analysis = { dir, sessions: sorted };
     const output = raw
       ? analysis
-      : { ...redactAnalysis(analysis, { usernames: osUsernames(), repoDir: dir }, rootOf), dir: redactDir(dir) };
+      : { ...redactAnalysis(analysis, { usernames: osUsernames(), repoDir: dir }, rootOf), dir: REPO_PLACEHOLDER };
     console.log(JSON.stringify(output, null, 2));
   } else {
     const color = process.stdout.isTTY === true && !process.env.NO_COLOR;
@@ -468,7 +466,7 @@ async function main(): Promise<number> {
       console.error(`lgtm-review: no Claude Code sessions found for ${dir}`);
       return 1;
     }
-    if (values.json) console.log(JSON.stringify({ dir: values.raw === true ? dir : redactDir(dir), sessions: [] } satisfies Analysis, null, 2));
+    if (values.json) console.log(JSON.stringify({ dir: values.raw === true ? dir : REPO_PLACEHOLDER, sessions: [] } satisfies Analysis, null, 2));
     else console.log(`No Claude Code sessions found for ${dir}`);
     return 0;
   }

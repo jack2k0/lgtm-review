@@ -182,3 +182,18 @@ describe("log-supplied metadata", () => {
     expect(out).toContain(uuid);
   });
 });
+
+describe("OS user name with undefined usernames option", () => {
+  test("redactAnalysis and formatText still redact the OS user", () => {
+    const prev = { USER: process.env.USER, LOGNAME: process.env.LOGNAME, USERNAME: process.env.USERNAME };
+    process.env.USER = process.env.LOGNAME = process.env.USERNAME = "zqxuser";
+    try {
+      const a = { schema: 1, dir: "/r", sessions: [session("s1", null, { title: "ask zqxuser" })] } as unknown as Analysis;
+      expect(JSON.stringify(redactAnalysis(a, { usernames: undefined, repoDir: "/r" }))).not.toContain("zqxuser");
+      const out = formatText(a.sessions, { color: false, dir: "/r", redact: { usernames: undefined } });
+      expect(out).not.toContain("zqxuser");
+    } finally {
+      for (const [k, v] of Object.entries(prev)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  });
+});
