@@ -1159,7 +1159,7 @@ function redactSecretTableCells(text: string, st: State): string {
 }
 
 /** `--password hunter2xyz` style flags (space separated). */
-const CLI_FLAG = /(?<![A-Za-z0-9-])(--?[A-Za-z][A-Za-z-]{0,30}[ \t]+)(?:"([^"\r\n]{4,300})"|'([^'\r\n]{4,300})'|([^\s"'\-/.~$<(\[{][^\s"']{3,200}))/g;
+const CLI_FLAG = /(?<![A-Za-z0-9-])(--?[A-Za-z][A-Za-z-]{0,30}[ \t]+)(?:"([^"\r\n]{4,300})"|'([^'\r\n]{4,300})'|([^\s"'\-/.~<(\[{][^\s"']{3,200}))/g;
 
 function redactFlag(g: Groups): string | null {
   const flag = (g[1] as string).trim();
@@ -1199,6 +1199,102 @@ function redactSshpass(text: string, st: State): string {
     const q = g[2] !== undefined ? '\\"' : g[3] !== undefined ? "\\'" : g[4] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
     return `sshpass${prefix}${q}${ph("secret")}${q}`;
   });
+}
+
+// ---------------------------------------------------------------- tool password flags, .netrc, XML, `=>`, env defaults
+
+/** `docker login -u u -p <v>` (also podman, nerdctl): `-p` is the password only after `login`. */
+const DOCKER_LOGIN_P =
+  /(?<![A-Za-z0-9_.-])((?:docker|podman|nerdctl)(?:\.exe)?[ \t]+(?:[a-z-]+[ \t]+)?login\b[^\r\n;|&]{0,500}?[ \t]+-p[ \t]+)(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"'\-][^\s"';&|]{0,300}))/g;
+/** `redis-cli -a <v>` (also valkey-cli): `-a` is the password; `-p` is the port and stays. */
+const REDIS_A =
+  /(?<![A-Za-z0-9_.-])((?:redis|valkey)-cli(?:\.exe)?\b[^\r\n;|&]{0,500}?[ \t]+-a[ \t]+)(?:"([^"\r\n]{1,300})"|'([^'\r\n]{1,300})'|([^\s"'\-][^\s"';&|]{0,300}))/g;
+
+function redactToolFlag(text: string, st: State, re: RegExp, gate: string): string {
+  return pass(text, st, re, [gate], true, (g) => {
+    const v = (g[2] ?? g[3] ?? g[4]) as string;
+    if (v.length < 3 || isPlaceholder(v) || isNonLiteral(v, g[4] === undefined, true)) return null;
+    const q = g[2] !== undefined ? '"' : g[3] !== undefined ? "'" : "";
+    return `${g[1]}${q}${ph("secret")}${q}`;
+  });
+}
+
+/**
+ * `.netrc`: `machine h login u password <v>`, also one keyword per line. A `login` entry is required, so prose such
+ * as "machine password policy" is not touched.
+ */
+const NETRC =
+  /(?<![A-Za-z0-9_.-])(machine[ \t]+\S{1,255}[ \t\r\n]+login[ \t]+\S{1,255}(?:[ \t\r\n]+(?:account|port)[ \t]+\S{1,255}){0,2}?[ \t\r\n]+password[ \t]+)(?:"([^"\r\n]{1,300})"|([^\s"']{3,300}))/g;
+
+function redactNetrc(text: string, st: State): string {
+  return pass(text, st, NETRC, ["machine"], false, (g) => {
+    const v = (g[2] ?? g[3]) as string;
+    if (v.length < 3 || isPlaceholder(v) || isNonLiteral(v, g[3] === undefined, true)) return null;
+    const q = g[2] !== undefined ? '"' : "";
+    return `${g[1]}${q}${ph("secret")}${q}`;
+  });
+}
+
+/** Text that documents a value instead of holding one: `your-api-key`, `CHANGE_ME`, `YOUR_PASSWORD`, `changeme`. */
+const DOC_PLACEHOLDER = /^(?:(?:your|my|insert|enter|put|replace|change|example|dummy|sample)[-_ .][A-Za-z0-9_ .-]*|changeme|[A-Z]+(?:[ _-][A-Z]+)+)$/;
+
+/** `<password>v</password>`: inner text of an element whose name is a secret key (same-case closing tag, one line, or CDATA). */
+const XML_SECRET =
+  /(<([A-Za-z_][A-Za-z0-9_.:-]{0,60})(?:[ \t][^<>\r\n]{0,200})?>)(?:<!\[CDATA\[([^\]\r\n]{1,500})\]\]>|([^<>\r\n]{3,500}))(<\/\2[ \t]*>)/g;
+
+function redactXml(text: string, st: State): string {
+  return pass(text, st, XML_SECRET, ["</"], false, (g) => {
+    if (!isSecretKey(g[2] as string)) return null;
+    const cdata = g[3] !== undefined;
+    const raw = (g[3] ?? g[4]) as string;
+    const v = raw.trim();
+    if (v.length < 3 || isPlaceholder(v) || isNonLiteral(v, false, true) || DOC_PLACEHOLDER.test(v)) return null;
+    return cdata ? `${g[1]}<![CDATA[${ph("secret")}]]>${g[5]}` : `${g[1]}${ph("secret")}${g[5]}`;
+  });
+}
+
+/**
+ * `'password' => 'v'` (PHP, Perl), `:token => "v"` (Ruby). A bare or quoted key takes a string literal; an
+ * unquoted value is taken only after a quoted or symbol key, so `token => token.value` is untouched. A key with a
+ * dot is a message key (`'password.required' => 'The password is required'`), so its prose stays.
+ */
+const FAT_ARROW =
+  /(?<![A-Za-z0-9_.-])(["':]?)([A-Za-z_][A-Za-z0-9_.-]{0,60})\1?([ \t]*=>[ \t]*)(?:"((?:[^"\\\r\n]|\\.){1,500})"|'((?:[^'\\\r\n]|\\.){1,500})'|([^\s"',;)}\]]{3,300}))/g;
+
+function redactFatArrow(text: string, st: State): string {
+  return pass(text, st, FAT_ARROW, ["=>"], false, (g) => {
+    const key = g[2] as string;
+    if (!isSecretKey(key)) return null;
+    const q = g[4] !== undefined ? '"' : g[5] !== undefined ? "'" : "";
+    const v = (g[4] ?? g[5] ?? g[6]) as string;
+    if (q === "" && g[1] === "") return null;
+    if (v.length < 3 || isPlaceholder(v) || isNonLiteral(v, q !== "", true)) return null;
+    if (q !== "" && key.includes(".") && /\s/.test(v)) return null;
+    return `${g[1]}${key}${g[1] === ":" ? "" : g[1]}${g[3]}${q}${ph("secret")}${q}`;
+  });
+}
+
+/** Literal default of a secret-named variable: `process.env.X || "v"`, `ENV['X'] ?? 'v'`, `os.environ.get("X", "v")`, `getenv("X", "v")`. */
+const ENV_DEFAULT_OP =
+  /((?:process\.env|import\.meta\.env|\bENV|os\.environ|\$_ENV|\$_SERVER)(?:\.([A-Za-z_]\w*)|\[[ \t]*["']([A-Za-z_]\w*)["'][ \t]*\])[ \t]*(?:\|\||\?\?|\bor\b)[ \t]*)(?:"([^"\r\n]{3,300})"|'([^'\r\n]{3,300})')/g;
+const ENV_DEFAULT_CALL =
+  /((?<![A-Za-z0-9_$])(?:getenv|environ\.get|environ\.setdefault|ENV\.fetch|env)\([ \t]*["']([A-Za-z_]\w*)["'][ \t]*,[ \t]*)(?:"([^"\r\n]{3,300})"|'([^'\r\n]{3,300})')/g;
+
+function redactEnvDefaults(text: string, st: State): string {
+  let t = pass(text, st, ENV_DEFAULT_OP, ["env", "||", "??", " or "], false, (g) => {
+    const name = (g[2] ?? g[3]) as string;
+    const v = (g[4] ?? g[5]) as string;
+    if (!isSecretKey(name) || isPlaceholder(v) || isNonLiteral(v, true, true)) return null;
+    const q = g[4] !== undefined ? '"' : "'";
+    return `${g[1]}${q}${ph("secret")}${q}`;
+  });
+  t = pass(t, st, ENV_DEFAULT_CALL, ["env"], true, (g) => {
+    const v = (g[3] ?? g[4]) as string;
+    if (!isSecretKey(g[2] as string) || isPlaceholder(v) || isNonLiteral(v, true, true)) return null;
+    const q = g[3] !== undefined ? '"' : "'";
+    return `${g[1]}${q}${ph("secret")}${q}`;
+  });
+  return t;
 }
 
 /** `curl -u user:password` and `wget --user=user:password` flags. */
@@ -1593,6 +1689,12 @@ function redactOnce(input: string, opts: RedactOptions, st: State): string {
   t = redactMysql(t, st);
   t = redactSshpass(t, st);
   t = redactCurl(t, st);
+  t = redactToolFlag(t, st, DOCKER_LOGIN_P, "login");
+  t = redactToolFlag(t, st, REDIS_A, "-cli");
+  t = redactNetrc(t, st);
+  t = redactXml(t, st);
+  t = redactFatArrow(t, st);
+  t = redactEnvDefaults(t, st);
 
   t = pass(t, st, EMAIL, ["@"], false, redactEmail);
 
