@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { isEnvFilePath, redact } from "./redact.js";
-import { trimPartialSecret } from "./redact.js";
+import { cutForDisplay, trimPartialSecret } from "./redact.js";
 import { PROMPT_TEXT_MAX, parseLines } from "./parse.js";
 import { prompt } from "./testing/records.js";
 
@@ -1376,5 +1376,55 @@ describe("redact: value after any key name and the A7 gaps", () => {
     }
     // a non-password secret column keeps `isStrictValue` only
     expect(redact("| token | hunter2secret |").count).toBe(0);
+  });
+});
+
+describe("cutForDisplay", () => {
+  test("text that fits is returned unchanged", () => {
+    expect(cutForDisplay("short", 5)).toBe("short");
+    expect(cutForDisplay("", 3)).toBe("");
+  });
+
+  test("cuts to max including the ellipsis", () => {
+    const out = cutForDisplay("a".repeat(100), 10);
+    expect(out).toBe("a".repeat(9) + "…");
+    expect(out.length).toBe(10);
+    expect(cutForDisplay("a".repeat(100), 10, "...")).toBe("a".repeat(7) + "...");
+    expect(cutForDisplay("a".repeat(100), 10, "")).toBe("a".repeat(10));
+  });
+
+  test("ends on the last whitespace of the final 20 characters", () => {
+    expect(cutForDisplay("one two three four five", 15, "")).toBe("one two three");
+    expect(cutForDisplay("one two three four five", 14, "…")).toBe("one two three…");
+  });
+
+  test("a cut exactly before whitespace keeps the whole word", () => {
+    expect(cutForDisplay("one two three", 7, "")).toBe("one two");
+  });
+
+  test("does not back off past the 20-character window", () => {
+    const s = "ab " + "c".repeat(60);
+    expect(cutForDisplay(s, 40, "")).toBe(s.slice(0, 40));
+    expect(cutForDisplay(s, 40, "", Infinity)).toBe("ab");
+  });
+
+  test("a secret cut mid-body does not survive as a prefix", () => {
+    const url = "psql postgres://app:Hunter2SecretPw9@db/x";
+    for (let max = 1; max < url.length; max++) {
+      const out = cutForDisplay(url, max);
+      expect(out, `max ${max}`).not.toMatch(/Hunt|Hunter2/);
+    }
+    const key = "run AKIAIOSFODNN7EXAMPLE now";
+    for (let max = 1; max < key.length; max++) {
+      expect(cutForDisplay(key, max), `max ${max}`).not.toContain("AKIA");
+    }
+  });
+
+  test("a partial secret after a secret flag is trimmed together with the flag value", () => {
+    expect(cutForDisplay("login --password hunter2xyz and more", 22, "")).toBe("login --password");
+  });
+
+  test("everything trimmed gives an empty string, not a lone ellipsis", () => {
+    expect(cutForDisplay("AKIAIOSFODNN7EXAMPLE tail", 10)).toBe("");
   });
 });

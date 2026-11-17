@@ -1,3 +1,4 @@
+import { cutForDisplay } from "./redact.js";
 import type { Action, Step, StepCheck } from "./schema.js";
 import { actionIntervals, unionMs, type Interval, type Phase } from "./timing.js";
 
@@ -69,15 +70,7 @@ export interface ActionRec {
 
 export function oneLine(s: string, max: number): string {
   const t = s.replace(/\s+/g, " ").trim();
-  if (t.length <= max) return t;
-  if (max <= 0) return "";
-  if (t[max - 1] !== " " && t[max] !== " ") {
-    const lastSpace = t.lastIndexOf(" ", max - 1);
-    if (lastSpace !== -1) {
-      return t.slice(0, lastSpace).trimEnd();
-    }
-  }
-  return t.slice(0, max).trimEnd();
+  return cutForDisplay(t, max, "", Infinity);
 }
 
 export function relPath(path: string, cwd: string | null): string {
@@ -122,7 +115,7 @@ export function failureExcerpt(text: string): string {
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l !== "");
-  return lines.slice(0, 2).join("\n").slice(0, EXCERPT_MAX);
+  return cutForDisplay(lines.slice(0, 2).join("\n"), EXCERPT_MAX, "");
 }
 
 function summaryOf(a: ActionRec, cwd: string | null): string {
@@ -146,7 +139,7 @@ function plural(n: number, word: string): string {
 }
 
 function cap(s: string, max: number): string {
-  return s.length > max ? `${s.slice(0, max - 3)}...` : s;
+  return cutForDisplay(s, max, "...");
 }
 
 function checkTitle(c: CheckRec): string {

@@ -1,3 +1,4 @@
+import { cutForDisplay } from "./redact.js";
 import { checkArithmeticOpener, splitSegments, stripHeredocs, type Segment } from "./check-patterns-segments.js";
 
 /**
@@ -575,7 +576,7 @@ export function matchSegment(raw: string, repo: RepoScripts | undefined): boolea
 
 function labelOf(raw: string): string {
   const s = normalizeFirstToken(stripPrefixes(raw)).replace(/\s+/g, " ");
-  return s.length > LABEL_MAX ? s.slice(0, LABEL_MAX - 1) + "…" : s;
+  return cutForDisplay(s, LABEL_MAX);
 }
 
 const GIT_PREFIX = /^git\s+(?:-C\s+\S+\s+|-c\s+\S+\s+)*/;
@@ -622,7 +623,7 @@ export function classifyCommand(command: string, repo?: RepoScripts): CommandCla
     }
     if (mutationProbe) unreliable = true;
     let label = labels.join(" + ");
-    if (label.length > LABEL_TOTAL_MAX) label = label.slice(0, LABEL_TOTAL_MAX - 1) + "…";
+    label = cutForDisplay(label, LABEL_TOTAL_MAX);
     return { isCheck: true, label, unreliable, mutationProbe };
   } catch {
     return NOT_CHECK;

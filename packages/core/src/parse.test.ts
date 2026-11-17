@@ -308,6 +308,16 @@ describe("slash command prompts", () => {
     expect(texts([prompt([{ type: "text", text: "<command-name>/review</command-name>" }])])).toEqual(["/review"]);
   });
 
+  test("args whose closing tag ends just before the 4000-character input cap are kept", () => {
+    const head = "<command-name>/review</command-name>\n<command-args>";
+    const tail = "</command-args>";
+    const tailArgs = " ";
+    const body = "keep " + "a".repeat(3996 - head.length - tail.length - tailArgs.length - 5) + tailArgs;
+    const raw = head + body + tail;
+    expect(raw).toHaveLength(3996);
+    expect(texts([prompt(raw + "Q".repeat(50))])[0]).toMatch(/^\/review keep a/);
+  });
+
   test("args are truncated like prompts", () => {
     expect(texts([cmd("review", "x".repeat(500))])[0]).toHaveLength(200);
   });

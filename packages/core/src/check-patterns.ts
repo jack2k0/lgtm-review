@@ -81,7 +81,17 @@ const NEGATIVE = /\b0 (?:failed|failures?|errors?)\b|\bno errors\b|\berrors?: 0\
 export function findMaskedFailure(output: string): string | null {
   try {
     if (typeof output !== "string" || output === "") return null;
-    const tail = output.length > MASKED_TAIL_MAX ? output.slice(output.length - MASKED_TAIL_MAX) : output;
+    let tail = output;
+    if (output.length > MASKED_TAIL_MAX) {
+      // A tail that starts mid-token would keep a secret's suffix, which no longer redacts: drop the partial token only,
+      // so a failure signal later on the same line still counts.
+      const start = output.length - MASKED_TAIL_MAX;
+      tail = output.slice(start);
+      if (!/\s/.test(output[start - 1] ?? "\n")) {
+        const ws = tail.search(/\s/);
+        tail = ws === -1 ? "" : tail.slice(ws);
+      }
+    }
     const lines = tail.split("\n");
     let last = lines.length - 1;
     while (last >= 0 && (lines[last] as string).trim() === "") last--;
