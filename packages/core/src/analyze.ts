@@ -1,4 +1,4 @@
-import { CHECK_FAMILIES, checkFamilies, classifyCommand, findMaskedFailure, placeCheckScope, resultUnobserved, treeOps, type CheckFamily, type PlacedScope, type RepoScripts, type TreeOp } from "./check-patterns.js";
+import { CHECK_FAMILIES, checkFamilies, classifyCommand, findMaskedFailure, placeCheckScope, resultUnobserved, treeOps, unobservedSegments, type CheckFamily, type PlacedScope, type RepoScripts, type TreeOp } from "./check-patterns.js";
 import { classifyShellMutation, normalizePath, resolveTarget, SHELL_EDIT_FILE, type ShellMutation } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, isDocPath, isScratchPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
@@ -123,6 +123,8 @@ interface CheckRec {
   aggregate: boolean;
   /** The result cannot be observed (trailing `&`, discarded output behind a masked exit, count-only pipe): not a check outcome at all. */
   unobserved: boolean;
+  /** The result was not observed (`unobserved`, and no failure showed): the check is `ignored`, but a later one still leaves the status open. */
+  hidden: boolean;
   unreliable: boolean;
   /** A command after the check may have reverted the edits (`; git checkout file`). */
   probe: boolean;
@@ -465,6 +467,11 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
   const passCovers = lastCompleted !== null && lastCompleted.coveredSeq > lastEdit && lastCompleted.exit === 0 && !lastCompleted.masked;
   const bgQuiet = incomplete.length > 0 && incomplete.every((c) => c.background) && passCovers;
   if (incomplete.length > 0 && !bgQuiet) return { status: "unchecked", reason: "check did not complete", outOfScope: new Map() };
+  // A check whose result was not observed, run after the last result, leaves the status open like an incomplete one.
+  // Alone, or after a failure, it changes nothing ("no checks ran" / the failure).
+  if (passCovers && lastCompleted !== null && p.checks.some((c) => c.hidden && c.useSeq > lastEdit && c.useSeq > lastCompleted.resultSeq)) {
+    return { status: "unchecked", reason: "check did not complete", outOfScope: new Map() };
+  }
 
   if (lastCompleted !== null && lastCompleted.coveredSeq > lastEdit) {
     if (checkFailed(lastCompleted)) return { status: "failing", reason: failureReason(lastCompleted, via), outOfScope: new Map() };
@@ -503,6 +510,20 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
           notes.add(reverted ? REVERT_NOTE : `scoped to ${scopeLabel}`);
         }
         scopeNote = ` (${[...notes].join("; ")})`;
+      }
+      // A scoped pass after a failing run of the whole project clears that failure (same family, newest result), but it proves less.
+      const supersedes =
+        lastCompleted.scope !== null &&
+        completed.some(
+          (c) =>
+            checkFailed(c) &&
+            c.scope === null &&
+            c.coveredSeq > lastEdit &&
+            c.coveredSeq < lastCompleted.coveredSeq &&
+            c.families.some((f) => (lastCompleted.aggregate ? true : lastCompleted.families.includes(f))),
+        );
+      if (supersedes) {
+        scopeNote = scopeNote === "" ? ` (scoped to ${lastCompleted.scope?.label}; earlier full run failed)` : `${scopeNote} (earlier full run failed)`;
       }
       const docsTail = docsAfter > 0 ? `; ${plural(docsAfter, "documentation edit")} after it` : "";
       const bgTail = bgQuiet ? "; a later background check did not report" : "";
@@ -725,7 +746,8 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               stopped: false,
               signalStop: false,
               label: cls.label,
-              ...checkFamilies(ev.input.command, opts.repo),
+              ...checkFamilies(ev.input.command, opts.repo, unobservedSegments(ev.input.command, opts.repo)),
+              hidden: false,
               unobserved: resultUnobserved(ev.input.command, opts.repo),
               unreliable: cls.unreliable,
               probe: cls.mutationProbe,
@@ -811,6 +833,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             if (line === null && use.check.unobserved) {
               use.check.completed = false;
               use.check.ignored = true;
+              use.check.hidden = true;
             } else setFailing(use.prompt, use.thread, line !== null);
           }
         }

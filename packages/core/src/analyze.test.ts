@@ -1760,8 +1760,8 @@ describe("status-evidence (S-38) phase 2: result not observed", () => {
     expect(run(bash("b1", "pnpm test | wc -l", { output: "3 failed" })).status).toBe("failing");
   });
 
-  test("a hidden pass next to a real pass changes nothing", () => {
-    expect(run(bash("b1", "pnpm test"), bash("b2", "pnpm lint &", { output: "" })).status).toBe("checked");
+  test("a hidden check before a real pass changes nothing", () => {
+    expect(run(bash("b1", "pnpm lint &", { output: "" }), bash("b2", "pnpm test")).status).toBe("checked");
   });
 
   test("a masked failure of a discarded-output check still shows when a later command prints it", () => {
@@ -1774,5 +1774,47 @@ describe("status-evidence (S-38) phase 2: result not observed", () => {
     a.finish();
     const check = a.details()[0]!.steps.find((s) => s.check !== undefined)!;
     expect(check.check).toMatchObject({ exitCode: null, passed: null });
+  });
+});
+
+describe("status-evidence review round 1", () => {
+  const run = (...steps: string[][]) => one([prompt("q"), ...edit("e1"), ...steps.flat()]);
+
+  test("check:<x> is not an aggregate: its family is the one of <x>", () => {
+    for (const later of ["pnpm check:types", "pnpm check:lint", "pnpm run check:tsc", "pnpm check:foo"]) {
+      expect(run(bash("b1", "pnpm test", { exit: 1, output: "1 failed" }), bash("b2", later)).status).toBe("failing");
+    }
+    expect(run(bash("b1", "pnpm test", { exit: 1 }), bash("b2", "pnpm check:test")).status).toBe("checked");
+    expect(run(bash("b1", "pnpm test", { exit: 1 }), bash("b2", "pnpm check")).status).toBe("checked");
+  });
+
+  test("a backgrounded check that is waited for, or another segment, stays observed", () => {
+    expect(run(bash("b1", "pnpm test & wait", { output: "ok" })).status).toBe("checked");
+    expect(run(bash("b1", "pnpm lint & pnpm test", { output: "ok" })).status).toBe("checked");
+    expect(run(bash("b1", "pnpm lint & pnpm test &", { output: "" })).status).toBe("unchecked");
+  });
+
+  test("a pass followed by a check whose result was not observed is unchecked; alone it is no check", () => {
+    expect(run(bash("b1", "pnpm test"), bash("b2", "pnpm typecheck | wc -l", { output: "0" }))).toMatchObject({
+      status: "unchecked",
+      reason: "check did not complete",
+    });
+    expect(run(bash("b1", "pnpm test"), bash("b2", "pnpm lint &", { output: "" })).status).toBe("unchecked");
+    expect(run(bash("b1", "pnpm typecheck | wc -l", { output: "0" }), bash("b2", "pnpm test")).status).toBe("checked");
+    expect(run(bash("b1", "pnpm typecheck | wc -l", { output: "0" }))).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("a count-only pipe with a quiet grep is not observed", () => {
+    expect(run(bash("b1", "pnpm test | grep -q passed", { output: "" }))).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+  });
+
+  test("a scoped pass that supersedes an earlier full-project failure says so", () => {
+    const WEB = "/home/user/project/packages/web/src/a.ts";
+    const p = one([prompt("q"), ...edit("e1", WEB), ...bash("b1", "pnpm test", { exit: 1, output: "1 failed" }), ...bash("b2", "cd packages/web && pnpm test")]);
+    expect(p.status).toBe("checked");
+    expect(p.reason).toContain("earlier full run failed");
+    // Unchanged: a pass of the same scope as the failure carries no such note.
+    const same = one([prompt("q"), ...edit("e1", WEB), ...bash("b1", "pnpm test", { exit: 1 }), ...bash("b2", "pnpm test")]);
+    expect(same.reason).toBe("pnpm test passed after last edit");
   });
 });

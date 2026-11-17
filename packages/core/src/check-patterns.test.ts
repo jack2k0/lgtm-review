@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { classifyShellMutation } from "./shell-edits.js";
-import { checkFamilies, checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, placeCheckScope, resultUnobserved, stripHeredocs, treeOps, type RepoScripts } from "./check-patterns.js";
+import { checkFamilies, checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, placeCheckScope, resultUnobserved, stripHeredocs, treeOps, unobservedSegments, type RepoScripts } from "./check-patterns.js";
 
 const repo: RepoScripts = { packageScripts: ["verify"], makeTargets: ["ci"], scriptFiles: ["tools/run-all.sh"] };
 
@@ -1008,5 +1008,76 @@ describe("status-evidence (S-38) phase 2", () => {
   test("never throws", () => {
     expect(resultUnobserved(undefined as unknown as string)).toBe(false);
     expect(resultUnobserved("")).toBe(false);
+  });
+});
+
+describe("status-evidence review round 1", () => {
+  test.each([
+    ["pnpm check:types", ["typecheck"], false],
+    ["pnpm check:lint", ["lint"], false],
+    ["pnpm run check:tsc", ["typecheck"], false],
+    ["pnpm check:test", ["test"], false],
+    ["pnpm check:foo", ["other"], false],
+    ["pnpm check", ["other"], true],
+    ["pnpm test:unit", ["test"], false],
+  ])("family of %s", (cmd, families, aggregate) => {
+    expect(checkFamilies(cmd)).toEqual({ families, aggregate });
+  });
+
+  test.each([
+    // prose and passing output under a masked exit must not match the new signals
+    "  \u2713 rejects error TS2304 in tsc output",
+    "\u2713 prints npm ERR! when the script fails",
+    "  \u2713 reports bash: vitest: command not found",
+    "it logs error[E0425] for a missing name",
+    "see ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL in the docs",
+  ])("prose row %j is not a failure", (line) => {
+    expect(findMaskedFailure(`${line}\n Tests  3 passed (3)`)).toBeNull();
+  });
+
+  test.each([
+    "src/a.ts(3,5): error TS2304: Cannot find name 'x'.",
+    "src/a.ts:3:5 - error TS2304: Cannot find name 'x'.",
+    "  npm ERR! code ELIFECYCLE",
+    "\u001b[31merror[E0425]\u001b[0m: cannot find value",
+    "bash: line 1: vitest: command not found",
+    " ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL x",
+  ])("anchored signal %j still matches", (line) => {
+    expect(findMaskedFailure(line)).not.toBeNull();
+  });
+
+  test("a coloured line start still matches", () => {
+    expect(findMaskedFailure("\u001b[31merror[E0425]\u001b[0m: cannot find value")).not.toBeNull();
+    expect(findMaskedFailure("\u001b[1m\u001b[31mnpm ERR!\u001b[0m code 1")).not.toBeNull();
+  });
+
+  test.each([
+    ["pnpm test | grep -q passed", true],
+    ["pnpm test | grep -l FAIL", true],
+    ["pnpm test | grep -L FAIL", true],
+    ["pnpm test | grep --quiet passed", true],
+    ["pnpm test | grep --silent passed", true],
+    ["pnpm test | grep passed", false],
+    ["pnpm test & wait", false],
+    ["pnpm test & wait $!", false],
+    ["pnpm lint & pnpm test", false],
+    ["pnpm test & pnpm lint", false],
+    ["pnpm test && pnpm lint &", true],
+    ["pnpm lint & pnpm test &", true],
+  ])("unobserved %j -> %s", (cmd, hidden) => {
+    expect(resultUnobserved(cmd)).toBe(hidden);
+  });
+
+  test("per segment: only the backgrounded check is hidden", () => {
+    expect([...unobservedSegments("pnpm lint & pnpm test")]).toEqual([0]);
+    expect([...unobservedSegments("pnpm test && pnpm lint &")].sort()).toEqual([0, 1]);
+    expect([...unobservedSegments("pnpm test & wait")]).toEqual([]);
+  });
+
+  test.each(["go test -list . ./...", "go test -list=Test.* ./..."])("%s is a no-op", (cmd) => {
+    expect(classifyCommand(cmd).isCheck).toBe(false);
+  });
+  test("go test is still a check", () => {
+    expect(classifyCommand("go test ./...").isCheck).toBe(true);
   });
 });

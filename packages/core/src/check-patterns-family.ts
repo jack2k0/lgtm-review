@@ -47,10 +47,19 @@ const NAME_FAMILY: Record<string, CheckFamily> = {
   compile: "build",
 };
 
-/** `null` for an aggregate, else the family of a script, make target or just recipe name (`test:unit` -> `test`). */
+/** `types` is the usual name of a type-check script (`check:types`). */
+const SUFFIX_FAMILY: Record<string, CheckFamily> = { ...NAME_FAMILY, types: "typecheck" };
+
+/**
+ * `null` for an aggregate, else the family of a script, make target or just recipe name (`test:unit` -> `test`).
+ * Only the exact names are aggregates: `check:types` is a type check, `check:lint` a lint, `ci:foo` is other.
+ */
 function nameFamily(name: string): CheckFamily | null {
-  const base = (name.split(":")[0] ?? name).toLowerCase();
-  if (AGGREGATE_NAMES.has(base)) return null;
+  const lower = name.toLowerCase();
+  if (AGGREGATE_NAMES.has(lower)) return null;
+  const colon = lower.indexOf(":");
+  const base = colon < 0 ? lower : lower.slice(0, colon);
+  if (colon >= 0 && AGGREGATE_NAMES.has(base)) return SUFFIX_FAMILY[lower.slice(colon + 1).split(":")[0] ?? ""] ?? "other";
   return NAME_FAMILY[base] ?? "other";
 }
 
@@ -191,13 +200,16 @@ function addSegment(acc: Acc, raw: string, repo: RepoScripts | undefined): void 
 }
 
 /**
- * Families of the check segments of a command (a chain keeps one per distinct family). Never throws;
+ * Families of the check segments of a command (a chain keeps one per distinct family); segments listed in `skip`
+ * (indices of `splitSegments`, the ones whose result was not observed) are left out. Never throws;
  * a command that is not a check, or that cannot be classified, belongs to `other`.
  */
-export function checkFamilies(command: string, repo?: RepoScripts): CheckFamilies {
+export function checkFamilies(command: string, repo?: RepoScripts, skip?: ReadonlySet<number>): CheckFamilies {
   try {
     const acc: Acc = { families: new Set(), aggregate: false };
-    for (const seg of splitSegments(stripHeredocs(command))) if (matchSegment(seg.text, repo)) addSegment(acc, seg.text, repo);
+    splitSegments(stripHeredocs(command)).forEach((seg, i) => {
+      if (skip?.has(i) !== true && matchSegment(seg.text, repo)) addSegment(acc, seg.text, repo);
+    });
     if (acc.aggregate) return { families: ["other"], aggregate: true };
     const families = CHECK_FAMILIES.filter((f) => acc.families.has(f));
     return { families: families.length > 0 ? families : ["other"], aggregate: false };

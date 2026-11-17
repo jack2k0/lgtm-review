@@ -241,13 +241,13 @@ function hasHelpFlag(toks: string[]): boolean {
   return toks.some((t) => t === "--help" || t === "-h" || t === "--version" || t === "-V" || (lowerV && t === "-v"));
 }
 
-/** Flags that make a test, lint or type-check tool print configuration or a list instead of running (`tsc --showConfig`, `eslint --init`, `jest --list`). */
-const NO_OP_FLAGS = new Set(["--showConfig", "--init", "--list", "--listTests"]);
+/** Flags that make a test, lint or type-check tool print configuration or a list instead of running (`tsc --showConfig`, `eslint --init`, `jest --list`, `go test -list`). */
+const NO_OP_FLAGS = new Set(["--showConfig", "--init", "--list", "--listTests", "-list"]);
 
 /** A tool call that only shows its config or lists tests runs no check. Script files are left alone: their arguments are their own. */
 function isNoOpInvocation(toks: string[]): boolean {
   if (/\.sh$/.test(toks.find((t) => !/^(?:bash|sh|zsh)$/.test(t)) ?? "")) return false;
-  return toks.slice(1).some((t) => NO_OP_FLAGS.has(t));
+  return toks.slice(1).some((t) => NO_OP_FLAGS.has(t) || t.startsWith("-list="));
 }
 
 /** `--dry-run` (and `make -n`) prints what would run instead of running it. */
