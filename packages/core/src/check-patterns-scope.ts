@@ -272,7 +272,7 @@ function segmentRoots(toks: string[], s: string): string[] | null {
 const REDIRECT_RE = /^(?:\d+|&)?(?:>>?\|?)(?:\S*)$|^(?:\d+|&)?<(?:\S*)$/;
 
 /** Drops shell redirections (`> out`, `2>&1`, `< in`) from a segment's tokens; they are not arguments. */
-function stripRedirects(toks: string[]): string[] {
+export function stripRedirects(toks: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i] as string;
@@ -287,16 +287,62 @@ function stripRedirects(toks: string[]): string[] {
 }
 
 /**
- * Where a check command ran, as written: the roots (relative to the working directory unless absolute) of
- * every check segment, with `cd` prefixes applied. `null` when a root cannot be placed (named package
- * filters, `cd` to an unknown directory, scripts, CI) or when the command is not a check.
+ * Outcome of placing a check command: its roots, the whole project (no scope), or a package selected by name
+ * (`unplaced`), which cannot be placed without the file system. `unplaced` lists the selected package names
+ * without scope (`@acme/core` gives `core`); an exclusion (`!web`) selects none.
  */
-export function checkScope(command: string, repo?: RepoScripts): string[] | null {
+export type PlacedScope = string[] | "whole" | { unplaced: string[] };
+
+/** A package name as written in a filter (`@acme/web`, `web`, `...web`, `web...`, `!web`); not a path or a glob. */
+const NAMED_PACKAGE = /^!?(?:\.\.\.)?\^?@?[A-Za-z0-9_][\w.@/-]*(?:\.\.\.)?$/;
+
+/** Package name of a filter value without scope, selectors and ellipses (`@acme/core...` gives `core`); `null` for an exclusion. */
+function packageNameOf(value: string): string | null {
+  if (value.startsWith("!")) return null;
+  const bare = value.replace(/^(?:\.\.\.)?\^?/, "").replace(/(?:\.\.\.)?$/, "");
+  const last = bare.slice(bare.lastIndexOf("/") + 1);
+  return last === "" ? null : last.toLowerCase();
+}
+
+/** Package names a package-manager or turbo segment selects (`--filter @acme/web`, `-w web`), or `null` when it names none. */
+function namedPackages(toks: readonly string[]): string[] | null {
+  const head = toks[0];
+  if (head !== "pnpm" && head !== "npm" && head !== "yarn" && head !== "bun" && head !== "turbo") return null;
+  const names: string[] = [];
+  let found = false;
+  const take = (v: string): void => {
+    found = true;
+    const n = packageNameOf(v);
+    if (n !== null) names.push(n);
+  };
+  if (head === "yarn" && toks[1] === "workspace" && toks[2] !== undefined) take(toks[2]);
+  for (let i = 1; i < toks.length; i++) {
+    const t = toks[i] as string;
+    if (t === "--") break;
+    let value: string | undefined;
+    if (t === "--filter" || t === "-F") value = toks[i + 1];
+    else if (t.startsWith("--filter=")) value = t.slice("--filter=".length);
+    else if (head === "npm" && (t === "-w" || t === "--workspace")) {
+      const v = toks[i + 1];
+      if (v !== undefined && (!v.includes("/") || v.startsWith("@"))) take(v);
+    }
+    if (value !== undefined && !/^(?:\.{1,2}\/|\/)/.test(value) && NAMED_PACKAGE.test(value)) take(value);
+  }
+  return found ? names : null;
+}
+
+/**
+ * Like `checkScope`, but tells a root-level run (`"whole"`: a root run, `-r`, a glob, a script, CI) from a
+ * check that selects a package by name, which cannot be placed without the file system (`"unplaced"`).
+ */
+export function placeCheckScope(command: string, repo?: RepoScripts, legacy = false): PlacedScope {
   try {
-    if (typeof command !== "string" || command.trim() === "") return null;
+    if (typeof command !== "string" || command.trim() === "") return "whole";
     let prefix: string | null = null;
     const outerPrefixes: (string | null)[] = [];
     const roots: string[] = [];
+    const unplacedNames: string[] = [];
+    let unplaced = false;
     for (const seg of splitSegments(stripHeredocs(command))) {
       for (let i = 0; i < seg.opens; i++) outerPrefixes.push(prefix);
       const s = normalizeFirstToken(stripPrefixes(seg.text));
@@ -304,20 +350,35 @@ export function checkScope(command: string, repo?: RepoScripts): string[] | null
       const head = toks[0];
       if (head === "cd" || head === "pushd") {
         const arg = toks[1];
-        if (arg === undefined || arg === "-" || /^[~$]/.test(arg) || arg.includes("`") || arg.includes("$(")) return null;
+        if (arg === undefined || arg === "-" || /^[~$]/.test(arg) || arg.includes("`") || arg.includes("$(")) return "whole";
         const next = joinPrefix(prefix, arg);
         prefix = next === "." ? null : next;
       } else if (matchSegment(seg.text, repo)) {
         const r = segmentRoots(toks, s);
-        if (r === null) return null;
-        for (const x of r) roots.push(joinPrefix(prefix, x));
+        // A named package adds no root: it covers nothing the other segments do not.
+        const names = r === null && !legacy ? namedPackages(toks) : null;
+        if (r === null && names === null) return "whole";
+        if (names !== null) {
+          unplaced = true;
+          unplacedNames.push(...names);
+        } else if (r !== null) for (const x of r) roots.push(joinPrefix(prefix, x));
       }
       // A `cd` inside `( … )` only affects that subshell: restore the outer prefix when it closes.
       for (let i = 0; i < seg.closes; i++) prefix = outerPrefixes.pop() ?? null;
     }
-    return roots.length === 0 ? null : [...new Set(roots)];
+    if (roots.length === 0) return unplaced ? { unplaced: [...new Set(unplacedNames)] } : "whole";
+    return [...new Set(roots)];
   } catch {
-    return null;
+    return "whole";
   }
 }
 
+/**
+ * Where a check command ran, as written: the roots (relative to the working directory unless absolute) of
+ * every check segment, with `cd` prefixes applied. `null` when a root cannot be placed (named package
+ * filters, `cd` to an unknown directory, scripts, CI) or when the command is not a check.
+ */
+export function checkScope(command: string, repo?: RepoScripts): string[] | null {
+  const placed = placeCheckScope(command, repo, true);
+  return Array.isArray(placed) ? placed : null;
+}

@@ -324,12 +324,19 @@
     "index": 4,
     "text": "Test the web package by name.",
     "status": "checked",
-    "reason": "pnpm --filter @acme/web test passed after last edit",
+    "reason": "pnpm --filter @acme/web test passed after last edit (scoped to unplaced scope)",
     "headline": "Mostly writing (50%), 1 check",
     "startedAt": "2026-01-01T00:00:29.000Z",
     "activeMs": 4000,
     "truncated": false,
-    "hints": [],
+    "hints": [
+      {
+        "rule": "check-scope",
+        "severity": "warn",
+        "path": "/home/user/project/packages/core/src/b.ts",
+        "reason": "outside the scope of the passing check (unplaced scope)"
+      }
+    ],
     "recommendation": "skim",
     "steps": [
       {

@@ -727,10 +727,10 @@ describe("scoped checks (FR-017)", () => {
     expect(scoped(p)).toEqual([]);
   });
 
-  test("SC-4: a named package filter cannot be placed, so nothing is flagged", () => {
+  test("SC-4: a named package filter cannot be placed, so it covers no edited file and the file is flagged", () => {
     const p = one([prompt("q"), ...edit("e1", CORE), ...bash("b1", "pnpm --filter @acme/web test")]);
     expect(p.status).toBe("checked");
-    expect(scoped(p)).toEqual([]);
+    expect(scoped(p)).toEqual([CORE]);
   });
 
   test("SC-5: the record cwd scopes the check", () => {
@@ -1460,5 +1460,207 @@ describe("C18: documentation after an untrusted absolute cd", () => {
     expect(checked.files.map((f) => f.path)).toContain("/abs/notes/plan.md");
     const unchecked = one([prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test"), ...bash("b2", heredoc("a.ts"))]);
     expect(unchecked.status).toBe("unchecked");
+  });
+});
+
+describe("status-tree (S-37): the check ran on the edited tree", () => {
+  const P = "/home/user/project";
+  const WT = `${P}/.claude/worktrees/wt-1`;
+  const SRC = `${P}/src/a.ts`;
+  const WTSRC = `${WT}/src/a.ts`;
+  const inCwd = (lines: string[], cwd: string): string[] =>
+    lines.map((l) => {
+      const o = JSON.parse(l) as Record<string, unknown>;
+      o.cwd = cwd;
+      return JSON.stringify(o);
+    });
+  const withSub = (parent: string[], sub: string[]) => {
+    const a = createAnalyzer();
+    for (const l of [prompt("go"), ...parent, toolUse("ag", "Agent", { description: "d", isolation: "worktree" }), toolResult("ag", "done")]) a.push(l);
+    a.addSubagent("ag", sub, { agentId: "a1", description: "d" });
+    return a.finish().prompts[0]!;
+  };
+  const scopedPaths = (p: ReturnType<typeof one>): (string | null)[] => p.hints.filter((h) => h.rule === "check-scope").map((h) => h.path);
+
+  test("unplaced named filters flag the edited file; other package selectors stay whole-project", () => {
+    for (const cmd of ["pnpm --filter @acme/web test", "pnpm -F web test", "pnpm --filter=web test", "turbo run test --filter=web", "npm test -w web"]) {
+      const p = one([prompt("q"), ...edit("e1", SRC), ...bash("b1", cmd)]);
+      expect(scopedPaths(p), cmd).toEqual([SRC]);
+    }
+    for (const cmd of ["pnpm -r test", "pnpm --filter './packages/*' test", "nx run web:test", "pnpm test"]) {
+      const p = one([prompt("q"), ...edit("e1", SRC), ...bash("b1", cmd)]);
+      expect(scopedPaths(p), cmd).toEqual([]);
+    }
+  });
+
+  test("an unplaced filter next to a root-level run is still whole-project", () => {
+    const p = one([prompt("q"), ...edit("e1", SRC), ...bash("b1", "pnpm test && pnpm --filter web test")]);
+    expect(scopedPaths(p)).toEqual([]);
+  });
+
+  // Records are stamped in creation order, so the pieces are built in order: head, the Agent call, the subagent, the parent's tail.
+  const withSubThen = (head: () => string[], sub: () => string[], tail: () => string[], isolation = true) => {
+    const a = createAnalyzer();
+    const lines = [prompt("go"), ...head(), toolUse("ag", "Agent", isolation ? { description: "d", isolation: "worktree" } : { description: "d" }), toolResult("ag", "done")];
+    const subLines = sub();
+    const tailLines = tail();
+    for (const l of lines) a.push(l);
+    a.addSubagent("ag", subLines, { agentId: "a1", description: "d" });
+    for (const l of tailLines) a.push(l);
+    return a.finish().prompts[0]!;
+  };
+
+  test("a check of the main tree after an edit made only in an agent worktree does not verify it", () => {
+    const sub = () => inCwd([prompt("t"), ...edit("s1", WTSRC)], WT);
+    expect(withSubThen(() => [], sub, () => bash("pb", "pnpm test")).status).toBe("unchecked");
+    expect(withSubThen(() => [], sub, () => bash("pb", "pnpm -C packages/web test")).status).toBe("unchecked");
+  });
+
+  test("a main-tree edit stays unchecked next to a worktree check even when a test-file root shares its stem", () => {
+    const p = withSub(edit("e1", SRC), inCwd([prompt("t"), ...bash("sb", "pnpm vitest run src/a.test.ts")], WT));
+    expect(p.status).toBe("unchecked");
+  });
+
+  test("a worktree check covers a main-tree file by folder name only inside its own tree", () => {
+    const p = withSub(
+      [...edit("e1", `${P}/src/api/x.ts`), ...edit("e2", `${P}/src/api/y.ts`)],
+      inCwd([prompt("t"), ...edit("s1", `${WT}/src/api/x.ts`), ...bash("sb", "pnpm vitest run src/api")], WT),
+    );
+    expect(p.status).toBe("checked");
+    expect(scopedPaths(p)).toEqual([`${P}/src/api/x.ts`, `${P}/src/api/y.ts`]);
+  });
+
+  test("a relative edit path is resolved: a worktree check that covers nothing does not make it checked", () => {
+    const relEdit = [
+      toolUse("e1", "Edit", { file_path: "src/a.ts", old_string: "a", new_string: "b" }),
+      toolResult("e1", "File updated.", { toolUseResult: patchResult(["b"], ["a"]) }),
+    ];
+    const p = withSub(relEdit, inCwd([prompt("t"), ...bash("sb", "pnpm test")], WT));
+    expect(p.status).toBe("unchecked");
+  });
+
+  describe("tree reverted (F4)", () => {
+    test("a check that passes while the edits are stashed is not a verification", () => {
+      const p = one([prompt("q"), ...edit("e1", SRC), ...bash("g1", "git stash"), ...bash("b1", "pnpm test"), ...bash("g2", "git stash pop")]);
+      expect(p.status).toBe("unchecked");
+    });
+
+    test("stashed and never restored: still unchecked", () => {
+      expect(one([prompt("q"), ...edit("e1", SRC), ...bash("g1", "git stash push -u"), ...bash("b1", "pnpm test")]).status).toBe("unchecked");
+    });
+
+    test("a check after stash pop verifies the edits", () => {
+      const p = one([prompt("q"), ...edit("e1", SRC), ...bash("g1", "git stash"), ...bash("g2", "git stash pop"), ...bash("b1", "pnpm test")]);
+      expect(p.status).toBe("checked");
+    });
+
+    test("stash, check and pop in one command is not a verification", () => {
+      expect(one([prompt("q"), ...edit("e1", SRC), ...bash("b1", "git stash && pnpm test; git stash pop")]).status).toBe("unchecked");
+    });
+
+    test.each(["git checkout -- .", "git checkout -- src/a.ts", "git restore src/a.ts", "git restore ."])("%s reverts the edit until it is made again", (cmd) => {
+      const reverted = one([prompt("q"), ...edit("e1", SRC), ...bash("g1", cmd), ...bash("b1", "pnpm test")]);
+      expect(reverted.status).toBe("unchecked");
+      const again = one([prompt("q"), ...edit("e1", SRC), ...bash("g1", cmd), ...edit("e2", SRC), ...bash("b1", "pnpm test")]);
+      expect(again.status).toBe("checked");
+    });
+
+    test("read-only and unrelated git commands do not count as a revert", () => {
+      for (const cmd of ["git stash list", "git stash show -p", "git restore --staged src/a.ts", "git checkout -b feature", "git checkout -- other/file.ts"]) {
+        expect(one([prompt("q"), ...edit("e1", SRC), ...bash("g1", cmd), ...bash("b1", "pnpm test")]).status, cmd).toBe("checked");
+      }
+    });
+
+    test("a revert of one file leaves the other edit checked and flags the reverted file", () => {
+      const p = one([prompt("q"), ...edit("e1", SRC), ...edit("e2", `${P}/src/b.ts`), ...bash("g1", "git checkout -- src/a.ts"), ...bash("b1", "pnpm test")]);
+      expect(p.status).toBe("checked");
+      expect(scopedPaths(p)).toEqual([SRC]);
+    });
+
+    test("a check before the revert keeps its verdict", () => {
+      expect(one([prompt("q"), ...edit("e1", SRC), ...bash("b1", "pnpm test"), ...bash("g1", "git stash"), ...bash("g2", "git stash pop")]).status).toBe("checked");
+    });
+  });
+});
+
+describe("status-tree review round 1", () => {
+  const P = "/home/user/project";
+  const WT = `${P}/.claude/worktrees/wt-1`;
+  const SRC = `${P}/src/a.ts`;
+  const inCwd = (lines: string[], cwd: string): string[] =>
+    lines.map((l) => {
+      const o = JSON.parse(l) as Record<string, unknown>;
+      o.cwd = cwd;
+      return JSON.stringify(o);
+    });
+  const scopedPaths = (p: ReturnType<typeof one>): (string | null)[] => p.hints.filter((h) => h.rule === "check-scope").map((h) => h.path);
+  const run = (head: () => string[], sub: () => string[], tail: () => string[], isolation: boolean) => {
+    const a = createAnalyzer();
+    const lines = [prompt("go"), ...head(), toolUse("ag", "Agent", isolation ? { description: "d", isolation: "worktree" } : { description: "d" }), toolResult("ag", "done")];
+    const subLines = sub();
+    const tailLines = tail();
+    for (const l of lines) a.push(l);
+    a.addSubagent("ag", subLines, { agentId: "a1", description: "d" });
+    for (const l of tailLines) a.push(l);
+    return a.finish().prompts[0]!;
+  };
+
+  test("1: an unplaced filter in an agent worktree covers no more of it than in the main tree", () => {
+    const sub = () => inCwd([prompt("t"), ...edit("s1", `${WT}/src/a.ts`), ...bash("sb", "pnpm --filter @acme/web test")], WT);
+    expect(run(() => [], sub, () => [], true).status).toBe("unchecked");
+    const named = () => inCwd([prompt("t"), ...edit("s1", `${WT}/packages/core/src/a.ts`), ...bash("sb", "pnpm --filter @acme/core test")], WT);
+    expect(run(() => [], named, () => [], true).status).toBe("checked");
+  });
+
+  test.each(["git stash 2>&1", "git stash >/dev/null 2>&1", "git -C /home/user/project stash", "git --no-pager stash", "git checkout -f main", "git switch -f main", "git switch --discard-changes main"])(
+    "2: %s reverts the edit",
+    (cmd) => {
+      expect(one([prompt("q"), ...edit("e1", SRC), ...bash("g1", cmd), ...bash("b1", "pnpm test")]).status).toBe("unchecked");
+    },
+  );
+
+  test("3: a subagent without isolation shares the main checkout: its stash reverts the parent's edit", () => {
+    const status = run(() => edit("e1", SRC), () => [prompt("t"), ...bash("sg", "git stash")], () => bash("pb", "pnpm test"), false).status;
+    expect(status).toBe("unchecked");
+  });
+
+  test("3: a parent stash makes a subagent's later check no verification", () => {
+    const status = run(() => [...edit("e1", SRC), ...bash("g1", "git stash")], () => [prompt("t"), ...bash("sb", "pnpm test")], () => [], false).status;
+    expect(status).toBe("unchecked");
+  });
+
+  test("3: a stash in an agent worktree does not revert the main checkout", () => {
+    const status = run(() => edit("e1", SRC), () => inCwd([prompt("t"), ...bash("sg", "git stash")], WT), () => bash("pb", "pnpm test"), true).status;
+    expect(status).toBe("checked");
+  });
+
+  test("4: an exclusion filter is not the whole project", () => {
+    const p = one([prompt("q"), ...edit("e1", SRC), ...bash("b1", "pnpm --filter '!web' test")]);
+    expect(scopedPaths(p)).toEqual([SRC]);
+  });
+
+  test("5: edits only in an agent worktree stay unverified by a scoped main-tree check that follows them", () => {
+    const sub = () => inCwd([prompt("t"), ...edit("s1", `${WT}/packages/web/src/a.ts`)], WT);
+    expect(run(() => [], sub, () => bash("pb", "pnpm -C packages/web test"), true).status).toBe("unchecked");
+  });
+
+  test("6: a failing git stash pop still brings the edits back", () => {
+    const p = one([prompt("q"), ...edit("e1", SRC), ...bash("g1", "git stash"), ...bash("g2", "git stash pop", { exit: 1, output: "CONFLICT" }), ...bash("b1", "pnpm test")]);
+    expect(p.status).toBe("checked");
+  });
+
+  test("7: a cut command with a revert reverts everything", () => {
+    const cmd = `git checkout -- ${Array.from({ length: 500 }, (_, i) => `other/file${i}.ts`).join(" ")} src/a.ts`;
+    expect(cmd.length).toBeGreaterThan(4000);
+    expect(one([prompt("q"), ...edit("e1", SRC), ...bash("g1", cmd), ...bash("b1", "pnpm test")]).status).toBe("unchecked");
+  });
+
+  test("8: a named filter matching the package directory of the edit covers it", () => {
+    const CORE = `${P}/packages/core/src/a.ts`;
+    const same = one([prompt("q"), ...edit("e1", CORE), ...bash("b1", "pnpm --filter @acme/core test")]);
+    expect(same.status).toBe("checked");
+    expect(scopedPaths(same)).toEqual([]);
+    const other = one([prompt("q"), ...edit("e1", CORE), ...bash("b1", "pnpm --filter @acme/web test")]);
+    expect(scopedPaths(other)).toEqual([CORE]);
   });
 });

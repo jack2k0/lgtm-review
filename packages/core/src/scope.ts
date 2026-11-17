@@ -8,7 +8,14 @@ export interface ResolvedScope {
   label: string;
   /** Root of the agent worktree the check ran in; it covers only files under that worktree. */
   worktree?: string;
+  /** The check's scope could not be placed (a named package filter, an unknown `cd`): it covers no edited file. */
+  unplaced?: true;
+  /** Package names (without scope, lower case) the unplaced filter selects; a file in a package directory of that name is covered. */
+  names?: string[];
 }
+
+/** Label of the scope of a check that could not be placed. */
+export const UNPLACED_LABEL = "unplaced scope";
 
 /** Folder names that hold tests; a root made only of these is the whole test suite. */
 const TEST_DIRS = new Set(["test", "tests", "__tests__", "spec", "specs", "e2e"]);
@@ -44,6 +51,27 @@ export function resolveScope(raw: readonly string[] | null, base: string | null,
     if (!roots.includes(root)) roots.push(root);
   }
   return { roots, label: labelOf(roots, sessionPrefix) };
+}
+
+/**
+ * Scope of a check as `placeCheckScope` reported it, resolved against the working directory and the session
+ * root. `null` is the whole project (a root-level run). A scope that cannot be placed is not the whole project:
+ * it covers no edited file (S-37), and so is a root list that cannot be resolved because the directory is unknown.
+ */
+export function resolveCheckScope(placed: readonly string[] | "whole" | { unplaced: readonly string[] }, base: string | null, sessionRoot: string | null): ResolvedScope | null {
+  if (placed === "whole") return null;
+  if (!Array.isArray(placed)) return unplacedScope((placed as { unplaced: readonly string[] }).unplaced);
+  const resolved = resolveScope(placed, base, sessionRoot);
+  if (resolved !== null) return resolved;
+  const known = base !== null && isAbs(base) && sessionRoot !== null && isAbs(sessionRoot);
+  return known ? null : unplacedScope([]);
+}
+
+/** Scope of a check that selects packages by name: no roots; it covers a file only through `names`. */
+export function unplacedScope(names: readonly string[], worktree?: string): ResolvedScope {
+  const scope: ResolvedScope = { roots: [], label: UNPLACED_LABEL, unplaced: true, names: [...names] };
+  if (worktree !== undefined) scope.worktree = worktree;
+  return scope;
 }
 
 function labelOf(roots: readonly string[], sessionPrefix: string): string {
@@ -141,6 +169,8 @@ function hasExtension(path: string): boolean {
 
 /** Does a check that ran on `root` cover the edited `file`? Both absolute. */
 export function scopeCovers(root: string, file: string): boolean {
+  // An agent worktree is its own tree: a root in it covers only files in the same worktree, and a root outside it none of its files.
+  if (agentWorktreeRoot(root) !== agentWorktreeRoot(file)) return false;
   if (file === root || file.startsWith(childPrefix(root))) return true;
   const key = keyOf(root);
   if (key === null) return false;
@@ -156,12 +186,28 @@ export function scopeCovers(root: string, file: string): boolean {
   return false;
 }
 
+/**
+ * Does a check with this scope cover the edited `file`? Only inside the tree it ran in (the main checkout, or its own agent
+ * worktree); an unplaced filter covers the files of a package directory named like the package (`@acme/core` and `packages/core`).
+ */
+export function scopeCoversPath(scope: ResolvedScope, file: string): boolean {
+  if (agentWorktreeRoot(file) !== (scope.worktree ?? null)) return false;
+  if (scope.unplaced === true) {
+    const pkg = packageOf(file);
+    const dir = pkg === null ? undefined : pkg.slice(pkg.lastIndexOf("/") + 1).toLowerCase();
+    return dir !== undefined && (scope.names ?? []).includes(dir);
+  }
+  return scope.roots.some((r) => scopeCovers(r, file));
+}
+
 export interface ScopeCheck {
   /** Sequence number at which the check finished. */
   coveredSeq: number;
   passed: boolean;
-  /** `null` when the check covers the whole project. */
+  /** `null` when the check covers the whole project of the main tree (never a file in an agent worktree). */
   scope: ResolvedScope | null;
+  /** Edited files the tree had reverted (stash, checkout, restore) when the check ran: it proves nothing about them. */
+  reverted?: ReadonlySet<string>;
 }
 
 export interface EditedFile {
@@ -179,7 +225,11 @@ export function scopeGaps(files: readonly EditedFile[], checks: readonly ScopeCh
   for (const f of files) {
     if (!isAbs(f.path)) continue;
     const covered = checks.some(
-      (c) => c.passed && c.coveredSeq > f.lastSeq && (c.scope === null || c.scope.roots.some((r) => scopeCovers(r, f.path))),
+      (c) =>
+        c.passed &&
+        c.coveredSeq > f.lastSeq &&
+        c.reverted?.has(f.path) !== true &&
+        (c.scope === null ? agentWorktreeRoot(f.path) === null : scopeCoversPath(c.scope, f.path)),
     );
     if (!covered) gaps.push(f.path);
   }

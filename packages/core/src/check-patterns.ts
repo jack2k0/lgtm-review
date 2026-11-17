@@ -43,7 +43,14 @@ export {
  */
 export {
   checkScope,
+  placeCheckScope,
+  type PlacedScope,
 } from "./check-patterns-scope.js";
+
+/**
+ * Re-exported tree-state operations (`git stash`, `git checkout -- .`, `git restore`, `git stash pop`).
+ */
+export { treeOps, type TreeOp } from "./check-patterns-tree.js";
 
 // --- Masked exit codes ------------------------------------------------------------------------
 
