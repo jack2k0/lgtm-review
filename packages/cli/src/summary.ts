@@ -23,8 +23,8 @@ const STATUS_ORDER: Status[] = ["checked", "unchecked", "failing", "no-changes"]
 export function redact(s: string, opts: RedactOptions = {}): string {
   const stripped = stripDroppedControls(s);
   const options: RedactOptions = {
-    usernames: opts.usernames ?? osUsernames(),
     ...opts,
+    usernames: opts.usernames ?? osUsernames(),
   };
   return stripped === "" ? "" : coreRedact(stripped, options).text;
 }

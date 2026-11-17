@@ -377,6 +377,9 @@ export async function runArchive(roots: readonly SessionRoot[], projectsDir: str
   return 0;
 }
 
+/** The repository directory as shown in `--json` without `--raw`: `<repo>`. */
+const REPO_PLACEHOLDER = "<repo>";
+
 export async function runListOrJson(
   dir: string,
   files: SessionFile[],
@@ -391,7 +394,9 @@ export async function runListOrJson(
   if (json) {
     const sorted = sortSessions(sessions);
     const analysis: Analysis = { dir, sessions: sorted };
-    const output = raw ? analysis : redactAnalysis(analysis, { usernames: osUsernames(), repoDir: dir }, rootOf);
+    const output = raw
+      ? analysis
+      : { ...redactAnalysis(analysis, { usernames: osUsernames(), repoDir: dir }, rootOf), dir: REPO_PLACEHOLDER };
     console.log(JSON.stringify(output, null, 2));
   } else {
     const color = process.stdout.isTTY === true && !process.env.NO_COLOR;
@@ -461,7 +466,7 @@ async function main(): Promise<number> {
       console.error(`lgtm-review: no Claude Code sessions found for ${dir}`);
       return 1;
     }
-    if (values.json) console.log(JSON.stringify({ dir, sessions: [] } satisfies Analysis, null, 2));
+    if (values.json) console.log(JSON.stringify({ dir: values.raw === true ? dir : REPO_PLACEHOLDER, sessions: [] } satisfies Analysis, null, 2));
     else console.log(`No Claude Code sessions found for ${dir}`);
     return 0;
   }
