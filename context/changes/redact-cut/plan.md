@@ -23,7 +23,7 @@ Done: `pnpm check` green (incl. perf suite); gate exit 0 or 2 with each item exp
 Non-goals: no new secret shapes (S-34), no change to `trimPartialSecret` or to the redaction patterns.
 
 ```gate
-allow: ^packages/core/src/(redact|check-patterns-classify|steps|analyze|parse|diff|play|llm-input)\.ts$
+allow: ^packages/core/src/(redact|check-patterns|check-patterns-classify|steps|analyze|parse|diff|play|llm-input)\.ts$
 allow: ^packages/core/src/[a-z-]+\.test\.ts$
 allow: ^packages/cli/src/format\.ts$
 allow: ^packages/cli/src/[a-z-]+\.test\.ts$

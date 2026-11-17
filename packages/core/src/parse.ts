@@ -229,10 +229,15 @@ function blocksText(content: unknown, max: number, sep: string): string {
   return cutBlocks(blocksRaw(content, max, sep), max);
 }
 
-/** Display cut of a joined message text: prompts, quotes and hints keep `truncateText`; the rest goes through `cutForDisplay`. */
+/**
+ * Cut of a joined message text: prompts, quotes and hints keep `truncateText`; the tool-result head (shown) goes
+ * through `cutForDisplay`; every other max (the 40-character slash-command probe, the 4000-character slash args) is
+ * an input to further parsing and keeps the plain `truncate`.
+ */
 function cutBlocks(s: string, max: number): string {
   if (max === PROMPT_TEXT_MAX || max === QUOTE_MAX || max === HINT_MAX) return truncateText(s, max);
-  return cutForDisplay(s, max, "");
+  if (max === RESULT_TEXT_MAX) return cutForDisplay(s, max, "");
+  return truncate(s, max);
 }
 
 /** The text blocks of a message `content` joined with `sep`, read until at least `max` characters are in; not yet cut. */
