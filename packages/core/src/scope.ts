@@ -187,6 +187,8 @@ export interface ScopeCheck {
   passed: boolean;
   /** `null` when the check covers the whole project of the main tree (never a file in an agent worktree). */
   scope: ResolvedScope | null;
+  /** Edited files the tree had reverted (stash, checkout, restore) when the check ran: it proves nothing about them. */
+  reverted?: ReadonlySet<string>;
 }
 
 export interface EditedFile {
@@ -207,6 +209,7 @@ export function scopeGaps(files: readonly EditedFile[], checks: readonly ScopeCh
       (c) =>
         c.passed &&
         c.coveredSeq > f.lastSeq &&
+        c.reverted?.has(f.path) !== true &&
         (c.scope === null ? agentWorktreeRoot(f.path) === null : c.scope.roots.some((r) => scopeCovers(r, f.path))),
     );
     if (!covered) gaps.push(f.path);

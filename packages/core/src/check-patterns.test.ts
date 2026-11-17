@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { classifyShellMutation } from "./shell-edits.js";
-import { checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, stripHeredocs, type RepoScripts } from "./check-patterns.js";
+import { checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, placeCheckScope, stripHeredocs, treeOps, type RepoScripts } from "./check-patterns.js";
 
 const repo: RepoScripts = { packageScripts: ["verify"], makeTargets: ["ci"], scriptFiles: ["tools/run-all.sh"] };
 
@@ -815,5 +815,37 @@ describe("status-accuracy-10 quote- and arithmetic-aware heredoc starts", () => 
       label: "pnpm check 2>&1 > results.txt",
       unreliable: false,
     });
+  });
+});
+
+describe("treeOps (S-37)", () => {
+  test("stash, checkout and restore revert; pop and apply restore; a check segment is marked in order", () => {
+    expect(treeOps("git stash && pnpm test; git stash pop")).toEqual([{ kind: "revert", paths: null }, { kind: "check" }, { kind: "restore" }]);
+    expect(treeOps("git checkout -- src/a.ts")).toEqual([{ kind: "revert", paths: ["src/a.ts"] }]);
+    expect(treeOps("git checkout -- .")).toEqual([{ kind: "revert", paths: null }]);
+    expect(treeOps("git restore src/a.ts src/b.ts")).toEqual([{ kind: "revert", paths: ["src/a.ts", "src/b.ts"] }]);
+    expect(treeOps("git restore --source=HEAD~1 src/a.ts")).toEqual([{ kind: "revert", paths: ["src/a.ts"] }]);
+    expect(treeOps("git stash apply")).toEqual([{ kind: "restore" }]);
+    expect(treeOps("git stash push -- src/a.ts")).toEqual([{ kind: "revert", paths: ["src/a.ts"] }]);
+  });
+
+  test("read-only and unrelated forms are not operations", () => {
+    for (const c of ["git stash list", "git stash show -p", "git stash drop", "git restore --staged a.ts", "git checkout -b x", "git checkout main", "git status", "git -C ../other stash", "", "ls"]) {
+      expect(treeOps(c), c).toEqual([]);
+    }
+  });
+
+  test("a glob or a variable path reverts everything", () => {
+    expect(treeOps("git restore 'src/*.ts'")).toEqual([{ kind: "revert", paths: null }]);
+    expect(treeOps("git checkout -- $FILE")).toEqual([{ kind: "revert", paths: null }]);
+  });
+});
+
+describe("placeCheckScope (S-37)", () => {
+  test("a named package selector is unplaced; the other unplaced shapes stay whole-project", () => {
+    for (const c of ["pnpm --filter @a/web test", "pnpm -F web test", "turbo run test --filter=web", "npm test -w web"]) expect(placeCheckScope(c), c).toBe("unplaced");
+    expect(placeCheckScope("pnpm test")).toEqual(["."]);
+    for (const c of ["pnpm -r test", "pnpm --filter './packages/*' test", "nx run web:test", "bash scripts/check.sh", "cd $X && pnpm test"]) expect(placeCheckScope(c), c).toBe("whole");
+    expect(placeCheckScope("pnpm -C packages/web test")).toEqual(["packages/web"]);
   });
 });

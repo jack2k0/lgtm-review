@@ -1525,4 +1525,47 @@ describe("status-tree (S-37): the check ran on the edited tree", () => {
     const p = withSub(relEdit, inCwd([prompt("t"), ...bash("sb", "pnpm test")], WT));
     expect(p.status).toBe("unchecked");
   });
+
+  describe("tree reverted (F4)", () => {
+    test("a check that passes while the edits are stashed is not a verification", () => {
+      const p = one([prompt("q"), ...edit("e1", SRC), ...bash("g1", "git stash"), ...bash("b1", "pnpm test"), ...bash("g2", "git stash pop")]);
+      expect(p.status).toBe("unchecked");
+    });
+
+    test("stashed and never restored: still unchecked", () => {
+      expect(one([prompt("q"), ...edit("e1", SRC), ...bash("g1", "git stash push -u"), ...bash("b1", "pnpm test")]).status).toBe("unchecked");
+    });
+
+    test("a check after stash pop verifies the edits", () => {
+      const p = one([prompt("q"), ...edit("e1", SRC), ...bash("g1", "git stash"), ...bash("g2", "git stash pop"), ...bash("b1", "pnpm test")]);
+      expect(p.status).toBe("checked");
+    });
+
+    test("stash, check and pop in one command is not a verification", () => {
+      expect(one([prompt("q"), ...edit("e1", SRC), ...bash("b1", "git stash && pnpm test; git stash pop")]).status).toBe("unchecked");
+    });
+
+    test.each(["git checkout -- .", "git checkout -- src/a.ts", "git restore src/a.ts", "git restore ."])("%s reverts the edit until it is made again", (cmd) => {
+      const reverted = one([prompt("q"), ...edit("e1", SRC), ...bash("g1", cmd), ...bash("b1", "pnpm test")]);
+      expect(reverted.status).toBe("unchecked");
+      const again = one([prompt("q"), ...edit("e1", SRC), ...bash("g1", cmd), ...edit("e2", SRC), ...bash("b1", "pnpm test")]);
+      expect(again.status).toBe("checked");
+    });
+
+    test("read-only and unrelated git commands do not count as a revert", () => {
+      for (const cmd of ["git stash list", "git stash show -p", "git restore --staged src/a.ts", "git checkout -b feature", "git checkout -- other/file.ts"]) {
+        expect(one([prompt("q"), ...edit("e1", SRC), ...bash("g1", cmd), ...bash("b1", "pnpm test")]).status, cmd).toBe("checked");
+      }
+    });
+
+    test("a revert of one file leaves the other edit checked and flags the reverted file", () => {
+      const p = one([prompt("q"), ...edit("e1", SRC), ...edit("e2", `${P}/src/b.ts`), ...bash("g1", "git checkout -- src/a.ts"), ...bash("b1", "pnpm test")]);
+      expect(p.status).toBe("checked");
+      expect(scopedPaths(p)).toEqual([SRC]);
+    });
+
+    test("a check before the revert keeps its verdict", () => {
+      expect(one([prompt("q"), ...edit("e1", SRC), ...bash("b1", "pnpm test"), ...bash("g1", "git stash"), ...bash("g2", "git stash pop")]).status).toBe("checked");
+    });
+  });
 });

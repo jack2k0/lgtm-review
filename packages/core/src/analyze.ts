@@ -1,4 +1,4 @@
-import { classifyCommand, findMaskedFailure, placeCheckScope, type PlacedScope, type RepoScripts } from "./check-patterns.js";
+import { classifyCommand, findMaskedFailure, placeCheckScope, treeOps, type PlacedScope, type RepoScripts, type TreeOp } from "./check-patterns.js";
 import { classifyShellMutation, normalizePath, resolveTarget, SHELL_EDIT_FILE, type ShellMutation } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, isDocPath, isScratchPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
@@ -129,6 +129,8 @@ interface CheckRec {
   thread: string;
   /** Where the check ran; `null` when it covers the whole project. */
   scope: ResolvedScope | null;
+  /** Edited files the tree had reverted (stash, checkout, restore) when the check ran. */
+  reverted: Set<string>;
 }
 
 interface PromptState {
@@ -153,6 +155,8 @@ interface PromptState {
   truncated: boolean;
   /** Retained diff lines per file path. */
   patchLines: Map<string, number>;
+  /** Per thread: edited files the working tree has reverted right now (`git stash`, `checkout --`, `restore`) and not yet brought back. */
+  tree: Map<string, Set<string>>;
 }
 
 interface PendingUse {
@@ -320,6 +324,48 @@ function editedAbs(e: EditRec, f: FileTouch): string | null {
   return normalizePath(`${e.cwd}/${f.path}`);
 }
 
+const REVERT_NOTE = "edit reverted when it ran";
+
+/** Applies one tree operation of `thread` to the prompt's reverted-file state. */
+function applyTreeOp(p: PromptState, thread: string, op: TreeOp, cwd: string | null, hasCd: boolean): void {
+  if (op.kind === "check") return;
+  let state = p.tree.get(thread);
+  if (state === undefined) p.tree.set(thread, (state = new Set()));
+  if (op.kind === "restore") {
+    state.clear();
+    return;
+  }
+  const base = cwd !== null && cwd.startsWith("/") ? cwd : null;
+  // A `cd` in the command changes what a relative path means: revert everything.
+  const prefixes =
+    op.paths === null || hasCd ? null : op.paths.map((x) => (x.startsWith("/") ? normalizePath(x) : base === null ? null : normalizePath(`${base}/${x}`)));
+  for (const e of p.edits) {
+    if (e.thread !== thread || e.gitOp) continue;
+    for (const f of e.files) {
+      if (f.cls !== "code") continue;
+      const abs = editedAbs(e, f);
+      const hit = prefixes === null || (abs !== null && prefixes.some((r) => r === null || abs === r || abs.startsWith(r.endsWith("/") ? r : `${r}/`)));
+      if (hit) state.add(abs ?? f.path);
+    }
+  }
+}
+
+/** Applies the tree operations of a command; at each check segment adds the reverted files to `into`. */
+function runTreeOps(p: PromptState, thread: string, ops: readonly TreeOp[], cwd: string | null, hasCd: boolean, into: Set<string> | null): void {
+  for (const op of ops) {
+    if (op.kind === "check") {
+      if (into !== null) for (const x of p.tree.get(thread) ?? []) into.add(x);
+    } else applyTreeOp(p, thread, op, cwd, hasCd);
+  }
+}
+
+/** An edit of a file brings it back into the tree: it is no longer reverted. */
+function noteEdit(p: PromptState, thread: string, e: EditRec): void {
+  const state = p.tree.get(thread);
+  if (state === undefined || state.size === 0 || e.gitOp) return;
+  for (const f of e.files) state.delete(editedAbs(e, f) ?? f.path);
+}
+
 function judge(p: PromptState, by: (thread: string) => string): { status: Status; reason: string; outOfScope: Map<string, string> } {
   const via = (thread: string): string => (thread === "" ? "" : ` (by subagent ${by(thread)})`);
   if (p.edits.length === 0) return { status: "no-changes", reason: "no edits", outOfScope: new Map() };
@@ -337,7 +383,7 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
   const real = p.checks.filter((c) => !c.ignored);
   // An agent-worktree check that passed but covers none of the edited files proves nothing about them.
   // The same holds for a check that ran in another tree (an agent worktree, or the main tree for edits made only in a
-  // worktree): it ran on the other tree.
+  // worktree) and for one that ran while every edited file was reverted: it ran on the old tree.
   const editedPaths = new Set<string>();
   for (const e of edits) for (const f of e.files) if (f.cls === "code") {
     const abs = editedAbs(e, f);
@@ -346,8 +392,12 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
   const coversNone = (c: CheckRec): boolean => {
     if (c.exit !== 0 || c.masked || editedPaths.size === 0) return false;
     const otherTree = c.scope === null || c.scope.worktree !== undefined;
-    if (!otherTree) return false;
-    return ![...editedPaths].some((path) => (c.scope === null ? agentWorktreeRoot(path) === null : c.scope.roots.some((r) => scopeCovers(r, path))));
+    if (!otherTree && c.reverted.size === 0) return false;
+    return ![...editedPaths].some(
+      (path) =>
+        !c.reverted.has(path) &&
+        (c.scope === null ? agentWorktreeRoot(path) === null : c.scope.worktree === undefined || c.scope.roots.some((r) => scopeCovers(r, path))),
+    );
   };
   const completed = real.filter((c) => c.completed && !coversNone(c));
   const lastCompleted = completed.reduce<CheckRec | null>(
@@ -390,15 +440,21 @@ function judge(p: PromptState, by: (thread: string) => string): { status: Status
       }
       const gaps = scopeGaps(
         [...files].map(([path, lastSeq]) => ({ path, lastSeq })),
-        completed.map((c) => ({ coveredSeq: c.coveredSeq, passed: c.exit === 0 && !c.masked, scope: c.scope })),
+        completed.map((c) => ({ coveredSeq: c.coveredSeq, passed: c.exit === 0 && !c.masked, scope: c.scope, reverted: c.reverted })),
       );
       const outOfScope = new Map<string, string>();
       let scopeNote = "";
       if (gaps.length > 0) {
-        // A root-level run of the main tree has gaps only for files of an agent worktree.
-        const label = lastCompleted.scope === null ? "main checkout" : lastCompleted.scope.label;
-        scopeNote = ` (scoped to ${label})`;
-        for (const gap of gaps) outOfScope.set(gap, label);
+        // A file the last check skipped because the tree had reverted it is named for that; every other gap lies outside its scope
+        // (a root-level run of the main tree has none but the files of an agent worktree).
+        const scopeLabel = lastCompleted.scope === null ? "main checkout" : lastCompleted.scope.label;
+        const notes = new Set<string>();
+        for (const gap of gaps) {
+          const reverted = lastCompleted.reverted.has(gap);
+          outOfScope.set(gap, reverted ? REVERT_NOTE : scopeLabel);
+          notes.add(reverted ? REVERT_NOTE : `scoped to ${scopeLabel}`);
+        }
+        scopeNote = ` (${[...notes].join("; ")})`;
       }
       const docsTail = docsAfter > 0 ? `; ${plural(docsAfter, "documentation edit")} after it` : "";
       const bgTail = bgQuiet ? "; a later background check did not report" : "";
@@ -603,6 +659,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           quoteBufs: new Map(),
           truncated: false,
           patchLines: new Map(),
+          tree: new Map(),
         };
         prompts.push(cur);
         return;
@@ -633,8 +690,11 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               output: "",
               thread,
               scope: checkScopeOf(placeCheckScope(ev.input.command, opts.repo), ev.cwd ?? parser.meta().cwd, parser.meta().cwd),
+              reverted: new Set(),
             };
             cur.checks.push(check);
+            // The tree as this command leaves it: a check after a stash or checkout in the same command ran on the old tree.
+            runTreeOps(cur, thread, treeOps(ev.input.command, opts.repo), ev.cwd ?? parser.meta().cwd, /\b(?:cd|pushd)\b/.test(ev.input.command), check.reverted);
           }
         }
         let action: ActionRec | null = null;
@@ -737,6 +797,10 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           if (ev.backgroundTaskId !== undefined) bgChecks.set(`task:${ev.backgroundTaskId}`, entry);
         }
         if (ev.isError) return;
+        if (use.check === null && use.name === "Bash" && use.input.command !== undefined) {
+          const command = use.input.command;
+          runTreeOps(use.prompt, use.thread, treeOps(command, opts.repo), use.cwd ?? parser.meta().cwd, /\b(?:cd|pushd)\b/.test(command), null);
+        }
         let touches: FileTouch[] = [];
         if (EDIT_TOOLS.has(use.name)) {
           const t = editTouch(use, ev, phase === "fix", classify(use.input.filePath ?? "", use));
@@ -813,6 +877,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             const doc = g.files.every((t) => isDocPath(t.path));
             const rec: EditRec = { seq: seqAt, files: g.files, gitOp: g.gitOp, doc, scratch: !doc && g.files.every((t) => t.cls !== "code"), thread: use.thread, cwd: null };
             use.prompt.edits.push(rec);
+            noteEdit(use.prompt, use.thread, rec);
           }
         }
         if (groups.length === 0 && touches.length > 0) {
@@ -827,6 +892,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
             cwd: EDIT_TOOLS.has(use.name) ? (use.cwd ?? parser.meta().cwd) : null,
           };
           use.prompt.edits.push(rec);
+          noteEdit(use.prompt, use.thread, rec);
         }
         if (touches.length > 0 && act) act.edits = touches.map((t) => ({ path: t.path, kind: t.kind, added: t.added, removed: t.removed }));
         return;
