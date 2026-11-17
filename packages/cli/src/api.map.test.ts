@@ -75,7 +75,7 @@ function session(cwd: string, prompts: { text: string; files: string[] }[]): str
 }
 
 function projectDir(root: string, cwd: string): string {
-  const d = join(root, "projects", cwd.replace(/[/.]/g, "-"));
+  const d = join(root, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
   mkdirSync(d, { recursive: true });
   return d;
 }
