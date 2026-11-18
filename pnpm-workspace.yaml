@@ -4,3 +4,10 @@ allowBuilds:
   esbuild: true
 overrides:
   minimatch: ">=11.0.1"
+# GHSA-fc5q-39xc-vjpf claims picomatch >=4.0.8, which is not on npm (latest 4.0.7, 2026-11-18). Dev-only via typescript-eslint. Delete this ignore and add the override when 4.0.8 is published.
+audit:
+  ignore:
+    - GHSA-fc5q-39xc-vjpf
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf
