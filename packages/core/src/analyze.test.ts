@@ -1818,3 +1818,75 @@ describe("status-evidence review round 1", () => {
     expect(same.reason).toBe("pnpm test passed after last edit");
   });
 });
+
+describe("status-exit-owner (S-42)", () => {
+  const run = (cmd: string, outcome: { exit?: number; output?: string } = {}) => one([prompt("q"), ...edit("e1"), ...bash("b1", cmd, outcome)]);
+
+  test("an && chain stays reliable: output is not inspected", () => {
+    expect(run("pytest && echo ok", { output: "1 failed" })).toMatchObject({
+      status: "checked",
+      reason: "pytest passed after last edit",
+    });
+    expect(run("gh run watch --exit-status 12345 && echo done", { output: "1 failed" })).toMatchObject({
+      status: "checked",
+      reason: "gh run watch --exit-status 12345 passed after last edit",
+    });
+  });
+
+  test.each(["pnpm test && echo ok || true", "pnpm test && echo ok; true", "pnpm test && echo ok\ntrue"])(
+    "%j is masked by a later operator",
+    (cmd) => {
+      expect(run(cmd, { output: "12 passed" }).reason).toContain("(exit code not verified)");
+      expect(run(cmd, { output: "2 failed" })).toMatchObject({
+        status: "failing",
+        reason: "pnpm test output indicates failures (exit code masked)",
+      });
+    },
+  );
+
+  test("a filter pipe's non-zero exit is not a failure when the output shows none", () => {
+    for (const cmd of ["pnpm test | grep FAIL", "pnpm test | rg FAIL", "pnpm test | awk '/FAIL/'", "pnpm test | sed -n '/FAIL/p'"]) {
+      expect(run(cmd, { exit: 1, output: "" }), cmd).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+    }
+  });
+
+  test("a failure signal in a filtered check still fails it", () => {
+    expect(run("pnpm test | grep FAIL", { exit: 1, output: "2 failed" })).toMatchObject({
+      status: "failing",
+      reason: "pnpm test failed: 2 failed",
+    });
+    expect(run("node --test | grep fail", { exit: 1, output: "ℹ fail 2" })).toMatchObject({ status: "failing" });
+  });
+
+  test("a signal exit of a filtered check is unchanged", () => {
+    expect(run("pnpm test | grep FAIL", { exit: 137, output: "" })).toMatchObject({
+      status: "unchecked",
+      reason: "check did not complete",
+    });
+  });
+
+  test("detail mode: a filtered no-match has no result", () => {
+    const a = createAnalyzer({ detail: true });
+    for (const l of [prompt("q"), ...edit("e1"), ...bash("b1", "pnpm test | grep FAIL", { exit: 1, output: "" })]) a.push(l);
+    a.finish();
+    const check = a.details()[0]!.steps.find((s) => s.check !== undefined)!;
+    expect(check.title).toBe("Run pnpm test -> no result");
+    expect(check.check).toMatchObject({ exitCode: null, passed: null });
+  });
+
+  test("--exit-zero hides a clean exit and still surfaces a failure in the output", () => {
+    expect(run("flake8 --exit-zero", { output: "12 passed" }).reason).toContain("(exit code not verified)");
+    expect(run("flake8 --exit-zero", { output: "1 failed" })).toMatchObject({
+      status: "failing",
+      reason: "flake8 --exit-zero output indicates failures (exit code masked)",
+    });
+  });
+
+  test.each(["eslint --print-config src/a.ts", "make -q test", "make --question test", "make -qk test"])(
+    "%s is not a passing check",
+    (cmd) => {
+      expect(run(cmd)).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+      expect(run(cmd, { exit: 1, output: "out of date" })).toMatchObject({ status: "unchecked", reason: "no checks ran" });
+    },
+  );
+});

@@ -34,6 +34,7 @@ export {
   normalizeFirstToken,
   matchSegment,
   classifyCommand,
+  isFilteredCheck,
   type RepoScripts,
   type CommandClass,
 } from "./check-patterns-classify.js";
@@ -80,6 +81,7 @@ const FAILURE_SIGNALS: RegExp[] = [
   /Tests run:.*(?:Failures|Errors): [1-9]/,
   /\bFAILED\b/,
   /\bnot ok\b/,
+  /^\s*(?:ℹ|#) fail [1-9]\d*\b/, // node:test summary `ℹ fail 2`, TAP `# fail 2`
   /\bFailed!/,
   /\bFailed:\s+[1-9]/,
   // The signals below name tool output at the start of a line (after blanks and colour codes); a test title or log text

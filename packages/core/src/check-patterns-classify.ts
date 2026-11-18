@@ -242,7 +242,7 @@ function hasHelpFlag(toks: string[]): boolean {
 }
 
 /** Flags that make a test, lint or type-check tool print configuration or a list instead of running (`tsc --showConfig`, `eslint --init`, `jest --list`, `go test -list`). */
-const NO_OP_FLAGS = new Set(["--showConfig", "--init", "--list", "--listTests", "-list"]);
+const NO_OP_FLAGS = new Set(["--showConfig", "--init", "--list", "--listTests", "-list", "--print-config"]);
 
 /** A tool call that only shows its config or lists tests runs no check. Script files are left alone: their arguments are their own. */
 function isNoOpInvocation(toks: string[]): boolean {
@@ -252,7 +252,12 @@ function isNoOpInvocation(toks: string[]): boolean {
 
 /** `--dry-run` (and `make -n`) prints what would run instead of running it. */
 function isDryRun(toks: string[]): boolean {
-  return toks.some((t) => t === "--dry-run" || t === "--dryrun" || t === "--just-print") || (toks[0] === "make" && toks.includes("-n"));
+  return toks.some((t) => t === "--dry-run" || t === "--dryrun" || t === "--just-print") || (toks[0] === "make" && toks.some((t) => t === "-n" || isMakeQuestion(t)));
+}
+
+/** `make -q` / `--question` only reports whether the target is up to date (exit 1 = out of date); `-qk`-style clusters count. */
+function isMakeQuestion(t: string): boolean {
+  return t === "--question" || /^-[a-zA-Z]*q[a-zA-Z]*$/.test(t);
 }
 
 const SCRIPT_RUNNERS = new Set(["pnpm", "npm", "yarn", "bun", "turbo"]);
@@ -605,10 +610,21 @@ function isMutationProbe(raw: string): boolean {
   return rest.some((t) => t === "--" || t === "." || (!t.startsWith("-") && /[./]/.test(t)));
 }
 
+const FILTER_HEADS = new Set(["grep", "egrep", "fgrep", "rg", "awk", "gawk", "mawk"]);
+
+/** `grep|rg|awk ...` or `sed -n ...`: a pure output filter whose own exit code (no match) says nothing about the check. */
+function isFilterSegment(raw: string): boolean {
+  const toks = tokens(normalizeFirstToken(stripPrefixes(raw)));
+  const head = toks[0] ?? "";
+  if (FILTER_HEADS.has(head)) return true;
+  return head === "sed" && toks.slice(1).some((t) => /^-[a-zA-Z]*n[a-zA-Z]*$/.test(t) || t === "--quiet" || t === "--silent");
+}
+
 /**
- * A chained command is a check when any segment is a check. The exit code belongs to the whole chain,
- * so the result is `unreliable` when a check segment is followed by a pipe, `||`, `;`, a newline plus
- * more commands, or `&`.
+ * A chained command is a check when any segment is a check. The exit code belongs to the last command
+ * of the whole chain, so the result is `unreliable` when any later top-level `|`, `||`, `;` or newline
+ * can mask a check (`A && B || C`), when the check segment itself is followed by `&`, or when the check
+ * passes `--exit-zero` (exit 0 hides whatever it found).
  */
 export function classifyCommand(command: string, repo?: RepoScripts): CommandClass {
   try {
@@ -622,9 +638,12 @@ export function classifyCommand(command: string, repo?: RepoScripts): CommandCla
       if (!matchSegment(seg.text, repo)) return;
       if (firstCheck < 0) firstCheck = i;
       labels.push(labelOf(seg.text));
-      const hasLater = i < segs.length - 1;
+      // The exit code belongs to the last command of the whole chain, so any later top-level `||`, `;`, newline or
+      // `|` (not only this segment's own operator) can mask this check: `A && B || C`, `A && B; C`.
+      if (segs.slice(i, -1).some((s) => s.op === "|" || s.op === "||" || s.op === ";" || s.op === "\n")) unreliable = true;
       if (seg.op === "&") unreliable = true;
-      else if ((seg.op === "|" || seg.op === "||" || seg.op === ";" || seg.op === "\n") && hasLater) unreliable = true;
+      // `--exit-zero` (flake8, eslint-style) makes the tool exit 0 whatever it found: only its output can show a failure.
+      if (tokens(normalizeFirstToken(stripPrefixes(seg.text))).some((t) => t === "--exit-zero")) unreliable = true;
     });
     if (labels.length === 0) return NOT_CHECK;
     for (let j = firstCheck + 1; j < segs.length; j++) {
@@ -639,3 +658,20 @@ export function classifyCommand(command: string, repo?: RepoScripts): CommandCla
   }
 }
 
+
+/**
+ * A check whose output goes straight into a filter (`| grep|rg|awk|sed -n`): the exit code is the filter's
+ * ("no match" is 1), so a non-zero exit is not a check outcome and only the output can show a failure.
+ */
+export function isFilteredCheck(command: string, repo?: RepoScripts): boolean {
+  try {
+    if (typeof command !== "string" || command.trim() === "") return false;
+    const segs = splitSegments(stripHeredocs(command));
+    return segs.some((seg, i) => {
+      const rest = segs.slice(i + 1);
+      return seg.op === "|" && rest.length > 0 && matchSegment(seg.text, repo) && rest.every((s) => isFilterSegment(s.text));
+    });
+  } catch {
+    return false;
+  }
+}
