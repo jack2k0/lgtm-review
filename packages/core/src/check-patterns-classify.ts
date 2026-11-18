@@ -255,9 +255,13 @@ function isDryRun(toks: string[]): boolean {
   return toks.some((t) => t === "--dry-run" || t === "--dryrun" || t === "--just-print") || (toks[0] === "make" && toks.some((t) => t === "-n" || isMakeQuestion(t)));
 }
 
-/** `make -q` / `--question` only reports whether the target is up to date (exit 1 = out of date); `-qk`-style clusters count. */
+/**
+ * `make -q` / `--question` only asks whether the target is up to date.
+ * A short cluster counts only when every letter is a flag that takes no argument (`-qk`).
+ * `-Iquery` is `-I` plus a directory, and make still runs the recipe.
+ */
 function isMakeQuestion(t: string): boolean {
-  return t === "--question" || /^-[a-zA-Z]*q[a-zA-Z]*$/.test(t);
+  return t === "--question" || t === "-q" || /^-[BdeiknpqRrsStw]*q[BdeiknpqRrsStw]*$/.test(t);
 }
 
 const SCRIPT_RUNNERS = new Set(["pnpm", "npm", "yarn", "bun", "turbo"]);
@@ -638,10 +642,10 @@ export function classifyCommand(command: string, repo?: RepoScripts): CommandCla
       if (!matchSegment(seg.text, repo)) return;
       if (firstCheck < 0) firstCheck = i;
       labels.push(labelOf(seg.text));
-      // The exit code belongs to the last command of the whole chain, so any later top-level `||`, `;`, newline or
-      // `|` (not only this segment's own operator) can mask this check: `A && B || C`, `A && B; C`.
-      if (segs.slice(i, -1).some((s) => s.op === "|" || s.op === "||" || s.op === ";" || s.op === "\n")) unreliable = true;
-      if (seg.op === "&") unreliable = true;
+      // The exit code belongs to the last foreground command, so a later `|`, `||`, `;`, newline or `&`
+      // (including `&` on the last segment: `A && B &`) can mask this check.
+      const tail = segs.slice(i);
+      if (tail.some((s, k) => s.op === "&" || (k < tail.length - 1 && (s.op === "|" || s.op === "||" || s.op === ";" || s.op === "\n")))) unreliable = true;
       // `--exit-zero` (flake8, eslint-style) makes the tool exit 0 whatever it found: only its output can show a failure.
       if (tokens(normalizeFirstToken(stripPrefixes(seg.text))).some((t) => t === "--exit-zero")) unreliable = true;
     });
@@ -669,7 +673,7 @@ export function isFilteredCheck(command: string, repo?: RepoScripts): boolean {
     const segs = splitSegments(stripHeredocs(command));
     return segs.some((seg, i) => {
       const rest = segs.slice(i + 1);
-      return seg.op === "|" && rest.length > 0 && matchSegment(seg.text, repo) && rest.every((s) => isFilterSegment(s.text));
+      return seg.op === "|" && rest.length > 0 && matchSegment(seg.text, repo) && rest.every((s, j) => isFilterSegment(s.text) && (j === rest.length - 1 || s.op === "|"));
     });
   } catch {
     return false;

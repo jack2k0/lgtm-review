@@ -1889,4 +1889,18 @@ describe("status-exit-owner (S-42)", () => {
       expect(run(cmd, { exit: 1, output: "out of date" })).toMatchObject({ status: "unchecked", reason: "no checks ran" });
     },
   );
+
+  test("a coloured node:test summary is still a failure under a masked exit", () => {
+    const esc = String.fromCharCode(27);
+    expect(run("node --test; echo done", { output: `${esc}[34mℹ fail 1${esc}[39m` })).toMatchObject({ status: "failing" });
+  });
+
+  test("make -I with an attached directory is still a check", () => {
+    expect(run("make -Iquery test", { exit: 2, output: "recipe failed" })).toMatchObject({ status: "failing" });
+  });
+
+  test("a later & masks the check, and a filter stops at the first non-pipe", () => {
+    expect(run("pnpm test && echo ok &", { output: "12 passed" }).reason).toContain("(exit code not verified)");
+    expect(run("pnpm test | grep FAIL; rg x", { exit: 1, output: "" }).status).toBe("failing");
+  });
 });
