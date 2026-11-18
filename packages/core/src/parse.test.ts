@@ -127,6 +127,18 @@ describe("tool pairing data", () => {
     expect(uses[1] as { cwd?: string }).not.toHaveProperty("cwd");
   });
 
+  test("a bash command cut inside a high-entropy token stays at least 4000 characters and keeps no prefix", () => {
+    const token = "k7Qm2Lp9Vx4Rn8Tw1Zc6Yb3Hj5Df0Ga8Hs1JuPqZ";
+    const cmd = `${"echo "}${"a".repeat(3969)}!${token} more`;
+    expect(cmd.length).toBeGreaterThan(4000);
+    const { events } = parseLines([toolUse("t1", "Bash", { command: cmd })]);
+    const stored = events[0]?.type === "tool_use" ? events[0].input.command : undefined;
+    expect(stored).toBeDefined();
+    expect(stored!.length).toBeGreaterThanOrEqual(4000);
+    expect(stored).not.toContain(token.slice(0, 8));
+    expect(stored!.trimEnd()).toBe(`${"echo "}${"a".repeat(3969)}!`);
+  });
+
   test("tool_result carries the id, so reversed result order can be paired by id", () => {
     const lines = [prompt("go"), toolUse("t1", "Bash", { command: "a" }), toolUse("t2", "Bash", { command: "b" }), toolResult("t2", "two"), toolResult("t1", "one")];
     const { events } = parseLines(lines);

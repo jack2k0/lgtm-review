@@ -1,5 +1,5 @@
 import { inheritedInfo, inheritedOthers } from "./format.js";
-import { needsAttention, redact as coreRedact } from "@lgtm/core";
+import { cutForDisplay, needsAttention, redact as coreRedact } from "@lgtm/core";
 import type { Hint, PromptAnalysis, RedactOptions, Recommendation, SessionAnalysis, Status } from "@lgtm/core";
 import { stripDroppedControls } from "./export-html.js";
 import { osUsernames } from "./export.js";
@@ -37,7 +37,9 @@ function flat(s: string): string {
 
 function shorten(s: string, max: number): string {
   const chars = [...s];
-  return chars.length > max ? chars.slice(0, max - 1).join("") + "…" : s;
+  if (chars.length <= max) return s;
+  // Code-point budget: `max` is the UTF-16 length of the first `max` code points, ellipsis included.
+  return cutForDisplay(s, chars.slice(0, max).join("").length);
 }
 
 /** Escapes text for a table cell or a line of prose: backslash, `|`, backtick, emphasis, links and HTML. */

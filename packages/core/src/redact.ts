@@ -549,6 +549,8 @@ export function trimPartialSecret(cut: string): string {
  * Cuts log-derived text to at most `max` characters for display, ellipsis included. A cut that lands inside
  * a token must not leave a secret prefix that later redaction no longer recognises, so the cut ends on the
  * last whitespace of its final `wordWindow` (20) characters when there is one, then passes through `trimPartialSecret`.
+ * A cut that still lands inside a token drops a trailing run of 8+ token characters
+ * (`[A-Za-z0-9_+\-/=.~%]`), unless that run has fewer than 4 distinct characters.
  * Text that already fits is returned unchanged.
  */
 export function cutForDisplay(s: string, max: number, ellipsis = "…", wordWindow = 20): string {
@@ -564,8 +566,27 @@ export function cutForDisplay(s: string, max: number, ellipsis = "…", wordWind
       }
     }
   }
-  cut = trimPartialSecret(cut).trimEnd();
+  const trimmed = trimPartialSecret(cut);
+  const midToken =
+    trimmed.length === cut.length &&
+    cut.length > 0 &&
+    cut.length < s.length &&
+    !/\s/.test(s[cut.length]!) &&
+    !/\s/.test(cut[cut.length - 1]!);
+  cut = (midToken ? dropTokenTail(trimmed) : trimmed).trimEnd();
   return cut === "" ? "" : cut + ellipsis;
+}
+
+const TOKEN_BODY = /[A-Za-z0-9_+\-/=.~%]/;
+
+/** `s` without a trailing run of 8+ token-body characters, unless the run has fewer than 4 distinct characters. */
+function dropTokenTail(s: string): string {
+  let i = s.length;
+  while (i > 0 && TOKEN_BODY.test(s[i - 1]!)) i--;
+  if (s.length - i < 8) return s;
+  const distinct = new Set<string>();
+  for (let j = i; j < s.length && distinct.size < 4; j++) distinct.add(s[j]!);
+  return distinct.size < 4 ? s : s.slice(0, i);
 }
 
 /**

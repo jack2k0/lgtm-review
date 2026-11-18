@@ -82,4 +82,39 @@ describe("display cuts leave no secret prefix", () => {
       for (const out of await render("aws", awsSession(pad))) expect({ pad, leaks: leaks(out, AWS_KEY) }).toEqual({ pad, leaks: [] });
     }
   });
+
+  test("--summary and the step label cut inside an AWS key leave no AKIAIOSF prefix", async () => {
+    // No whitespace before the key, so a display cut cannot back up out of it. `!` is not a token
+    // character, so the full key still redacts when the text is stored uncut.
+    const promptText = `${"P".repeat(51)}!${AWS_KEY}`;
+    const command = `pnpm test ${"Q".repeat(60)}!${AWS_KEY}`;
+    const extra = (n: number, type: string, message: unknown, more: Record<string, unknown> = {}) =>
+      JSON.stringify({
+        type,
+        uuid: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+        sessionId: SID,
+        timestamp: `2026-01-01T00:00:${String(n).padStart(2, "0")}.000Z`,
+        cwd: PROJECT,
+        gitBranch: "main",
+        version: "2.1.0",
+        message,
+        ...more,
+      });
+    const lines = [
+      user(1, promptText),
+      extra(2, "assistant", { role: "assistant", content: [{ type: "tool_use", id: "w1", name: "Write", input: { file_path: `${PROJECT}/src/a.ts`, content: "a\n" } }] }),
+      extra(3, "user", { role: "user", content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] }, { toolUseResult: { type: "create", content: "a\n", structuredPatch: [] } }),
+      use(4, "t1", "Bash", { command }),
+      result(5, "t1", "Exit code 1\nfail", true),
+    ];
+    const file = join(tmp, "aws-cut.jsonl");
+    writeFileSync(file, lines.join("\n") + "\n");
+    const { analysis, analyzer } = await analyzeFileDetail(file, { sessionId: SID, file: "aws-cut.jsonl" });
+    const summary = formatSummary(analysis, { titles: true, root: PROJECT, usernames: [] });
+    const steps = analyzer.details().flatMap((d) => d.steps.map((s) => s.title));
+    expect(analysis.title).not.toContain("AKIAIOSF");
+    expect(analysis.title.endsWith("!")).toBe(true);
+    expect(steps.some((t) => t.includes("pnpm test"))).toBe(true);
+    for (const out of [summary, ...steps]) expect(out).not.toContain("AKIAIOSF");
+  });
 });

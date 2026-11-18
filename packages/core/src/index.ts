@@ -53,7 +53,7 @@ export type { AnalyzeOptions, Analyzer } from "./analyze.js";
 export { createSubagentCollector, parseSubagent, mergeSubagents, SUBAGENT_DEPTH_MAX, PROMPT_SUBAGENT_EVENTS_MAX, TRANSCRIPT_EVENTS_MAX, TRANSCRIPT_TEXT_MAX } from "./subagents.js";
 export type { SubagentTranscript, SubagentCollector, SubagentCollectorOptions, Truncation, MergeFlags, MergeContext } from "./subagents.js";
 export type { Event, ToolUseEvent, ToolResultEvent, TextEvent, PromptEvent, BoundaryEvent } from "./parse.js";
-export { redact, isEnvFilePath } from "./redact.js";
+export { redact, isEnvFilePath, cutForDisplay } from "./redact.js";
 export type { RedactOptions, RedactResult } from "./redact.js";
 export { TITLE_PROMPT_VERSION, TITLE_SYSTEM_PROMPT, condenseForTitle, sanitizeTitle, titleRequestBody } from "./llm-input.js";
 export type { TitleRequestBody } from "./llm-input.js";

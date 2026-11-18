@@ -143,4 +143,15 @@ describe("display cuts go through cutForDisplay", () => {
     expect("l.slice(1, 1 + DIFF_LINE_CHARS_MAX)".match(CUT)).not.toBeNull();
     expect("a.slice(0, max)".match(CUT)).toBeNull();
   });
+
+  it("does not define function truncate or function truncateText outside tests", () => {
+    const decl = /\bfunction\s+truncate(?:Text)?\s*\(/;
+    const hits: string[] = [];
+    for (const root of ["packages/core/src", "packages/cli/src"]) {
+      for (const file of sources(join(repoRoot, root))) {
+        if (decl.test(readFileSync(file, "utf8"))) hits.push(relative(repoRoot, file));
+      }
+    }
+    expect(hits.sort()).toEqual([]);
+  });
 });
