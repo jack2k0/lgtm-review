@@ -1,4 +1,4 @@
-import { inheritedSource, redact as coreRedact } from "@lgtm/core";
+import { cutForDisplay, inheritedSource, redact as coreRedact } from "@lgtm/core";
 import type { Analysis, FileChange, PromptAnalysis, RedactOptions, SessionAnalysis, Status } from "@lgtm/core";
 import { osUsernames } from "./export.js";
 
@@ -20,7 +20,7 @@ function paint(opts: FormatOptions, code: string, text: string): string {
 
 function oneLine(s: string, max: number): string {
   const t = s.replace(/\s+/g, " ").trim();
-  return t.length > max ? t.slice(0, max) + "…" : t;
+  return cutForDisplay(t, max);
 }
 
 function fileLine(f: FileChange, red: (s: string) => string = (s) => s): string {

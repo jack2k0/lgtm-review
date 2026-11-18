@@ -1,6 +1,6 @@
 import { createPatch, extractPatch, type RawPatch } from "./diff.js";
 import { emptyStats, EVIDENCE_LINES_MAX, scanContent, scanDiffLines, type EditStats } from "./hints.js";
-import { cutForDisplay, trimPartialSecret } from "./redact.js";
+import { cutForDisplay } from "./redact.js";
 import type { Warning } from "./schema.js";
 
 /**
@@ -191,15 +191,20 @@ function nonEmptyStr(v: unknown): string | undefined {
   return typeof v === "string" && v !== "" ? v : undefined;
 }
 
-export function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max) : s;
+/** Display and stored cut of log text: a cut inside a token leaves no secret prefix (see `cutForDisplay`). */
+function cutText(s: string, max: number): string {
+  return cutForDisplay(s, max, "", 0);
 }
 
-function truncateText(s: string, max: number): string {
-  if (s.length <= max) return s;
-  const cut = s.slice(0, max);
-  if (!/\s/.test(s[max]!)) return trimPartialSecret(cut);
-  return cut;
+/**
+ * A Bash command longer than `COMMAND_MAX` is cut like other log text, then padded with spaces back to
+ * `COMMAND_MAX` when the token-tail drop made it shorter. Callers treat `length >= COMMAND_MAX` as "cut";
+ * the spaces are not shell tokens.
+ */
+function cutCommand(s: string): string {
+  if (s.length <= COMMAND_MAX) return s;
+  const cut = cutText(s, COMMAND_MAX);
+  return cut.length >= COMMAND_MAX ? cut : cut + " ".repeat(COMMAND_MAX - cut.length);
 }
 
 function countLines(s: string): number {
@@ -229,15 +234,9 @@ function blocksText(content: unknown, max: number, sep: string): string {
   return cutBlocks(blocksRaw(content, max, sep), max);
 }
 
-/**
- * Cut of a joined message text: prompts, quotes and hints keep `truncateText`; the tool-result head (shown) goes
- * through `cutForDisplay`; every other max (the 40-character slash-command probe, the 4000-character slash args) is
- * an input to further parsing and keeps the plain `truncate`.
- */
+/** Cut of a joined message text: every max goes through `cutText`, shown or not. */
 function cutBlocks(s: string, max: number): string {
-  if (max === PROMPT_TEXT_MAX || max === QUOTE_MAX || max === HINT_MAX) return truncateText(s, max);
-  if (max === RESULT_TEXT_MAX) return cutForDisplay(s, max, "");
-  return truncate(s, max);
+  return cutText(s, max);
 }
 
 /** The text blocks of a message `content` joined with `sep`, read until at least `max` characters are in; not yet cut. */
@@ -288,13 +287,13 @@ function slashPromptText(raw: string): string | null {
   if (SKIPPED_COMMANDS.has(key)) return null;
   if (key === "goal" && args.toLowerCase() === "clear") return null;
   const flat = args.replace(/\s+/g, " ");
-  return truncateText(flat === "" ? `/${name}` : `/${name} ${flat}`, PROMPT_TEXT_MAX);
+  return cutText(flat === "" ? `/${name}` : `/${name} ${flat}`, PROMPT_TEXT_MAX);
 }
 
 function hintOf(input: Record<string, unknown>): string | undefined {
   for (const k of ["pattern", "url", "query", "description", "path"]) {
     const v = input[k];
-    if (typeof v === "string" && v !== "") return truncateText(v.replace(/\s+/g, " ").trim(), HINT_MAX);
+    if (typeof v === "string" && v !== "") return cutText(v.replace(/\s+/g, " ").trim(), HINT_MAX);
   }
   return undefined;
 }
@@ -304,13 +303,13 @@ function sanitizeInput(name: string, input: unknown, detail: boolean): ToolInput
   if (!isObj(input)) return out;
   if (name === "Bash") {
     const c = str(input.command);
-    if (c !== undefined) out.command = truncate(c, COMMAND_MAX);
+    if (c !== undefined) out.command = cutCommand(c);
   }
   const p = str(input.file_path) ?? str(input.notebook_path);
-  if (p !== undefined) out.filePath = truncate(p, PATH_MAX);
+  if (p !== undefined) out.filePath = cutText(p, PATH_MAX);
   if (name === "SendMessage") {
     const to = str(input.to);
-    if (to !== undefined) out.to = truncate(to, PATH_MAX);
+    if (to !== undefined) out.to = cutText(to, PATH_MAX);
   }
   if (name === "Write" && typeof input.content === "string") {
     out.contentLines = countLines(input.content);
@@ -348,7 +347,7 @@ function parseBashEdits(diff: unknown, detail: boolean): BashEdit[] | undefined 
     const deleted = hunks.length > 0 && hunks.every((h) => h.newStart === 0 && h.newLines === 0);
     const created = hunks.length > 0 && hunks.every((h) => h.oldStart === 0 && h.oldLines === 0);
     const edit: BashEdit = {
-      path: truncate(path, PATH_MAX),
+      path: cutText(path, PATH_MAX),
       kind: deleted ? "D" : created ? "A" : "M",
       added,
       removed,
@@ -570,7 +569,7 @@ export function createParser(opts: ParserOptions = {}): Parser {
     for (const b of message.content) {
       if (detail && isObj(b) && b.type === "text" && typeof b.text === "string") {
         const t = b.text.trim();
-        if (t !== "") out.push(agentTag !== undefined ? { type: "text", text: truncateText(t, QUOTE_MAX), agentId: agentTag } : { type: "text", text: truncateText(t, QUOTE_MAX) });
+        if (t !== "") out.push(agentTag !== undefined ? { type: "text", text: cutText(t, QUOTE_MAX), agentId: agentTag } : { type: "text", text: cutText(t, QUOTE_MAX) });
         continue;
       }
       if (!isObj(b) || b.type !== "tool_use") continue;
@@ -651,7 +650,7 @@ export function createParser(opts: ParserOptions = {}): Parser {
           const t = nonEmptyStr(rec.aiTitle) ?? nonEmptyStr(rec.title);
           if (t !== undefined) meta.title = t;
         } else if (!KNOWN_SILENT.has(type)) {
-          noteUnknown(truncate(type, 40));
+          noteUnknown(cutText(type, 40));
         }
       } catch (e) {
         // Defensive: the parser must never throw on odd records.

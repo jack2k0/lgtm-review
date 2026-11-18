@@ -1427,6 +1427,30 @@ describe("cutForDisplay", () => {
   test("everything trimmed gives an empty string, not a lone ellipsis", () => {
     expect(cutForDisplay("AKIAIOSFODNN7EXAMPLE tail", 10)).toBe("");
   });
+
+  test("a cut inside a high-entropy token drops the run instead of keeping a prefix", () => {
+    const key = "AKIAIOSFODNN7EXAMPLE";
+    // A stem so the run does not start with AKIA: trimPartialSecret would already drop that.
+    const glued = `id${key}tail`;
+    const atKey = 2 + key.slice(0, 8).length;
+    const aws = cutForDisplay(glued, atKey + 1);
+    expect(aws).not.toContain(key.slice(0, 8));
+    expect(aws).not.toContain(`${key.slice(0, 8)}…`);
+    expect(aws).toBe("");
+
+    const token = "k7Qm2Lp9Vx4Rn8Tw1Zc6Yb3Hj5Df0Ga8Hs1JuPqZ";
+    expect(token).toHaveLength(40);
+    const head = `see ${token} end`;
+    const into = 4 + 30;
+    const ent = cutForDisplay(head, into + 1);
+    expect(ent).not.toContain(token.slice(0, 8));
+    expect(ent).not.toContain(`${token.slice(0, 8)}…`);
+    expect(ent).toBe("see…");
+
+    expect(cutForDisplay("shortENER", 6)).toBe("short…");
+    expect(cutForDisplay("a".repeat(30), 12)).toBe(`${"a".repeat(11)}…`);
+    expect(cutForDisplay(`${"a".repeat(8)}b`, 8, "")).toBe("a".repeat(8));
+  });
 });
 
 describe("redact-shapes-2 phase 1: URL credentials and reference exemptions", () => {
