@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { classifyShellMutation } from "./shell-edits.js";
-import { checkFamilies, checkScope, classifyCommand, findMaskedFailure, parseHeredocStarts, placeCheckScope, resultUnobserved, stripHeredocs, treeOps, unobservedSegments, type RepoScripts } from "./check-patterns.js";
+import { checkFamilies, checkScope, classifyCommand, findMaskedFailure, isFilteredCheck, parseHeredocStarts, placeCheckScope, resultUnobserved, stripHeredocs, treeOps, unobservedSegments, type RepoScripts } from "./check-patterns.js";
 
 const repo: RepoScripts = { packageScripts: ["verify"], makeTargets: ["ci"], scriptFiles: ["tools/run-all.sh"] };
 
@@ -1079,5 +1079,92 @@ describe("status-evidence review round 1", () => {
   });
   test("go test is still a check", () => {
     expect(classifyCommand("go test ./...").isCheck).toBe(true);
+  });
+});
+
+describe("status-exit-owner (S-42)", () => {
+  test.each([
+    ["pnpm test && echo ok", false],
+    ["pytest && echo ok", false],
+    ["gh run watch --exit-status 12345 && echo done", false],
+    ["pnpm test && echo ok || true", true],
+    ["pnpm lint && pnpm test || true", true],
+    ["pnpm test && echo ok; true", true],
+    ["pnpm test && echo ok\ntrue", true],
+    ["pnpm test && echo ok | cat", true],
+    ["pnpm test &", true],
+    ["flake8 --exit-zero", true],
+    ["eslint . --exit-zero", true],
+    ["pnpm test --exit-zero", true],
+    ["flake8", false],
+  ])("later operator or --exit-zero: %j unreliable %s", (cmd, unreliable) => {
+    expect(classifyCommand(cmd, repo)).toMatchObject({ isCheck: true, unreliable });
+  });
+
+  test.each([
+    "eslint --print-config src/a.ts",
+    "pnpm eslint --print-config src/a.ts",
+    "make -q test",
+    "make --question test",
+    "make -qk test",
+    "make test -q",
+    "make -C sub -q test",
+  ])("%s is not a check", (cmd) => {
+    expect(classifyCommand(cmd).isCheck).toBe(false);
+  });
+
+  test("make keep-going and an ordinary target are still checks", () => {
+    expect(classifyCommand("make -k test").isCheck).toBe(true);
+    expect(classifyCommand("make -j4 test").isCheck).toBe(true);
+    expect(classifyCommand("make test").isCheck).toBe(true);
+  });
+
+  test("a script file keeps --print-config (its arguments are its own)", () => {
+    expect(classifyCommand("bash scripts/check.sh --print-config").isCheck).toBe(true);
+  });
+
+  test.each([
+    ["pnpm test | grep FAIL", true],
+    ["pnpm test | egrep x", true],
+    ["pnpm test | fgrep x", true],
+    ["pnpm test | rg x", true],
+    ["pnpm test | awk '/x/'", true],
+    ["pnpm test | gawk '/x/'", true],
+    ["pnpm test | mawk '/x/'", true],
+    ["pnpm test | sed -n '1p'", true],
+    ["pnpm test | sed -ne '/x/p'", true],
+    ["pnpm test | sed --quiet 's/a/b/p'", true],
+    ["pnpm test | sed --silent -e '/x/p'", true],
+    ["pnpm test | grep FAIL | rg x", true],
+    ["pytest -q | grep FAIL | awk '/x/'", true],
+    ["pnpm test | sed 's/a/b/'", false],
+    ["pnpm test | sed -e 's/a/b/'", false],
+    ["pnpm test | grep FAIL | tail", false],
+    ["pnpm test | tail", false],
+    ["pnpm test", false],
+    ["pnpm test && echo ok || true", false],
+    ["echo hi | grep x", false],
+    ["", false],
+  ])("filtered %j -> %s", (cmd, filtered) => {
+    expect(isFilteredCheck(cmd)).toBe(filtered);
+  });
+
+  test("isFilteredCheck never throws", () => {
+    expect(isFilteredCheck(undefined as unknown as string)).toBe(false);
+  });
+
+  test.each([
+    ["ℹ fail 1", true],
+    ["ℹ fail 2", true],
+    ["  ℹ fail 12", true],
+    ["# fail 1", true],
+    ["# fail 2", true],
+    ["ℹ fail 0", false],
+    ["# fail 0", false],
+    ["ℹ failed to start", false],
+    ["the node summary says ℹ fail 2 when tests fail", false],
+    ["note that # fail 2 is a TAP count, not a failure by itself", false],
+  ])("node:test / TAP signal %j -> %s", (output, failing) => {
+    expect(findMaskedFailure(output) !== null).toBe(failing);
   });
 });

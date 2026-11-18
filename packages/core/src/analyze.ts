@@ -1,4 +1,4 @@
-import { CHECK_FAMILIES, checkFamilies, classifyCommand, findMaskedFailure, placeCheckScope, resultUnobserved, treeOps, unobservedSegments, type CheckFamily, type PlacedScope, type RepoScripts, type TreeOp } from "./check-patterns.js";
+import { CHECK_FAMILIES, checkFamilies, classifyCommand, isFilteredCheck, findMaskedFailure, placeCheckScope, resultUnobserved, treeOps, unobservedSegments, type CheckFamily, type PlacedScope, type RepoScripts, type TreeOp } from "./check-patterns.js";
 import { classifyShellMutation, normalizePath, resolveTarget, SHELL_EDIT_FILE, type ShellMutation } from "./shell-edits.js";
 import { buildFileDiff, capPatch, DIFF_LINES_MAX, patchChars, patchLines, type RawPatch } from "./diff.js";
 import { computeHints, emptyStats, isDocPath, isScratchPath, recommend, type EditEvidence, type EditStats } from "./hints.js";
@@ -126,6 +126,8 @@ interface CheckRec {
   /** The result was not observed (`unobserved`, and no failure showed): the check is `ignored`, but a later one still leaves the status open. */
   hidden: boolean;
   unreliable: boolean;
+  /** The output goes into `grep|rg|awk|sed -n`: a non-zero exit is the filter's ("no match"), not the check's. */
+  filtered: boolean;
   /** A command after the check may have reverted the edits (`; git checkout file`). */
   probe: boolean;
   /** Exit 0, but the output tail shows failures (the exit code was masked by a pipe or trailing command). */
@@ -316,6 +318,11 @@ function orderedSeq(seq: number, order: "before-check" | "after-check" | "unknow
 
 function failureOutput(output: string): string {
   return oneLine(output.replace(/^\s*(?:Error:\s*)?Exit code \d+/, ""), FAIL_OUTPUT_MAX);
+}
+
+/** The tool-result wrapper `Exit code N` is the command's status, not a failure signal in its output. */
+function withoutExitPrefix(text: string): string {
+  return text.replace(/^\s*(?:Error:\s*)?Exit code \d+\s*\n?/, "");
 }
 
 function plural(n: number, word: string): string {
@@ -750,6 +757,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
               hidden: false,
               unobserved: resultUnobserved(ev.input.command, opts.repo),
               unreliable: cls.unreliable,
+              filtered: isFilteredCheck(ev.input.command, opts.repo),
               probe: cls.mutationProbe,
               masked: false,
               maskedLine: "",
@@ -804,7 +812,12 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
         pending.delete(key);
         if (use.check) {
           if (ev.isError) {
-            if (ev.exitCode === undefined) use.check.ignored = true;
+            const filterLine = use.check.filtered && ev.exitCode !== undefined && !isSignalExit(ev.exitCode) ? findMaskedFailure(withoutExitPrefix(ev.tail ?? ev.text)) : null;
+            if (use.check.filtered && ev.exitCode !== undefined && !isSignalExit(ev.exitCode) && filterLine === null) {
+              // The non-zero exit is the filter's ("no match"): the check was not observed, and its output shows no failure.
+              use.check.ignored = true;
+              use.check.hidden = true;
+            } else if (ev.exitCode === undefined) use.check.ignored = true;
             else if (isSignalExit(ev.exitCode)) {
               // Killed by a signal: not a failure, and it must not open the Fix phase (C3).
               use.check.signalStop = true;
@@ -849,7 +862,7 @@ export function createAnalyzer(opts: AnalyzeOptions = {}): Analyzer {
           if (use.check) {
             // A signal has no verdict. `exitCode` stays null so the step title is "no result", not "failed (exit N)".
             const signal = use.check.signalStop;
-            const exitCode = signal || (use.check.ignored && !ev.isError) ? null : ev.isError ? (ev.exitCode ?? null) : ev.background ? null : 0;
+            const exitCode = signal || (use.check.ignored && (!ev.isError || use.check.hidden)) ? null : ev.isError ? (ev.exitCode ?? null) : ev.background ? null : 0;
             const masked = use.check.masked;
             act.check = {
               command: use.input.command ?? "",
